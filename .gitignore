@@ -1,0 +1,7 @@
+.secrets/
+state/
+release/*
+!release/.gitkeep
+__pycache__/
+*.pyc
+/tmp/
