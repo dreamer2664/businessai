@@ -40,12 +40,16 @@ FILLER = re.compile(
     r"[A-Z][a-z]+ [A-Z][a-z]+ (is|was) (the |a |an )?(founder|ceo|owner|president|entrepreneur|professor|author)|"
     r"(faq|frequently asked questions)|key takeaways?|conclusion|final thoughts|in summary|to sum up|"
     r"want to|ready to|whether you|no matter|if you're (looking|ready|new)|good luck|happy selling|"
-    r"disclaimer|this (post|article|guide) (was|is|will|covers)|(originally )?published|updated)",
+    r"disclaimer|this (post|article|guide) (was|is|will|covers)|(originally )?published|updated|"
+    r"here'?s how|learn (how|why|what)|find out|discover how|in this guide|this guide|keep reading|read on|"
+    r"we'?ll (show|walk|cover)|below,? (we|you)|let'?s (dive|get))",
     re.I)
-INFO = re.compile(r"\b(is|are|means|refers|defined|definition|includes?|consists?|typically|usually|average|percent|%|"
-                  r"formula|calculate|cost|price|margin|rate|ratio|revenue|profit|customer|supplier|product|"
-                  r"strategy|process|step|factor|type|kind|method|because|therefore|result|increase|decrease|"
-                  r"should|must|need|require|allow|help|reduce|improve|measure|track|test|compare|choose|avoid)\b", re.I)
+INFO = re.compile(r"\b(is|are|means|refers|defin\w*|includ\w*|consist\w*|typical\w*|usual\w*|average|percent\w*|%|"
+                  r"formula|calculat\w*|cost\w*|pric\w*|margin\w*|rate\w*|ratio|revenue|profit\w*|customer\w*|supplier\w*|"
+                  r"seller\w*|product\w*|order\w*|ship\w*|market\w*|sale\w*|brand\w*|ad|ads|strateg\w*|process\w*|step\w*|"
+                  r"factor\w*|type\w*|kind|method\w*|because|therefore|result\w*|increas\w*|decreas\w*|"
+                  r"should|must|need\w*|requir\w*|allow\w*|help\w*|reduc\w*|improv\w*|measur\w*|track\w*|test\w*|compar\w*|"
+                  r"choos\w*|avoid\w*|check\w*|look for|at least|minimum|maximum|percentage|feedback|rating\w*|review\w*)\b", re.I)
 STORY = re.compile(r"\b(he|she|his|her|him|they|their|I|my|we|our|us)\b", re.I)
 
 
@@ -73,7 +77,7 @@ def keep(p, title):
         return False
     if p.count("?") >= 2 and len(p) < 300:          # question lists
         return False
-    if density(p) < 4.0:
+    if density(p) < 5.5:
         return False
     return True
 
@@ -93,7 +97,7 @@ def split_long(t):
 
 
 def passages(text, title):
-    paras = [p.strip() for p in text.split("\\n")]
+    paras = [p.strip().replace("\u2019", "'").replace("\u2018", "'") for p in text.split("\\n")]
     out, seen, heading = [], set(), ""
     buf = ""
     for p in paras:
@@ -103,6 +107,10 @@ def passages(text, title):
             if buf:
                 out.append(buf); buf = ""
             heading = p[3:].strip()
+            continue
+        if len(p) < MIN_CHARS and len(p) >= 30 and buf and not FILLER.search(p) and density(p) >= 4.5 \
+                and not re.search(r"https?://|www\.", p):
+            buf = buf + " " + p            # short fact ("Try to work with suppliers who have at least 95%…") rides along
             continue
         if not keep(p, title):
             continue
@@ -148,7 +156,10 @@ def main():
                 continue
             title = re.sub(r"^\d+(\.\d+)?\s+", "", title)
             title = re.sub(r"\s*\(\d{4}\)\s*$", "", title)
-            ps = passages(text, title)
+            if topic == "glossary":
+                ps = [d.strip() for d in text.split("\\n") if len(d.strip()) >= 30]
+            else:
+                ps = passages(text, title)
             ps2 = []
             for p in ps:
                 h = hashlib.md5(norm(p)[:160].encode()).hexdigest()

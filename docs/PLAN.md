@@ -28,9 +28,8 @@ messages and social media, reports to the owner and asks questions via phone.
    vision + desktop/cursor control.
 
 ## Milestones (one per session; each has a score set and a size budget)
-0. Home & skeleton — new repo, install script, Telegram line.
-   Test: owner texts it from the phone, it answers.
-1. Knowledge pack #1 — business / dropshipping / marketing basics. Score: 50 Qs.
+0. ✅ Home & skeleton — new repo, install script, Telegram line. (runs on the owner's Windows PC via WSL)
+1. ✅ Knowledge pack #1 — business.kdw 5.7 MB, 52/55 on tests/business.txt; hard test banks collected in tests/banks/ (to be sat alone once it has a browser).
 2. Eyes & hands v1 — read-only browsing (research a product, compare 3
    suppliers, summarise a document). Score: 20 tasks.
 3. Memory — notes, task list, daily plan; asks the owner when stuck.

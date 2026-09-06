@@ -4,7 +4,7 @@ An AI that (eventually) runs an online store end to end: product and supplier
 research, listings, customer messages, social media — reporting to its owner
 and asking questions through Telegram.
 
-**Status: milestone 0 — skeleton + phone line.** See [docs/PLAN.md](docs/PLAN.md)
+**Status: milestone 1 — business knowledge pack (52/55 on its score set).** Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
 for the roadmap and the rules (score-driven, frugal, owner-in-the-loop, no
 CAPTCHA-breaking, official platform connections only).
 
@@ -27,6 +27,9 @@ sh scripts/install.sh          # creates .secrets/env — put the bot token + yo
 sh scripts/run.sh              # foreground; or: sh scripts/service.sh  (starts at boot, auto-restarts)
 ```
 Then message the bot on Telegram: `/start`, `/status`, `/selftest` (asks you a question with buttons).
+
+Knowledge brain (optional, ~65 MB): `sh scripts/get_brain.sh` downloads the engine + models + packs from the release; after that any
+question you send (or `/ask …`) is answered from the business pack with its source.
 
 ## Phone line (what the agent can do today)
 - Only the owner (Telegram username in `.secrets/env`, pinned to the numeric id at first contact) is served.

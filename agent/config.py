@@ -39,7 +39,7 @@ TELEGRAM_OWNER_USERNAME = os.environ.get("TELEGRAM_OWNER_USERNAME", "").lstrip("
 TELEGRAM_OWNER_ID = int(os.environ.get("TELEGRAM_OWNER_ID", "0") or 0)
 
 # Knowledge brain (the C engine from kdr-brain). Optional at milestone 0.
-BRAIN_BIN = os.environ.get("BAI_BRAIN_BIN", str(ROOT / "release" / "businessai-brain"))
+BRAIN_BIN = os.environ.get("BAI_BRAIN_BIN", str(ROOT / "release" / "kdr-brain-lite"))
 BRAIN_KDR = os.environ.get("BAI_BRAIN_KDR", str(ROOT / "release" / "brain.kdr"))
 BRAIN_PORT = int(os.environ.get("BAI_BRAIN_PORT", "8090"))
 PACKS_DIR = ROOT / "release" / "packs"

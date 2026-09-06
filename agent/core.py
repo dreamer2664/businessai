@@ -17,13 +17,13 @@ import traceback
 from . import brain, config
 from .telegram import Bot, TelegramError
 
-VERSION = "0.1 (milestone 0: skeleton + phone line)"
+VERSION = "0.2 (milestone 1: business knowledge pack)"
 
 HELP = """I'm your Business AI. For now I can:
 /status — what I'm running and how much I know
-/ask <question> — look it up in my knowledge packs
+/ask <question> — answer from my business knowledge pack (e-commerce, dropshipping, marketing, business basics)
 /help — this list
-Anything else you write, I answer directly."""
+Any plain question is looked up in the pack too."""
 
 
 class Agent:
@@ -205,7 +205,11 @@ class Agent:
             return "Running a self-test: I'll ask you something with buttons."
         # default: try the knowledge brain, otherwise be honest
         ans = self.brain.ask(text)
-        return ans or "I don't know that yet — my knowledge packs are still empty (milestone 1)."
+        if ans:
+            return ans
+        if not self.brain.ready:
+            return "My knowledge brain isn't installed on this machine yet — run: sh scripts/get_brain.sh"
+        return "I couldn't find a confident answer in my business pack for that."
 
     def status_text(self):
         up = int(time.time() - self.started)
