@@ -17,6 +17,9 @@ RestartSec=5
 WantedBy=default.target
 UNIT
 systemctl --user daemon-reload
-systemctl --user enable --now businessai
+systemctl --user enable businessai
+systemctl --user restart businessai
+sleep 3
+systemctl --user is-active businessai && echo "live screen: http://localhost:8765"
 loginctl enable-linger "$USER" 2>/dev/null || true
 echo "service running. status: systemctl --user status businessai   logs: journalctl --user -u businessai -f"

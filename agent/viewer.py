@@ -77,10 +77,18 @@ def humanize(kind, f):
     }.get(kind, lambda: f"{kind}: " + ", ".join(f"{k}={str(v)[:60]}" for k, v in f.items()))()
 
 
+def _is_wsl():
+    try:
+        return "microsoft" in open("/proc/version").read().lower()
+    except Exception:
+        return False
+
+
 class Viewer:
     def __init__(self, port=None, host=None, on_step=None):
         self.port = int(port or os.environ.get("BAI_VIEW_PORT", "8765"))
-        self.host = host or os.environ.get("BAI_VIEW_HOST", "127.0.0.1")
+        # Under WSL, Windows only reliably reaches ports bound on all interfaces; elsewhere stay local-only.
+        self.host = host or os.environ.get("BAI_VIEW_HOST") or ("0.0.0.0" if _is_wsl() else "127.0.0.1")
         self.on_step = on_step                # callback(action_text, jpeg_bytes) — used for Telegram /watch
         self.force = False                    # take screenshots even when nobody polls the page
         self.shot, self.shot_time = None, 0
