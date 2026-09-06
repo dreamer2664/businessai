@@ -49,6 +49,7 @@ KIND is one of:
 - "summarize": the message contains a URL to read or summarize
 - "compare": the owner wants suppliers / options / prices for a product compared
 - "visit": the owner wants me to go to / open a specific website or app and report what is there (open YouTube, go to Amazon bestsellers, check Etsy trending)
+- "watch": the owner wants me to watch a video, or videos about a topic, and tell them what it says
 - "chat": greetings, thanks, small talk, feedback, or instructions about how to behave
 TOPIC is the subject in a few words (for summarize: the URL). Examples:
 "can you find out how epacket shipping works" -> {"kind": "research", "topic": "how ePacket shipping works"}
@@ -56,6 +57,7 @@ TOPIC is the subject in a few words (for summarize: the URL). Examples:
 "look for suppliers of bamboo toothbrushes" -> {"kind": "compare", "topic": "bamboo toothbrush"}
 "thanks that was useful" -> {"kind": "chat", "topic": "thanks"}
 "open youtube and list the top 5 trending videos" -> {"kind": "visit", "topic": "youtube | list the top 5 trending videos"}
+"watch a video about facebook ads for beginners and tell me what you learned" -> {"kind": "watch", "topic": "facebook ads for beginners"}
 "go to amazon and tell me the bestsellers in kitchen" -> {"kind": "visit", "topic": "amazon | bestsellers in kitchen"}
 For "visit", TOPIC is "<site> | <what to report>".
 Message: """
@@ -192,8 +194,13 @@ class Planner:
         m = message.strip()
         low = m.lower()
         url = re.search(r"https?://\S+", m)
+        if url and re.search(r"youtube\.com/watch|youtu\.be/|youtube\.com/shorts", url.group(0)):
+            return {"kind": "watch", "topic": url.group(0)}
         if url:
             return {"kind": "summarize", "topic": url.group(0)}
+        mw = re.search(r"\b(?:watch|look at)\s+(?:a|some|the)?\s*(?:youtube\s+)?videos?\s+(?:about|on|of)\s+(.+?)(?:\s+and\s+tell.*|\s+then.*)?$", low)
+        if mw:
+            return {"kind": "watch", "topic": mw.group(1).strip(" ?.")}
         if re.search(r"^(hi|hello|hey|thanks|thank you|ok|okay|good (morning|evening|night)|bye)\b", low) and len(low) < 40:
             return {"kind": "chat", "topic": m}
         mv = re.search(r"\b(?:open|go to|goto|visit|check out|look at|browse)\s+(?:the\s+)?([a-z][a-z0-9 .-]{1,25}?)(?:\s+(?:and|,|to|then)\s+|\s*$)(.*)", low)
@@ -206,7 +213,7 @@ class Planner:
             raw = self.chat("You classify messages. Output JSON only.", INTENT_PROMPT + json.dumps(m), max_tokens=60, stop=["\n\n"])
             j = json.loads(re.search(r"\{.*\}", raw, re.S).group(0))
             kind = j.get("kind", "ask")
-            if kind not in ("ask", "research", "summarize", "compare", "chat", "visit"):
+            if kind not in ("ask", "research", "summarize", "compare", "chat", "visit", "watch"):
                 kind = "ask"
             return {"kind": kind, "topic": str(j.get("topic") or m)[:120]}
         except Exception as e:

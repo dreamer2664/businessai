@@ -20,6 +20,7 @@ import urllib.parse
 
 from . import config
 from .browser import Browser, BrowserError
+from . import video
 
 FORUM = re.compile(r"reddit\.com|quora\.com|facebook\.com|youtube\.com|tiktok\.com|instagram\.com|pinterest\.|x\.com|twitter\.com|linkedin\.com/posts", re.I)
 SENT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9])")
@@ -372,6 +373,56 @@ class Tasks:
             self.memory.note("visit", f"{site}: {question}"[:120], out, [final])
         return out
 
+    def watch(self, what, n_videos=1):
+        """'Watch' a video (URL/id) or the best video for a topic by reading its captions; summarize with the model."""
+        vid = video.url_id(what)
+        if vid:
+            picks = [{"id": vid, "title": ""}]
+        else:
+            try:
+                picks = [v for v in video.search(what, 8) if v["id"]][:n_videos + 3]
+            except Exception as e:
+                return f"YouTube search failed: {str(e)[:100]}"
+            if not picks:
+                return f"No videos found for '{what}'."
+        out, done = [], 0
+        for v in picks:
+            if done >= n_videos:
+                break
+            try:
+                text, meta = video.transcript(v["id"])
+            except Exception as e:
+                self.log("transcript_error", id=v["id"], error=str(e)[:100])
+                continue
+            title = meta.get("title") or v.get("title") or v["id"]
+            url = f"https://www.youtube.com/watch?v={v['id']}"
+            if len(text) < 400:
+                self.log("video_no_captions", id=v["id"])
+                continue
+            done += 1
+            mins = meta.get("seconds", 0) // 60
+            head = f"▶ {title} — {meta.get('channel', '')} ({mins} min, {'auto' if meta.get('auto') else 'human'} captions)\n{url}"
+            summary = None
+            if self.planner and self.planner.installed():
+                self._release_page()
+                try:
+                    summary = self.planner.chat(
+                        "You watched a business video for your owner (you have its transcript). Plain words, no hype.",
+                        f"TITLE: {title}\nTRANSCRIPT (may be auto-generated, no punctuation):\n{text[:7000]}\n\n"
+                        "Give: one sentence on what the video is about, then 4-6 bullet points with the concrete, useful claims "
+                        "(numbers, steps, warnings). Finish with one line: 'Trust: ' and whether the speaker is selling something.",
+                        max_tokens=320, timeout=240)
+                except Exception as e:
+                    self.log("watch_summary_failed", error=str(e)[:100])
+            if not summary:
+                summary = "Transcript excerpt: " + text[:900]
+            out.append(head + "\n" + summary)
+            if self.memory:
+                self.memory.note("video", title, summary, [url])
+        if not out:
+            return f"I found videos for '{what}' but none had readable captions, so I couldn't watch them."
+        return "\n\n".join(out)
+
     def study(self, goal):
         return self.on_hands(self._study, goal)
 
@@ -415,6 +466,8 @@ class Tasks:
                 out = self.compare_suppliers(arg)
             elif cmd in ("summarize", "summarise", "read") and arg:
                 out = self.summarize(arg)
+            elif cmd in ("watch", "video") and arg:
+                out = self.watch(arg)
             elif cmd in ("visit", "open", "goto") and arg:
                 site, _, question = arg.partition("|")
                 out = self.visit(site.strip(), question.strip())
@@ -422,7 +475,7 @@ class Tasks:
                 n = int(arg) if arg.strip().isdigit() else 40
                 out = self.exam(str(config.ROOT / "tests/banks/mcq_principles-marketing.jsonl"), n)
             else:
-                out = "Tasks I can do: research <topic> · compare <product> · summarize <url> · visit <site> | <question> · exam [n]"
+                out = "Tasks I can do: research <topic> · compare <product> · summarize <url> · visit <site> | <question> · watch <video url or topic> · exam [n]"
         except Exception as e:  # noqa
             out = f"Task failed: {type(e).__name__}: {str(e)[:200]}"
         self.log("task_done", cmd=cmd, ms=int((time.time() - t0) * 1000), chars=len(out))

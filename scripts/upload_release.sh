@@ -14,7 +14,7 @@ if [ -z "$id" ]; then
   id=$(printf '%s' "$rel" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
 fi
 echo "release id $id"
-for f in release/kdr-brain-lite release/brain.kdr release/packs/*.kdw; do
+for f in ${FILES:-release/kdr-brain-lite release/brain.kdr release/packs/*.kdw release/llm/llama-server-static}; do
   [ -s "$f" ] || continue; name=$(basename "$f")
   # delete an existing asset with the same name
   aid=$(auth "$API/releases/$id/assets" | python3 -c "import json,sys; print(next((a['id'] for a in json.load(sys.stdin) if a['name']=='$name'),''))")

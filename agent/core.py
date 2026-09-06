@@ -28,7 +28,7 @@ HELP = """Just talk to me. I work out whether you're asking a question, want som
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.
 
 Commands (optional):
-/research <topic> · /compare <product> · /summarize <url> · /visit <site> | <question> · /exam [n]
+/research <topic> · /compare <product> · /summarize <url> · /visit <site> | <question> · /watch <video url or topic> · /exam [n]
 /todo — my to-do list · /todo add <text> · /todo done <n>
 /goal <topic> — give me a standing learning goal; I study it on my own when idle (max 6 sessions a day) and keep notes
 /goals · /goal drop <n> · /notes [topic] — what I've learned · /report — today's summary
@@ -252,7 +252,7 @@ class Agent:
         if low.startswith("/selftest"):
             threading.Thread(target=self.selftest, daemon=True).start()
             return "Running a self-test: I'll ask you something with buttons."
-        for cmd in ("/research", "/compare", "/summarize", "/summarise", "/visit", "/exam"):
+        for cmd in ("/research", "/compare", "/summarize", "/summarise", "/visit", "/watch", "/exam"):
             if low.startswith(cmd):
                 return self.start_task(cmd[1:].replace("summarise", "summarize"), text[len(cmd):].strip())
         if low.startswith("/todo"):
@@ -292,7 +292,7 @@ class Agent:
                 return self.planner.reply(text) if self.planner.installed() else "Hi! Ask me anything about the store."
             except Exception:
                 return "Hi! Ask me anything about the store."
-        if it["kind"] in ("research", "compare", "summarize", "visit"):
+        if it["kind"] in ("research", "compare", "summarize", "visit", "watch"):
             return self.start_task(it["kind"], it["topic"])
         # a question: answer from what I know; if I know nothing useful, go and look
         ans = self.tasks.ask(text)
@@ -310,6 +310,7 @@ class Agent:
         threading.Thread(target=self.run_task, args=(f"{kind} {arg}",), daemon=True).start()
         msg = {"exam": "sitting the exam now — this takes a few minutes; I'll send the score.",
                "visit": f"going to {arg.split('|')[0].strip()} now — a moment.",
+               "watch": "watching it now (I read the captions) — a minute or two.",
                "compare": f"looking for suppliers of {arg} in my browser — about a minute.",
                "summarize": "reading it now — a moment.",
                "research": f"looking into '{arg}' — report in about a minute."}[kind]

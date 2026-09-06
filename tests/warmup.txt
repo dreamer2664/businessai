@@ -1,0 +1,27 @@
+# Warm-up ladder: light "go there and tell me" tasks, scored like everything else.
+# task<TAB>required term group<TAB>...   (| = alternatives inside a group; all groups must appear in the reply, case-insensitive)
+# Scorer: engine/scripts/score_warmup.py — runs each line through Tasks.run() / Tasks.ask() WITH the thinking model.
+
+## Level 1 — go to a page and say what it is
+visit https://en.wikipedia.org/wiki/Print_on_demand | what is this page about, in one sentence	print	demand
+visit https://www.printful.com | what does this company do	print|custom	product|merch|order|design
+visit https://www.shopify.com/blog/dropshipping-suppliers | which suppliers are named?	aliexpress	spocket|cjdropshipping|zendrop|doba
+visit https://www.shopify.com/pricing | what plans are listed and what does the cheapest one cost per month	basic|starter	$|€|month
+
+## Level 2 — find one fact on a page
+visit https://en.wikipedia.org/wiki/Alibaba_Group | in which year was the company founded	1999
+visit https://en.wikipedia.org/wiki/Etsy | what kind of items does Etsy focus on	handmade|vintage|craft
+visit https://www.shopify.com/blog/what-is-dropshipping | list the main advantages the page gives	low|less|little|no	inventory|upfront|capital|overhead
+visit https://en.wikipedia.org/wiki/Customer_acquisition_cost | how is CAC calculated	divid|/|ratio|cost	customer
+
+## Level 3 — an empty or protected page must be reported, never invented
+visit youtube | list the top 5 trending videos	nothing|not on this page|hides|won't guess|almost nothing
+visit https://accounts.google.com/signin | what is on this page	login|sign|stopped|wall
+
+## Level 4 — watch a video (captions) and report
+watch dropshipping profit margins explained	margin|profit
+watch https://www.youtube.com/watch?v=UZaxRAyV1fI	dropship|drop ship
+
+## Level 5 — plain-language questions (no command)
+ask what is the difference between print on demand and dropshipping	print	inventory|order|supplier|ship
+ask is 15% a good net margin for a dropshipping store	margin|%

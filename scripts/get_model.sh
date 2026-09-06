@@ -9,12 +9,21 @@ cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 mkdir -p release/llm state/logs
 LLAMA_TAG=b10826
-URL="${BAI_MODEL_URL:-https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf}"
+# model size by RAM: >= 6 GB total -> 3B (smarter; ~2 GB file, ~3 GB RAM while thinking); less -> 1.5B (~1 GB file, ~1.3 GB RAM)
+RAM_MB=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 4000)
+if [ -n "$BAI_MODEL_URL" ]; then URL="$BAI_MODEL_URL"
+elif [ "$RAM_MB" -ge 6000 ]; then URL="https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf"
+else URL="https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"; fi
+echo "this machine: ${RAM_MB} MB RAM -> model: $(basename "$URL")"
 
 fetch_model() {
+  WANT=$(basename "$URL")
+  if [ -s release/llm/model.gguf ] && [ "$(cat release/llm/model.name 2>/dev/null)" != "$WANT" ]; then
+    echo "replacing $(cat release/llm/model.name 2>/dev/null || echo 'old model') with $WANT"; rm -f release/llm/model.gguf
+  fi
   if [ ! -s release/llm/model.gguf ]; then
-    echo "fetching model (~1 GB, once) ..."
-    curl -fL --progress-bar -o release/llm/model.gguf.part "$URL" && mv release/llm/model.gguf.part release/llm/model.gguf
+    echo "fetching $WANT (once) ..."
+    curl -fL --progress-bar -o release/llm/model.gguf.part "$URL" && mv release/llm/model.gguf.part release/llm/model.gguf && echo "$WANT" > release/llm/model.name
   fi
 }
 
@@ -36,7 +45,8 @@ case "$1" in
       mkdir -p "$SRC" && tar xzf /tmp/llama-src.tgz -C "$SRC" --strip-components=1 && rm /tmp/llama-src.tgz
     fi
     echo "building llama-server (5-15 min on a laptop) ..."
-    cmake -S "$SRC" -B "$SRC/build" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DGGML_NATIVE=ON -DBUILD_SHARED_LIBS=OFF >/dev/null
+    cmake -S "$SRC" -B "$SRC/build" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+      -DGGML_NATIVE=ON -DBUILD_SHARED_LIBS=OFF -DGGML_STATIC=ON -DGGML_OPENMP=OFF -DCMAKE_EXE_LINKER_FLAGS="-static" >/dev/null
     cmake --build "$SRC/build" --target llama-server -j "$(nproc)" 2>&1 | grep -E "error|Built target llama-server" || true
     rm -f release/llm/llama-server release/llm/*.so*
     cp "$SRC/build/bin/llama-server" release/llm/llama-server
@@ -46,10 +56,16 @@ case "$1" in
 esac
 
 if [ ! -x release/llm/llama-server ]; then
-  echo "fetching prebuilt llama.cpp $LLAMA_TAG ..."
-  curl -fsSL -o /tmp/llama.tgz "https://github.com/ggml-org/llama.cpp/releases/download/$LLAMA_TAG/llama-$LLAMA_TAG-bin-ubuntu-x64.tar.gz"
-  tar xzf /tmp/llama.tgz -C release/llm --strip-components=1 && rm /tmp/llama.tgz
-  chmod +x release/llm/llama-server
+  # our own fully static build (16 MB, needs no system libraries at all) from the project's GitHub Release
+  echo "fetching llama-server (static build, 16 MB) ..."
+  if curl -fsSL -o release/llm/llama-server "https://github.com/${GH_OWNER:-dreamer2664}/${GH_REPO:-businessai}/releases/download/latest/llama-server-static"; then
+    chmod +x release/llm/llama-server
+  else
+    echo "static build unavailable, falling back to the upstream prebuilt llama.cpp $LLAMA_TAG ..."
+    curl -fsSL -o /tmp/llama.tgz "https://github.com/ggml-org/llama.cpp/releases/download/$LLAMA_TAG/llama-$LLAMA_TAG-bin-ubuntu-x64.tar.gz"
+    tar xzf /tmp/llama.tgz -C release/llm --strip-components=1 && rm /tmp/llama.tgz
+    chmod +x release/llm/llama-server
+  fi
 fi
 fetch_model
 # quick check: does the prebuilt binary run here at all?
