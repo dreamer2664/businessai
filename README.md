@@ -4,7 +4,7 @@ An AI that (eventually) runs an online store end to end: product and supplier
 research, listings, customer messages, social media — reporting to its owner
 and asking questions through Telegram.
 
-**Status: milestone 2 — own browser + read-only research tasks** (browse tasks 18/19, knowledge pack 52/55, marketing exam 60 % offline). Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
+**Status: milestone 3 — thinking model, plain language, memory** (marketing exam 90 %, browse tasks 18/19, knowledge pack 52/55). Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
 for the roadmap and the rules (score-driven, frugal, owner-in-the-loop, no
 CAPTCHA-breaking, official platform connections only).
 
@@ -30,6 +30,17 @@ Then message the bot on Telegram: `/start`, `/status`, `/selftest` (asks you a q
 
 Knowledge brain (optional, ~65 MB): `sh scripts/get_brain.sh` downloads the engine + models + packs from the release; after that any
 question you send (or `/ask …`) is answered from the business pack with its source.
+
+## Thinking model (planner)
+`agent/planner.py` runs a small open model locally through llama.cpp (default Qwen2.5-1.5B-Instruct, 940 MB, CPU only,
+`sh scripts/get_model.sh`). It is started on first use and stopped after 10 idle minutes, so RAM is only used while thinking.
+It never answers from thin air: it gets evidence (knowledge-pack passages, page notes, the agent's own notes) and must say
+when the evidence isn't enough. Any OpenAI-compatible endpoint can replace it (`BAI_LLM_URL`, `BAI_LLM_KEY`, `BAI_LLM_MODEL`).
+
+## Memory
+`state/notes.jsonl` (everything researched/summarized, with sources), `state/todo.json` (to-do + learning goals).
+`/goal <topic>` gives the agent a standing learning goal: when idle it studies one new angle per session, at most 6 sessions
+a day, and sends a daily report at 20:00. That is the only thing it does on its own.
 
 ## Browser (eyes & hands)
 `agent/browser.py` drives a headless Chromium: every page is turned into numbered text (`[7] button: Add to cart`), actions

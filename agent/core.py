@@ -9,6 +9,7 @@ Usage:  python3 -m agent.core            # run
 """
 import datetime as _dt
 import json
+import re
 import sys
 import threading
 import time
@@ -17,20 +18,22 @@ import traceback
 from . import brain, config
 from .tasks import Tasks
 from .viewer import Viewer
+from .planner import Planner
+from .memory import Memory
 from .telegram import Bot, TelegramError
 
-VERSION = "0.4 (milestone 2+: live screen)"
+VERSION = "0.5 (milestone 3: thinking model, plain-language, memory)"
 
-HELP = """I'm your Business AI. I can:
-/ask <question> — answer from my business knowledge pack (e-commerce, dropshipping, marketing, business basics)
-/research <topic> — search the web in my own browser, read the best pages, report with sources (~30 s)
-/compare <product> — look for suppliers of a product and tabulate prices / shipping / MOQ notes (~1 min)
-/summarize <url> — open a page or PDF and give me the key points
-/exam [n] — sit n questions of the marketing exam bank offline and report my score
-/screen — a screenshot of what my browser shows right now
-/watch on|off — send me a photo after every step while I work (off by default)
-/status — what I'm running and how much I know (and the address of my live screen)
-Any plain question is looked up in the pack too. Browsing is read-only: I never log in, pass CAPTCHAs, buy or post."""
+HELP = """Just talk to me. I work out whether you're asking a question, want something looked up on the web, want a page summarized, or want suppliers compared.
+Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.
+
+Commands (optional):
+/research <topic> · /compare <product> · /summarize <url> · /exam [n]
+/todo — my to-do list · /todo add <text> · /todo done <n>
+/goal <topic> — give me a standing learning goal; I study it on my own when idle (max 6 sessions a day) and keep notes
+/goals · /goal drop <n> · /notes [topic] — what I've learned · /report — today's summary
+/screen · /watch on|off — see my browser · /status · /selftest
+Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
 
 class Agent:
@@ -49,8 +52,13 @@ class Agent:
         self.brain = brain.Brain()
         self.viewer = Viewer(on_step=self._on_step).start()
         self.watch = False
-        self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer)
+        self.planner = Planner(log=self.log)
+        self.memory = Memory()
+        self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer,
+                           planner=self.planner, memory=self.memory)
         self.busy = None
+        self.last_idle_check = time.time()
+        self.report_sent = ""
         self.log("start", version=VERSION, bot=self.me.get("username"))
 
     # ---- persistence / logging ----------------------------------------
@@ -246,19 +254,62 @@ class Agent:
             return "Running a self-test: I'll ask you something with buttons."
         for cmd in ("/research", "/compare", "/summarize", "/summarise", "/exam"):
             if low.startswith(cmd):
-                if self.busy:
-                    return f"I'm still busy with: {self.busy}. Ask me again in a minute."
-                arg = text[len(cmd):].strip()
-                threading.Thread(target=self.run_task, args=(cmd[1:] + " " + arg,), daemon=True).start()
-                return {"/exam": "Sitting the exam now — this takes a few minutes; I'll send the score.",
-                        "/compare": "Looking for suppliers in my browser — about a minute."}.get(cmd, "On it — browsing now, report in ~30 seconds.")
-        # default: try the knowledge brain, otherwise be honest
-        ans = self.brain.ask(text)
-        if ans:
+                return self.start_task(cmd[1:].replace("summarise", "summarize"), text[len(cmd):].strip())
+        if low.startswith("/todo"):
+            arg = text[5:].strip()
+            if arg.lower().startswith("add "):
+                return f"Added #{self.memory.add(arg[4:].strip())}.\n" + self.memory.list_text()
+            if arg.lower().startswith("done "):
+                x = self.memory.done(arg[5:].strip())
+                return (f"Done: {x['text']}" if x else "No open item with that number.") + "\n" + self.memory.list_text()
+            return self.memory.list_text()
+        if low.startswith("/goals"):
+            return self.memory.list_text()
+        if low.startswith("/goal"):
+            arg = text[5:].strip()
+            if arg.lower().startswith("drop "):
+                return "Dropped." if self.memory.drop_goal(arg[5:].strip().lstrip("g")) else "No goal with that number."
+            if not arg:
+                return self.memory.list_text()
+            i = self.memory.add_goal(arg)
+            return f"Learning goal g{i} set: {arg}\nI'll study it when idle (up to 6 sessions a day, 3 pages each) and keep notes — /notes {arg.split()[0]} to see them, /goal drop {i} to stop."
+        if low.startswith("/notes"):
+            q = text[6:].strip()
+            ns = self.memory.notes(q or None, limit=5)
+            if not ns:
+                return "No notes yet" + (f" about '{q}'." if q else ". They appear when I research, summarize or study something.")
+            return "\n\n".join(f"{n['t'][:16]} · {n['kind']} · {n['topic']}\n{n['text'][:500]}" for n in ns)
+        if low.startswith("/report"):
+            return self.memory.daily_report() or "Nothing to report yet today."
+        # ---- plain language: work out what the owner wants --------------------
+        it = self.planner.intent(text) if self.planner.installed() else {"kind": "ask", "topic": text}
+        self.log("intent", intent=it["kind"], topic=it["topic"])
+        if it["kind"] == "chat":
+            try:
+                return self.planner.reply(text) if self.planner.installed() else "Hi! Ask me anything about the store."
+            except Exception:
+                return "Hi! Ask me anything about the store."
+        if it["kind"] in ("research", "compare", "summarize"):
+            return self.start_task(it["kind"], it["topic"])
+        # a question: answer from what I know; if I know nothing useful, go and look
+        ans = self.tasks.ask(text)
+        if ans and not re.search(r"\b(does not|doesn't|do not|don't) (contain|answer|mention|provide|include)\b|no evidence|not enough (evidence|information)", ans, re.I):
             return ans
-        if not self.brain.ready:
-            return "My knowledge brain isn't installed on this machine yet — run: sh scripts/get_brain.sh"
-        return "I couldn't find a confident answer in my business pack for that."
+        if not self.brain.ready and not self.planner.installed():
+            return "My knowledge brain and thinking model aren't installed here yet — run: sh scripts/get_brain.sh && sh scripts/get_model.sh"
+        return self.start_task("research", it["topic"], prefix="I don't know that well enough from my own knowledge — ")
+
+    def start_task(self, kind, arg, prefix=""):
+        if self.busy:
+            return f"I'm still busy with: {self.busy}. Ask me again in a minute."
+        if not arg:
+            return f"What should I {kind}?"
+        threading.Thread(target=self.run_task, args=(f"{kind} {arg}",), daemon=True).start()
+        msg = {"exam": "sitting the exam now — this takes a few minutes; I'll send the score.",
+               "compare": f"looking for suppliers of {arg} in my browser — about a minute.",
+               "summarize": "reading it now — a moment.",
+               "research": f"looking into '{arg}' — report in about a minute."}[kind]
+        return (prefix + msg) if prefix else msg[0].upper() + msg[1:]
 
     def run_task(self, command):
         self.busy = command[:60]
@@ -269,10 +320,39 @@ class Agent:
         self.log("out", text=out[:300])
         self.bot.send(self.owner_id, out)
 
+    def idle_work(self):
+        """Between messages: one self-study session when a learning goal is waiting, and the daily report at 20:00."""
+        now = time.time()
+        if self.busy or now - self.last_idle_check < 60:
+            return
+        self.last_idle_check = now
+        hour = _dt.datetime.now().hour
+        today = _dt.date.today().isoformat()
+        if hour >= 20 and self.report_sent != today and self.owner_id:
+            rep = self.memory.daily_report()
+            self.report_sent = today
+            if rep:
+                self.notify(rep)
+        goal = self.memory.next_goal()
+        if goal and 8 <= hour < 23 and self.owner_id:
+            threading.Thread(target=self.run_study, args=(goal,), daemon=True).start()
+
+    def run_study(self, goal):
+        self.busy = f"studying g{goal['id']}: {goal['topic'][:40]}"
+        try:
+            angle, out = self.tasks.study(goal)
+            self.log("study", goal=goal["id"], angle=angle, chars=len(out))
+            self.notify(f"📚 Self-study on '{goal['topic']}' — angle: {angle}\n\n{out[:1500]}")
+        except Exception as e:
+            self.log("study_error", error=str(e)[:200])
+        finally:
+            self.busy = None
+
     def status_text(self):
         up = int(time.time() - self.started)
         return (f"Business AI {VERSION}\n"
                 f"up {up // 3600}h {up % 3600 // 60}m · brain: {self.brain.describe()}\n"
+                f"{self.planner.describe()} · notes: {len(self.memory.notes(limit=100000))} · {self.memory.list_text().splitlines()[-1]}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")
@@ -297,6 +377,8 @@ class Agent:
                     backoff = min(backoff * 2, 30)
                 continue
             self.tasks.tick()
+            self.planner.tick()
+            self.idle_work()
             for u in updates:
                 self.state["offset"] = u["update_id"] + 1
                 self._save_state()

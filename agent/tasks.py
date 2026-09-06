@@ -58,11 +58,13 @@ def key_sentences(text, topic, limit=6):
 class Tasks:
     IDLE_CLOSE = 600          # seconds; the browser window stays open between tasks, then closes itself
 
-    def __init__(self, log=None, notify=None, brain=None, viewer=None):
+    def __init__(self, log=None, notify=None, brain=None, viewer=None, planner=None, memory=None):
         self.log = log or (lambda kind, **f: None)
         self.notify = notify or (lambda text: None)
         self.brain = brain
         self.viewer = viewer
+        self.planner = planner
+        self.memory = memory
         self._browser = None
         self._lock = threading.Lock()
 
@@ -126,10 +128,22 @@ class Tasks:
                 ks = key_sentences(text, topic)
                 if ks:
                     opened.append((b.page.title()[:80] or r["url"], r["url"], ks))
-        for title, url, ks in opened:
-            report.append(f"\n{title}\n{url}\n" + "\n".join(f"• {s}" for s in ks))
-        report.append(f"\n({len(opened)} pages read in {time.time() - t0:.0f}s)")
-        return "\n".join(report)
+        brief = None
+        if opened and self.planner and self.planner.installed():
+            try:
+                brief = self.planner.brief(topic, opened)
+            except Exception as e:
+                self.log("brief_failed", error=str(e)[:100])
+        if brief:
+            report = [f"Research: {topic}\n\n{brief}", "\nPages I read:"] + [f"[{i+1}] {t} — {u}" for i, (t, u, _) in enumerate(opened)]
+        else:
+            for title, url, ks in opened:
+                report.append(f"\n{title}\n{url}\n" + "\n".join(f"• {s}" for s in ks))
+        report.append(f"({len(opened)} pages read in {time.time() - t0:.0f}s)")
+        out = "\n".join(report)
+        if self.memory and opened:
+            self.memory.note("research", topic, brief or out, [u for _, u, _ in opened])
+        return out
 
     def summarize(self, url, max_points=8):
         with self._session() as b:
@@ -146,8 +160,24 @@ class Tasks:
         out = [f"Summary of: {title}", url]
         if heads:
             out.append("Sections: " + " | ".join(heads))
+        if self.planner and self.planner.installed() and len(text) > 200:
+            try:
+                summary = self.planner.chat(
+                    "You summarize web pages for a busy store owner. Plain words, no fluff.",
+                    f"PAGE: {title}\n\n{clean(text)[:6000]}\n\nGive: one sentence on what the page is, then 3-6 bullet points with the most useful concrete facts (numbers, steps, warnings).",
+                    max_tokens=260)
+                out.append(summary)
+                out.append(f"({len(text)} characters read)")
+                res = "\n".join(out)
+                if self.memory:
+                    self.memory.note("summary", title or url, summary, [url])
+                return res
+            except Exception as e:
+                self.log("summary_failed", error=str(e)[:100])
         out += [f"• {s}" for s in ks] or ["(no clear key sentences found — page may be mostly images/scripts)"]
         out.append(f"({len(text)} characters read)")
+        if self.memory:
+            self.memory.note("summary", title or url, "\n".join(ks), [url])
         return "\n".join(out)
 
     def compare_suppliers(self, product, n_pages=3):
@@ -182,15 +212,82 @@ class Tasks:
         out = [f"Supplier comparison: {product}", "site | kind | page | prices seen | shipping times | MOQ notes"]
         out += [" | ".join(r) for r in rows]
         out.append("Note: read-only research; nothing was contacted or ordered.")
+        if self.memory:
+            self.memory.note("suppliers", product, "\n".join(out[2:-1]), [f"https://{r[0]}" for r in rows])
         return "\n".join(out)
 
-    def exam(self, bank, n=40):
-        from .mcq import run_bank
-        import io, contextlib
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            ok, tot = run_bank(bank, n=n)
-        return f"Exam {bank.split('/')[-1]}: {ok}/{tot} correct ({100*ok/max(1,tot):.0f}%) — offline, knowledge brain only.\n{buf.getvalue().strip()}"
+    def exam(self, bank, n=40, seed=1):
+        """Sit n questions. Retrieval solver first; the thinking model (with the retrieved passages as evidence) decides."""
+        import json as _json, random
+        from .mcq import MCQSolver
+        qs = [_json.loads(l) for l in open(bank, encoding="utf-8") if l.strip()]
+        random.seed(seed)
+        qs = random.sample(qs, min(n, len(qs)))
+        S = MCQSolver()
+        use_llm = bool(self.planner and self.planner.installed())
+        ok = ok_ret = 0
+        t0 = time.time()
+        for i, q in enumerate(qs):
+            idx, conf, _ = S.answer(q["q"], q["choices"])
+            ok_ret += idx == q["answer"]
+            if use_llm:
+                d = S.brain(q["q"])
+                ev = "\n".join(f"[{h.get('title', '')}] {h.get('text', '')}" for h in d.get("hits", [])[:5])
+                try:
+                    li, lconf, _ = self.planner.mcq(q["q"], q["choices"], ev + f"\n(retrieval solver suggests {'ABCDEFGH'[idx]}, confidence {conf:.2f})")
+                    idx = li
+                except Exception:
+                    pass
+            ok += idx == q["answer"]
+            if self.viewer:
+                self.viewer.task = f"exam {i+1}/{len(qs)} — {ok} right so far"
+        mode = "thinking model + knowledge brain" if use_llm else "knowledge brain only"
+        return (f"Exam {bank.split('/')[-1]}: {ok}/{len(qs)} correct ({100*ok/len(qs):.0f}%) — {mode}, {time.time()-t0:.0f}s.\n"
+                f"(retrieval alone would have scored {ok_ret}/{len(qs)})")
+
+    def ask(self, question):
+        """Answer from what I already know (knowledge pack + my notes), written by the thinking model."""
+        ev, titles = [], []
+        if self.brain and self.brain.ready:
+            d = self.brain.ask_raw(question) or {}
+            for h in d.get("hits", [])[:5]:
+                ev.append(f"[{h.get('title', '')}] {h.get('text', '')}")
+                titles.append(h.get("title", ""))
+        if self.memory:
+            rec = self.memory.recall(question)
+            if rec:
+                ev.append(rec)
+        if not ev:
+            return None
+        if self.planner and self.planner.installed():
+            try:
+                return self.planner.answer(question, "\n".join(ev))
+            except Exception as e:
+                self.log("answer_failed", error=str(e)[:100])
+        return self.brain.ask(question) if self.brain and self.brain.ready else None
+
+    def study(self, goal):
+        """One self-directed study session on a learning goal: pick an angle not yet covered, research it, keep the note."""
+        angles_done = goal.get("angles", [])
+        angle = goal["topic"]
+        if self.planner and self.planner.installed():
+            try:
+                raw = self.planner.chat("You plan research for a small online-store owner. Output one line only.",
+                                        f"Learning goal: {goal['topic']}\nAlready researched angles: {angles_done or 'none'}\n"
+                                        "Give ONE new web-search query (max 10 words) about a different aspect of this goal "
+                                        "(e.g. costs, how it works, best options, risks, how to start). It MUST keep the goal's key words.",
+                                        max_tokens=30, stop=["\n"])
+                cand = raw.strip().strip('"')
+                keys = [w for w in re.findall(r"[a-z]{4,}", goal["topic"].lower()) if w not in ("with", "from", "about", "that", "this")]
+                if cand and sum(k in cand.lower() for k in keys) >= max(1, len(keys) // 2):
+                    angle = cand
+                else:
+                    angle = f"{goal['topic']} " + ["how it works", "costs and pricing", "best options compared", "risks and problems", "how to start", "reviews"][len(angles_done) % 6]
+            except Exception:
+                pass
+        out = self.research(angle)
+        self.memory.studied(goal["id"], angle)
+        return angle, out
 
     # ---- dispatcher ----------------------------------------------------
     def run(self, command):

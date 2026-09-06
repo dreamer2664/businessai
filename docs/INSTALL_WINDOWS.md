@@ -80,3 +80,8 @@ cd ~/businessai && git pull && systemctl --user restart businessai
   On Windows 10 (no WSLg) it stays invisible — use the live page or `/screen` instead. Force invisible with `BAI_HEADED=0`.
   The window needs the full Chromium once: `python3 -m playwright install chromium` (install_browser.sh does it).
 * **Phone:** `/screen` for one screenshot, `/watch on` for a photo after every step.
+
+## Thinking model (milestone 3)
+`sh scripts/get_model.sh` downloads llama.cpp and a 940 MB open model once. Needs ~1.3 GB free RAM while the agent is
+thinking (it frees it after 10 idle minutes). Bigger/better models: set `BAI_MODEL_URL` to any GGUF file before running the
+script (e.g. Qwen2.5-3B-Instruct-Q4_K_M ≈ 2 GB, needs ~3 GB RAM). Use `BAI_LLM_THREADS` to limit CPU threads.

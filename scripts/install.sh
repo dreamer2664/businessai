@@ -13,4 +13,5 @@ echo
 echo "Optional — the agent's own browser (needed for /research, /compare, /summarize; ~300 MB):"
 echo "   sh scripts/install_browser.sh"
 echo "Optional — the knowledge brain (needed for /ask and /exam; ~65 MB):   sh scripts/get_brain.sh"
+echo "Optional — the thinking model (plain-language chat, written answers, exam; ~1 GB): sh scripts/get_model.sh"
 echo "install OK. start with:  sh scripts/run.sh   (or install the service: sh scripts/service.sh)"
