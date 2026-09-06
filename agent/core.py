@@ -22,6 +22,7 @@ from .planner import Planner
 from .memory import Memory
 from .learn import Learner
 from .inbox import Inbox
+from .social import Social
 from .telegram import Bot, TelegramError
 
 VERSION = "0.6 (milestone 5: customer replies with approval)"
@@ -36,6 +37,7 @@ Commands (optional):
 /goals · /goal drop <n> · /notes [topic] — my notes · /learned — facts I've folded into my own knowledge pack · /report — today's summary
 Forward me any customer message (or write /customer <their text>) → I draft the answer, you tap Approve / Edit / Reject, and I hand you the final text to paste back. Nothing is ever sent by itself.
 /inbox — customer messages waiting; /inbox practice loads 12 sample messages so you can see how I'd answer them
+/post <platform> <what about> — I draft a social post (instagram, facebook, tiktok, x, linkedin, pinterest), you approve/edit, then copy it — I never publish by myself
 /policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
 /screen · /watch on|off — see my browser · /status · /selftest
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
@@ -63,6 +65,9 @@ class Agent:
                            planner=self.planner, memory=self.memory)
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
         self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log)
+        self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
+        self.posts = {}             # post id -> draft dict awaiting the owner's tap
+        self.editing_post = None    # post id whose text the owner is typing
         self.drafts = {}            # message id -> draft dict awaiting the owner's tap
         self.editing = None         # message id whose reply the owner is typing
         self.busy = None
@@ -180,6 +185,13 @@ class Agent:
             self.inbox.add("owner", self._forward_name(msg), body)
             threading.Thread(target=self.process_inbox, daemon=True).start()
             return
+        if self.editing_post and not text.startswith("/"):
+            pid, self.editing_post = self.editing_post, None
+            d = self.posts.pop(pid, None) or {}
+            self.social.decide(pid, "edited", d, text)
+            self.bot.send(chat_id, f"Saved your version of the {d.get('platform', '')} post.\n\n📋 Long-press to copy and publish it yourself:\n\n{text}")
+            self.log("post_edited", id=pid)
+            return
         if self.editing and not text.startswith("/"):
             mid, self.editing = self.editing, None
             d = self.drafts.pop(mid, None) or {}
@@ -247,6 +259,38 @@ class Agent:
                 self.bot.send(self.owner_id, f"Noted: {ans!r} (answer to an earlier question — I had restarted in between).")
             else:
                 self.bot.answer_callback(cq["id"], "That question is already closed.")
+        elif data.startswith("p:"):
+            _, action, pid = data.split(":", 2)
+            d = self.posts.get(pid)
+            m = cq.get("message") or {}
+            if not d:
+                self.bot.answer_callback(cq["id"], "Already handled.")
+                return
+            if action == "ok":
+                self.posts.pop(pid, None)
+                self.social.decide(pid, "approved", d, d["text"])
+                self.bot.answer_callback(cq["id"], "Approved")
+                if m:
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n✅ approved")
+                self.bot.send(self.owner_id, f"📋 {d['platform']} post — long-press to copy and publish it yourself (I can't post for you yet):\n\n{d['text']}")
+            elif action == "edit":
+                self.editing_post = pid
+                self.bot.answer_callback(cq["id"], "Type your version")
+                self.bot.send(self.owner_id, "Type the post text you want (your next message is taken as the post). /cancel to keep the draft waiting.")
+            elif action == "redo":
+                self.posts.pop(pid, None)
+                self.social.decide(pid, "rejected", d, "")
+                self.bot.answer_callback(cq["id"], "Trying again")
+                if m:
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"])
+                threading.Thread(target=self.draft_post, args=(d["platform"], d["topic"]), daemon=True).start()
+            elif action == "no":
+                self.posts.pop(pid, None)
+                self.social.decide(pid, "rejected", d, "")
+                self.bot.answer_callback(cq["id"], "Dropped")
+                if m:
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n❌ dropped — nothing published")
+            self.log("post_decision", id=pid, action=action)
         elif data.startswith("r:"):
             _, action, mid = data.split(":", 2)
             d = self.drafts.get(mid)
@@ -274,6 +318,30 @@ class Agent:
             self.log("inbox_decision", id=mid, action=action)
         else:
             self.bot.answer_callback(cq["id"])
+
+    # ---- social posts -----------------------------------------------------
+    def draft_post(self, platform, topic):
+        if self.busy:
+            self.notify(f"I'm busy ({self.busy}) — I'll draft the {platform} post right after.")
+            while self.busy:
+                time.sleep(3)
+        self.busy = f"drafting a {platform} post"
+        try:
+            d = self.social.draft(platform, topic)
+            pid = str(int(time.time() * 1000) % 10 ** 8)
+            self.posts[pid] = d
+            flags = ("\n⚠️ " + "; ".join(d["checks"])) if d["checks"] else ""
+            note = f"\nℹ️ {d['note']}" if d.get("note") else ""
+            body = f"📣 {platform} post · {d['chars']} characters\nabout: {topic[:120]}\n\n— my draft —\n{d['text']}{flags}{note}"
+            ok_label = "⚠️ Approve anyway" if d["checks"] else "✅ Approve"
+            self.bot.send(self.owner_id, body, buttons=[[(ok_label, f"p:ok:{pid}"), ("✏️ Edit", f"p:edit:{pid}")],
+                                                        [("🔁 Try again", f"p:redo:{pid}"), ("❌ Drop", f"p:no:{pid}")]])
+            self.log("post_draft", id=pid, platform=platform, flags=d["checks"])
+        except Exception as e:
+            self.log("post_error", error=str(e)[:200])
+            self.notify(f"I couldn't draft that post: {str(e)[:120]}")
+        finally:
+            self.busy = None
 
     # ---- customer messages ---------------------------------------------
     def deliver(self, mid, final_text):
@@ -380,6 +448,15 @@ class Agent:
             return "\n\n".join(f"{n['t'][:16]} · {n['kind']} · {n['topic']}\n{n['text'][:500]}" for n in ns)
         if low.startswith("/report"):
             return self.memory.daily_report() or "Nothing to report yet today."
+        if low.startswith("/post"):
+            arg = text[5:].strip()
+            if not arg:
+                return "Tell me what the post is about: /post instagram our new bamboo toothbrush set (platforms: instagram, facebook, tiktok, x, linkedin, pinterest)."
+            plat, topic = self.social.parse(arg)
+            if not topic:
+                return f"What should the {plat} post be about?"
+            threading.Thread(target=self.draft_post, args=(plat, topic), daemon=True).start()
+            return f"Drafting a {plat} post about “{topic}” — you'll get it with Approve / Edit / Reject buttons. Nothing gets published by itself."
         if low.startswith("/inbox"):
             arg = low[6:].strip()
             if arg.startswith("practice"):
@@ -404,8 +481,8 @@ class Agent:
         if low.startswith("/stats"):
             return self.inbox.stats_text()
         if low.startswith("/cancel"):
-            had = self.editing
-            self.editing = None
+            had = self.editing or self.editing_post
+            self.editing = self.editing_post = None
             return "Okay, edit cancelled — the draft is still waiting with its buttons." if had else "Nothing to cancel."
         if low.startswith("/learned"):
             if "rebuild" in low:
@@ -512,7 +589,7 @@ class Agent:
                 f"up {up // 3600}h {up % 3600 // 60}m · brain: {self.brain.describe()}\n"
                 f"{self.planner.describe()} · notes: {len(self.memory.notes(limit=100000))} · {self.memory.list_text().splitlines()[-1]}\n"
                 f"{self.learner.status()}\n"
-                f"{self.inbox.status()}\n"
+                f"{self.inbox.status()}\n{self.social.status()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")
