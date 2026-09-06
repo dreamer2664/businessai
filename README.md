@@ -37,6 +37,17 @@ refer to the numbers, and every step is logged in plain words. Built-in rules: n
 reports), refuses buy/pay/post/submit clicks unless a task is explicitly allowed to act, blocklist for adult/gambling/banking.
 Telegram: `/research <topic>`, `/compare <product>`, `/summarize <url>`, `/exam [n]`. Install: `sh scripts/install_browser.sh`.
 
+## Watching it work (live screen)
+Three ways, all free and local:
+1. **Live page** — the agent serves its own screen at `http://localhost:8765` on the machine it runs on: latest screenshot
+   (refreshes every second), a plain-words log of every step, and a toggle to see the numbered text it actually reads.
+   No files are written; screenshots are only taken while somebody is watching. Change the port with `BAI_VIEW_PORT`.
+2. **Phone** — `/screen` sends one screenshot; `/watch on` sends a photo after every browser step (`/watch off` to stop).
+3. **A real window** — set `BAI_HEADED=1` (or just run where a display exists, e.g. WSLg on Windows 11) and the agent's
+   Chrome opens visibly, slowed to 250 ms per action so you can follow the cursor. Without a display it falls back to
+   invisible mode automatically. The window stays open between tasks and closes itself after 10 idle minutes.
+Try it without Telegram: `python3 -m agent.viewer --demo` (runs a few read-only tasks in a loop).
+
 ## Phone line (what the agent can do today)
 - Only the owner (Telegram username in `.secrets/env`, pinned to the numeric id at first contact) is served.
 - `notify(text)` — one-way message to the phone.

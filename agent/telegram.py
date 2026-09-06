@@ -91,20 +91,25 @@ class Bot:
         except TelegramError:
             return None
 
-    def send_document(self, chat_id, path, caption=None):
-        """Upload a file (multipart) — used for reports/screenshots later."""
+    def send_photo(self, chat_id, jpeg_bytes, caption=None):
+        """Send an in-memory JPEG as a photo (used for the live screen)."""
+        return self.send_document(chat_id, None, caption, payload=jpeg_bytes, field="photo", name="screen.jpg")
+
+    def send_document(self, chat_id, path, caption=None, payload=None, field="document", name=None):
+        """Upload a file (multipart) — reports, screenshots. payload= bytes instead of a path."""
         boundary = f"----bai{int(time.time() * 1000)}"
-        with open(path, "rb") as f:
-            payload = f.read()
-        name = str(path).split("/")[-1]
+        if payload is None:
+            with open(path, "rb") as f:
+                payload = f.read()
+        name = name or str(path).split("/")[-1]
         parts = [f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n"]
         if caption:
             parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n{config.redact(caption)}\r\n")
         head = "".join(parts).encode()
-        head += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"{name}\"\r\n"
+        head += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{name}\"\r\n"
                  f"Content-Type: application/octet-stream\r\n\r\n").encode()
         body = head + payload + f"\r\n--{boundary}--\r\n".encode()
-        req = urllib.request.Request(self.base + "sendDocument", data=body,
+        req = urllib.request.Request(self.base + ("sendPhoto" if field == "photo" else "sendDocument"), data=body,
                                      headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
         with urllib.request.urlopen(req, timeout=120) as r:
             out = json.loads(r.read().decode())

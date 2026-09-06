@@ -18,6 +18,7 @@ find(text), click(n), type(n, text, enter=False), scroll(dir), back(), forward()
 screenshot(path), search(query), links(), extract_text(), download_text(url).
 """
 import json
+import os
 import re
 import time
 import urllib.parse
@@ -87,24 +88,66 @@ class BrowserError(Exception):
 
 
 class Browser:
-    def __init__(self, headless=True, allow_actions=False, log=None, state_dir=None):
+    def __init__(self, headless=None, allow_actions=False, log=None, state_dir=None, viewer=None):
+        """headless=None → visible window when a display exists (or BAI_HEADED=1), else invisible.
+        viewer: agent.viewer.Viewer — receives a screenshot + a plain-words line after every step."""
         from playwright.sync_api import sync_playwright
+        self.log = log or (lambda kind, **f: None)
+        self.viewer = viewer
+        if headless is None:
+            want_headed = os.environ.get("BAI_HEADED", "").lower() in ("1", "true", "yes") or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+            headless = not want_headed
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(headless=headless, args=["--disable-gpu", "--no-sandbox"])
+        launch = dict(args=["--disable-gpu", "--no-sandbox"])
+        try:
+            self._browser = self._pw.chromium.launch(headless=headless, slow_mo=0 if headless else 250, **launch)
+        except Exception as e:
+            if headless:
+                raise
+            self.log("browser_headed_unavailable", error=str(e)[:120])
+            headless = True
+            self._browser = self._pw.chromium.launch(headless=True, **launch)
+        self.headless = headless
         self._ctx = self._browser.new_context(viewport={"width": 1280, "height": 900}, locale="en-US",
                                               user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                                                           "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"))
         self._ctx.set_default_timeout(20000)
         self.allow_actions = allow_actions
-        self.log = log or (lambda kind, **f: None)
         self.state_dir = state_dir or (config.STATE_DIR / "browser")
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.page = self._ctx.new_page()
         self.items = []
         self.history = []
+        self.last_used = time.time()
+        if self.viewer:
+            self.viewer.browser_open = True
+
+    def alive(self):
+        try:
+            return self._browser.is_connected() and bool(self._ctx.pages)
+        except Exception:
+            return False
+
+    def _show(self, action=""):
+        """Push the current tab to the live viewer (screenshot only while somebody is watching)."""
+        self.last_used = time.time()
+        if not self.viewer:
+            return
+        shot = None
+        if self.viewer.watching():
+            try:
+                shot = self.page.screenshot(type="jpeg", quality=55, timeout=4000)
+            except Exception:
+                pass
+        try:
+            self.viewer.step(action, self.page.url, self.page.title()[:80], self.status(), len(self._ctx.pages), shot)
+        except Exception:
+            pass
 
     # ---- lifecycle -----------------------------------------------------
     def close(self):
+        if self.viewer:
+            self.viewer.browser_open = False
         try:
             self._ctx.close(); self._browser.close(); self._pw.stop()
         except Exception:
@@ -153,6 +196,7 @@ class Browser:
                 raise BrowserError(f"could not open {url}: {str(e)[:120]}")
         self.history.append(url)
         self.log("browser_open", url=url, ms=int((time.time() - t0) * 1000))
+        self._show(f"Opened {url}")
         return self.read()
 
     def back(self):
@@ -234,6 +278,8 @@ class Browser:
                      if st == "captcha" else "!! This page asks for a login. I must not log in by myself — stop and ask the owner.\n")
         if len(text) > max_chars:
             text = text[:max_chars] + f"\n… (truncated; {len(text) - max_chars} more characters — use scroll or find)"
+        if self.viewer:
+            self.viewer.text = head + "\n" + text
         return head + "\n" + text
 
     def links(self, limit=60):
@@ -292,6 +338,7 @@ class Browser:
         except Exception:
             pass
         self.log("browser_click", n=int(n), label=it.get("label"), role=it.get("role"), new_tab=len(self._ctx.pages) > before)
+        self._show(f"Clicked '{it.get('label')}'")
         return self.read()
 
     def type(self, n, text, enter=False):
@@ -307,6 +354,7 @@ class Browser:
             except Exception:
                 pass
         self.log("browser_type", n=int(n), label=it.get("label"), text=text[:80], enter=enter)
+        self._show(f"Typed '{text[:40]}' into '{it.get('label')}'")
         return self.read() if enter else f"typed into [{n}] {it.get('label')!r}"
 
     def select(self, n, value):
@@ -318,6 +366,7 @@ class Browser:
         dy = 800 * pages * (1 if direction == "down" else -1)
         self.page.mouse.wheel(0, dy)
         time.sleep(0.4)
+        self._show(f"Scrolled {direction}")
         return self.read()
 
     def download_text(self, url, max_chars=60000):

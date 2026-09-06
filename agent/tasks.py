@@ -11,7 +11,9 @@ deterministic procedure built on Browser + the knowledge brain:
 
 Every task returns a text report; run_task() also logs and can notify the owner.
 """
+import contextlib
 import re
+import threading
 import time
 import urllib.parse
 
@@ -54,10 +56,45 @@ def key_sentences(text, topic, limit=6):
 
 
 class Tasks:
-    def __init__(self, log=None, notify=None, brain=None):
+    IDLE_CLOSE = 600          # seconds; the browser window stays open between tasks, then closes itself
+
+    def __init__(self, log=None, notify=None, brain=None, viewer=None):
         self.log = log or (lambda kind, **f: None)
         self.notify = notify or (lambda text: None)
         self.brain = brain
+        self.viewer = viewer
+        self._browser = None
+        self._lock = threading.Lock()
+
+    # ---- one browser, reused (so the owner can watch one window instead of a flicker of new ones) ----
+    def browser(self):
+        if self._browser is None or not self._browser.alive():
+            self._browser = Browser(log=self.log, viewer=self.viewer)
+        return self._browser
+
+    def close_browser(self):
+        if self._browser is not None:
+            try:
+                self._browser.close()
+            finally:
+                self._browser = None
+
+    def tick(self):
+        """Call periodically: closes the browser after IDLE_CLOSE seconds without a task."""
+        b = self._browser
+        if b is not None and not self._lock.locked() and time.time() - b.last_used > self.IDLE_CLOSE:
+            self.close_browser()
+            self.log("session_closed")
+
+    @contextlib.contextmanager
+    def _session(self):
+        with self._lock:
+            b = self.browser()
+            try:
+                yield b
+            except Exception:
+                self.close_browser()          # a broken browser is not reused
+                raise
 
     # ---- tasks ---------------------------------------------------------
     def research(self, topic, n_pages=3):
@@ -70,7 +107,7 @@ class Tasks:
                 report.append("From my knowledge pack:\n" + local)
         # 2) the web
         opened = []
-        with Browser(log=self.log) as b:
+        with self._session() as b:
             try:
                 results = b.search_results(topic, 12)
             except BrowserError as e:
@@ -95,7 +132,7 @@ class Tasks:
         return "\n".join(report)
 
     def summarize(self, url, max_points=8):
-        with Browser(log=self.log) as b:
+        with self._session() as b:
             if url.lower().endswith(".pdf"):
                 text = b.download_text(url); title = url
             else:
@@ -115,7 +152,7 @@ class Tasks:
 
     def compare_suppliers(self, product, n_pages=3):
         rows = []
-        with Browser(log=self.log) as b:
+        with self._session() as b:
             queries = [f"{product} dropshipping supplier", f"{product} wholesale supplier Europe"]
             seen = set()
             for q in queries:

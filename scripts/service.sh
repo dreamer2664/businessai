@@ -10,6 +10,7 @@ After=network-online.target
 [Service]
 WorkingDirectory=$(pwd)
 ExecStart=/usr/bin/env python3 -m agent.core
+Environment=DISPLAY=${DISPLAY:-:0} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 Restart=always
 RestartSec=5
 [Install]

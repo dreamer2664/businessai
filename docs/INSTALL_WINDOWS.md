@@ -73,3 +73,10 @@ cd ~/businessai && git pull && systemctl --user restart businessai
   doesn't match your Telegram username exactly (Telegram → Settings → Username).
 - Log lines with `409 Conflict`: two copies are running (e.g. sandbox + PC).
   Only one can poll Telegram at a time — stop the other one.
+
+## Seeing the AI work (milestone 2+)
+* **Live page:** while the service runs, open http://localhost:8765 in your normal Windows browser (WSL ports are shared).
+* **Real window:** Windows 11 WSL has a display (WSLg) built in, so the agent's Chrome opens as a normal window automatically.
+  On Windows 10 (no WSLg) it stays invisible — use the live page or `/screen` instead. Force invisible with `BAI_HEADED=0`.
+  The window needs the full Chromium once: `python3 -m playwright install chromium` (install_browser.sh does it).
+* **Phone:** `/screen` for one screenshot, `/watch on` for a photo after every step.

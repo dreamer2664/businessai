@@ -16,9 +16,10 @@ import traceback
 
 from . import brain, config
 from .tasks import Tasks
+from .viewer import Viewer
 from .telegram import Bot, TelegramError
 
-VERSION = "0.3 (milestone 2: own browser, read-only research tasks)"
+VERSION = "0.4 (milestone 2+: live screen)"
 
 HELP = """I'm your Business AI. I can:
 /ask <question> — answer from my business knowledge pack (e-commerce, dropshipping, marketing, business basics)
@@ -26,7 +27,9 @@ HELP = """I'm your Business AI. I can:
 /compare <product> — look for suppliers of a product and tabulate prices / shipping / MOQ notes (~1 min)
 /summarize <url> — open a page or PDF and give me the key points
 /exam [n] — sit n questions of the marketing exam bank offline and report my score
-/status — what I'm running and how much I know
+/screen — a screenshot of what my browser shows right now
+/watch on|off — send me a photo after every step while I work (off by default)
+/status — what I'm running and how much I know (and the address of my live screen)
 Any plain question is looked up in the pack too. Browsing is read-only: I never log in, pass CAPTCHAs, buy or post."""
 
 
@@ -44,7 +47,9 @@ class Agent:
         self.pending = {}          # question_id -> {"event": Event, "answer": str|None}
         self.started = time.time()
         self.brain = brain.Brain()
-        self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain)
+        self.viewer = Viewer(on_step=self._on_step).start()
+        self.watch = False
+        self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer)
         self.busy = None
         self.log("start", version=VERSION, bot=self.me.get("username"))
 
@@ -62,6 +67,8 @@ class Agent:
         rec = {"t": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"), "kind": kind}
         rec.update(fields)
         line = config.redact(json.dumps(rec, ensure_ascii=False))
+        if hasattr(self, "viewer"):
+            self.viewer.note(kind, fields)
         day = _dt.date.today().isoformat()
         with open(config.LOG_DIR / f"{day}.jsonl", "a") as f:
             f.write(line + "\n")
@@ -197,6 +204,26 @@ class Agent:
         else:
             self.bot.answer_callback(cq["id"])
 
+    # ---- live screen ---------------------------------------------------
+    def _on_step(self, action, shot):
+        """Browser step → photo to the owner's phone when /watch is on."""
+        if self.watch and shot and self.owner_id:
+            try:
+                self.bot.send_photo(self.owner_id, shot, caption=action[:200])
+            except Exception as e:
+                self.log("watch_error", error=str(e)[:120])
+
+    def screen(self):
+        b = self.tasks._browser
+        if not (b and b.alive()):
+            return "My browser is closed right now (it opens when a task starts and closes 10 minutes after the last one)."
+        try:
+            shot = b.page.screenshot(type="jpeg", quality=60, timeout=6000)
+            self.bot.send_photo(self.owner_id, shot, caption=f"{b.page.title()[:80]}\n{b.page.url}"[:200])
+            return None
+        except Exception as e:
+            return f"Couldn't take a screenshot: {str(e)[:120]}"
+
     # ---- the (tiny, for now) conversational policy ---------------------
     def respond(self, text):
         low = text.lower()
@@ -206,6 +233,14 @@ class Agent:
             return self.status_text()
         if low.startswith("/ask "):
             return self.brain.ask(text[5:].strip())
+        if low.startswith("/screen"):
+            return self.screen()
+        if low.startswith("/watch"):
+            arg = low[6:].strip()
+            self.watch = (arg != "off") if arg else not self.watch
+            self.viewer.force = self.watch
+            return ("Watching on: I'll send a photo after every browser step until you say /watch off."
+                    if self.watch else "Watching off. /screen still gives you a single screenshot any time.")
         if low.startswith("/selftest"):
             threading.Thread(target=self.selftest, daemon=True).start()
             return "Running a self-test: I'll ask you something with buttons."
@@ -239,7 +274,8 @@ class Agent:
         return (f"Business AI {VERSION}\n"
                 f"up {up // 3600}h {up % 3600 // 60}m · brain: {self.brain.describe()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
-                f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}")
+                f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
+                f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")
 
     def selftest(self):
         a = self.ask("Self-test (the buttons mean nothing, just checking that your tap reaches me): tap one",
@@ -260,6 +296,7 @@ class Agent:
                     time.sleep(backoff)
                     backoff = min(backoff * 2, 30)
                 continue
+            self.tasks.tick()
             for u in updates:
                 self.state["offset"] = u["update_id"] + 1
                 self._save_state()

@@ -34,6 +34,8 @@ messages and social media, reports to the owner and asks questions via phone.
    screenshots, CAPTCHA/login walls detected and never passed, buy/pay/post clicks refused); read-only tasks
    /research /compare /summarize (tests/browse.txt 18/19); offline exam solver (agent/mcq.py) 57–60 % on the
    440-question marketing bank, 87 % on the half it is confident about.
+   + Live screen (agent/viewer.py): local web page with screenshot + plain-words step log, /screen & /watch on Telegram,
+   visible Chrome window where a display exists (BAI_HEADED).
 3. Memory — notes, task list, daily plan; asks the owner when stuck.
 4. Practice store (free test shop) — listings, descriptions, pricing rules;
    every change approved by the owner.
