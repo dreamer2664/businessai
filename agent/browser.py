@@ -122,6 +122,13 @@ class Browser:
         if self.viewer:
             self.viewer.browser_open = True
 
+    def park(self):
+        """Free the page's memory (navigate to about:blank) while the agent thinks; the tab stays open."""
+        try:
+            self.page.goto("about:blank", timeout=3000)
+        except Exception:
+            pass
+
     def alive(self):
         try:
             return self._browser.is_connected() and bool(self._ctx.pages)

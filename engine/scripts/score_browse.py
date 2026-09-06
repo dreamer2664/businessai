@@ -3,7 +3,7 @@ import re, sys, time
 sys.path.insert(0, ".")
 from agent.tasks import Tasks
 qf = next((a for a in sys.argv[1:] if not a.startswith("--")), "tests/browse.txt"); show = "--show" in sys.argv
-T = Tasks(log=lambda k, **f: None)
+T = Tasks(log=lambda k, **f: None)  # no planner: scores the raw browsing layer
 blocks, cur = {}, "misc"
 for line in open(qf, encoding="utf-8"):
     line = line.rstrip("\n")

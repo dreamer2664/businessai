@@ -37,8 +37,12 @@ question you send (or `/ask …`) is answered from the business pack with its so
 It never answers from thin air: it gets evidence (knowledge-pack passages, page notes, the agent's own notes) and must say
 when the evidence isn't enough. Any OpenAI-compatible endpoint can replace it (`BAI_LLM_URL`, `BAI_LLM_KEY`, `BAI_LLM_MODEL`).
 
+## Low-memory machines
+Browser and thinking model together need ~2.5 GB. With less, the agent enters low-memory mode automatically: it closes the browser before thinking and reopens it for the next task (slower, but no stalls). `/status` and `state/logs/llm.log` show why the model isn't running, and `sh scripts/get_model.sh --test` / `--build` fix a prebuilt server that doesn't match the machine.
+
 ## Memory
 `state/notes.jsonl` (everything researched/summarized, with sources), `state/todo.json` (to-do + learning goals).
+`/visit <site> | <question>` (or just "open Amazon and tell me the bestsellers") goes to a site and reports what is really on it — answers are checked word-for-word against the page, and empty/login-only pages (YouTube, TikTok) are reported as such instead of guessed.
 `/goal <topic>` gives the agent a standing learning goal: when idle it studies one new angle per session, at most 6 sessions
 a day, and sends a daily report at 20:00. That is the only thing it does on its own.
 

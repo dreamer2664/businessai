@@ -28,7 +28,7 @@ HELP = """Just talk to me. I work out whether you're asking a question, want som
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.
 
 Commands (optional):
-/research <topic> · /compare <product> · /summarize <url> · /exam [n]
+/research <topic> · /compare <product> · /summarize <url> · /visit <site> | <question> · /exam [n]
 /todo — my to-do list · /todo add <text> · /todo done <n>
 /goal <topic> — give me a standing learning goal; I study it on my own when idle (max 6 sessions a day) and keep notes
 /goals · /goal drop <n> · /notes [topic] — what I've learned · /report — today's summary
@@ -222,15 +222,15 @@ class Agent:
                 self.log("watch_error", error=str(e)[:120])
 
     def screen(self):
-        b = self.tasks._browser
-        if not (b and b.alive()):
-            return "My browser is closed right now (it opens when a task starts and closes 10 minutes after the last one)."
         try:
-            shot = b.page.screenshot(type="jpeg", quality=60, timeout=6000)
-            self.bot.send_photo(self.owner_id, shot, caption=f"{b.page.title()[:80]}\n{b.page.url}"[:200])
-            return None
+            res = self.tasks.screenshot()
         except Exception as e:
             return f"Couldn't take a screenshot: {str(e)[:120]}"
+        if not res:
+            return "My browser is closed right now (it opens when a task starts and closes 10 minutes after the last one)."
+        shot, title, url = res
+        self.bot.send_photo(self.owner_id, shot, caption=f"{title}\n{url}"[:200])
+        return None
 
     # ---- the (tiny, for now) conversational policy ---------------------
     def respond(self, text):
@@ -252,7 +252,7 @@ class Agent:
         if low.startswith("/selftest"):
             threading.Thread(target=self.selftest, daemon=True).start()
             return "Running a self-test: I'll ask you something with buttons."
-        for cmd in ("/research", "/compare", "/summarize", "/summarise", "/exam"):
+        for cmd in ("/research", "/compare", "/summarize", "/summarise", "/visit", "/exam"):
             if low.startswith(cmd):
                 return self.start_task(cmd[1:].replace("summarise", "summarize"), text[len(cmd):].strip())
         if low.startswith("/todo"):
@@ -284,12 +284,15 @@ class Agent:
         # ---- plain language: work out what the owner wants --------------------
         it = self.planner.intent(text) if self.planner.installed() else {"kind": "ask", "topic": text}
         self.log("intent", intent=it["kind"], topic=it["topic"])
+        if self.planner.last_error and not getattr(self, "warned_llm", False):
+            self.warned_llm = True
+            self.notify(f"⚠️ My thinking model isn't running: {self.planner.last_error}\nI'll keep working in simple mode (worse understanding and answers) until it is fixed. /status shows the state.")
         if it["kind"] == "chat":
             try:
                 return self.planner.reply(text) if self.planner.installed() else "Hi! Ask me anything about the store."
             except Exception:
                 return "Hi! Ask me anything about the store."
-        if it["kind"] in ("research", "compare", "summarize"):
+        if it["kind"] in ("research", "compare", "summarize", "visit"):
             return self.start_task(it["kind"], it["topic"])
         # a question: answer from what I know; if I know nothing useful, go and look
         ans = self.tasks.ask(text)
@@ -306,6 +309,7 @@ class Agent:
             return f"What should I {kind}?"
         threading.Thread(target=self.run_task, args=(f"{kind} {arg}",), daemon=True).start()
         msg = {"exam": "sitting the exam now — this takes a few minutes; I'll send the score.",
+               "visit": f"going to {arg.split('|')[0].strip()} now — a moment.",
                "compare": f"looking for suppliers of {arg} in my browser — about a minute.",
                "summarize": "reading it now — a moment.",
                "research": f"looking into '{arg}' — report in about a minute."}[kind]

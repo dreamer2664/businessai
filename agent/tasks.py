@@ -11,6 +11,7 @@ deterministic procedure built on Browser + the knowledge brain:
 
 Every task returns a text report; run_task() also logs and can notify the owner.
 """
+import concurrent.futures
 import contextlib
 import re
 import threading
@@ -58,6 +59,26 @@ def key_sentences(text, topic, limit=6):
 class Tasks:
     IDLE_CLOSE = 600          # seconds; the browser window stays open between tasks, then closes itself
 
+    @staticmethod
+    def _mem_available_mb():
+        try:
+            for line in open("/proc/meminfo"):
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+        except Exception:
+            pass
+        return 99999
+
+    def _release_page(self):
+        """Before thinking: park the page (normal) or close the browser (low-memory machines, < 2.5 GB available)."""
+        b = self._browser
+        if b is None or not b.alive():
+            return
+        if self.low_mem:
+            self.close_browser()
+        else:
+            b.park()
+
     def __init__(self, log=None, notify=None, brain=None, viewer=None, planner=None, memory=None):
         self.log = log or (lambda kind, **f: None)
         self.notify = notify or (lambda text: None)
@@ -67,6 +88,27 @@ class Tasks:
         self.memory = memory
         self._browser = None
         self._lock = threading.Lock()
+        self.low_mem = self._mem_available_mb() < 2500
+        if self.low_mem:
+            self.log("low_memory_mode", available_mb=self._mem_available_mb())
+        # Playwright's sync API is bound to the thread that created the browser, so ALL browser work runs on
+        # this one long-lived "hands" thread; public methods submit to it and wait.
+        self._hands = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="hands")
+
+    def on_hands(self, fn, *a, timeout=None, **kw):
+        """Run fn(*a, **kw) on the hands thread and return its result (callable from any thread)."""
+        if threading.current_thread().name.startswith("hands"):
+            return fn(*a, **kw)
+        return self._hands.submit(fn, *a, **kw).result(timeout=timeout)
+
+    def screenshot(self):
+        """JPEG bytes of the current tab, or None when the browser is closed."""
+        def _shot():
+            b = self._browser
+            if not (b and b.alive()):
+                return None
+            return b.page.screenshot(type="jpeg", quality=60, timeout=6000), b.page.title()[:80], b.page.url
+        return self.on_hands(_shot, timeout=20)
 
     # ---- one browser, reused (so the owner can watch one window instead of a flicker of new ones) ----
     def browser(self):
@@ -85,7 +127,7 @@ class Tasks:
         """Call periodically: closes the browser after IDLE_CLOSE seconds without a task."""
         b = self._browser
         if b is not None and not self._lock.locked() and time.time() - b.last_used > self.IDLE_CLOSE:
-            self.close_browser()
+            self._hands.submit(self.close_browser)
             self.log("session_closed")
 
     @contextlib.contextmanager
@@ -129,6 +171,7 @@ class Tasks:
                 if ks:
                     opened.append((b.page.title()[:80] or r["url"], r["url"], ks))
         brief = None
+        self._release_page()
         if opened and self.planner and self.planner.installed():
             try:
                 brief = self.planner.brief(topic, opened)
@@ -154,6 +197,7 @@ class Tasks:
                 if b.status() != "ok":
                     return f"{url}: page shows a {b.status()} wall — I stopped (I don't pass CAPTCHAs/logins)."
                 title = b.page.title(); text = b.extract_text()
+        self._release_page()
         heads = [h for h in (clean(l).strip("# ").strip() for l in text.split("\n") if l.startswith("#")) if 3 < len(h) < 80][:12]
         topic = " ".join(re.findall(r"[A-Za-z]+", title)[:6])
         ks = key_sentences(text, topic, limit=max_points) or key_sentences(text, " ".join(heads[:3]), limit=max_points)
@@ -266,7 +310,72 @@ class Tasks:
                 self.log("answer_failed", error=str(e)[:100])
         return self.brain.ask(question) if self.brain and self.brain.ready else None
 
+    SITES = {"youtube": "https://www.youtube.com/feed/trending", "amazon": "https://www.amazon.com/gp/bestsellers",
+             "ebay": "https://www.ebay.com/trending", "etsy": "https://www.etsy.com/trending", "aliexpress": "https://www.aliexpress.com",
+             "shopify": "https://www.shopify.com", "google trends": "https://trends.google.com/trending?geo=US",
+             "reddit": "https://www.reddit.com/r/dropship/", "tiktok": "https://www.tiktok.com/discover",
+             "temu": "https://www.temu.com", "alibaba": "https://www.alibaba.com", "product hunt": "https://www.producthunt.com"}
+
+    NEEDS_LOGIN = {"youtube": "YouTube hides its trending/recommendation feeds from visitors without an account or cookies",
+                   "tiktok": "TikTok shows nothing to a browser without an account", "reddit": "Reddit blocks automated browsers"}
+
+    def visit(self, site, question=""):
+        """Go to a site (name or URL), read what is on it, and answer the owner's question from the page — grounded."""
+        key = site.lower().strip(" .?")
+        url = site if re.match(r"^https?://", site) else self.SITES.get(key) or self.SITES.get(key.replace("the ", "")) or None
+        if not url:
+            url = "https://" + re.sub(r"[^a-z0-9.-]", "", key) + ("" if "." in key else ".com")
+        with self._session() as b:
+            try:
+                b.open(url)
+            except BrowserError as e:
+                return f"I couldn't open {url}: {e}"
+            st = b.status()
+            title, final = b.page.title(), b.page.url
+            if st != "ok":
+                return f"I opened {final} but it shows a {st} wall, so I stopped (I never pass CAPTCHAs or log in). Screenshot: /screen"
+            text = clean(b.extract_text())
+            if len(text) < 300:
+                b.scroll("down", 2)
+                text = clean(b.extract_text())
+        self._release_page()
+        lines = [l.strip(" #•") for l in text.splitlines() if len(l.strip(" #•")) > 2]
+        page = "\n".join(lines)[:3500]
+        note = self.NEEDS_LOGIN.get(key.split()[0]) if key.split() else None
+        if len(lines) < 8 or re.search(r"try searching to get started|start watching videos|sign in to|log in to see", text, re.I):
+            out = (f"{title} — {final}\n\nThe page shows almost nothing to me" + (f": {note}." if note else " (empty or script-only page).") +
+                   " I won't guess at its contents. Screenshot: /screen")
+            if self.memory:
+                self.memory.note("visit", f"{site}: {question}"[:120], out, [final])
+            return out
+        if self.planner and self.planner.installed():
+            try:
+                q = question or "What is on this page? List the main items or headlines."
+                ans = self.planner.chat(
+                    "You read a web page for your owner and answer ONLY with items that appear word-for-word in the page text. "
+                    "Number the items. If the page text does not contain what was asked, reply exactly: NOT ON PAGE",
+                    f"PAGE TITLE: {title}\nURL: {final}\nPAGE TEXT:\n{page}\n\nOWNER ASKED: {q}", max_tokens=220, timeout=150)
+                # grounding check: every listed item must really occur in the page text
+                low = page.lower()
+                items = [re.sub(r"^\d+[.)]\s*", "", l).strip(" \"'") for l in ans.splitlines() if re.match(r"^\d+[.)]", l.strip())]
+                bad = [i for i in items if len(i) > 3 and i.lower()[:40] not in low]
+                if "NOT ON PAGE" in ans or (items and len(bad) > len(items) // 2):
+                    ans = ("What was asked is not on this page as I see it" + (f" ({note})" if note else "") +
+                           ". Here is what the page actually shows:\n" + "\n".join(f"• {l}" for l in lines[:12]))
+                out = f"{title} — {final}\n\n{ans}"
+            except Exception as e:
+                self.log("visit_answer_failed", error=str(e)[:100])
+                out = f"{title} — {final}\n\n" + "\n".join(f"• {l}" for l in lines[:25])
+        else:
+            out = f"{title} — {final}\n\n" + "\n".join(f"• {l}" for l in lines[:25])
+        if self.memory:
+            self.memory.note("visit", f"{site}: {question}"[:120], out, [final])
+        return out
+
     def study(self, goal):
+        return self.on_hands(self._study, goal)
+
+    def _study(self, goal):
         """One self-directed study session on a learning goal: pick an angle not yet covered, research it, keep the note."""
         angles_done = goal.get("angles", [])
         angle = goal["topic"]
@@ -291,7 +400,10 @@ class Tasks:
 
     # ---- dispatcher ----------------------------------------------------
     def run(self, command):
-        """'research <topic>' | 'compare <product>' | 'summarize <url>' | 'exam [n]'"""
+        return self.on_hands(self._run, command)
+
+    def _run(self, command):
+        """'research <topic>' | 'compare <product>' | 'summarize <url>' | 'visit <site> [, question]' | 'exam [n]'"""
         cmd, _, arg = command.strip().partition(" ")
         cmd = cmd.lower()
         t0 = time.time()
@@ -303,11 +415,14 @@ class Tasks:
                 out = self.compare_suppliers(arg)
             elif cmd in ("summarize", "summarise", "read") and arg:
                 out = self.summarize(arg)
+            elif cmd in ("visit", "open", "goto") and arg:
+                site, _, question = arg.partition("|")
+                out = self.visit(site.strip(), question.strip())
             elif cmd == "exam":
                 n = int(arg) if arg.strip().isdigit() else 40
                 out = self.exam(str(config.ROOT / "tests/banks/mcq_principles-marketing.jsonl"), n)
             else:
-                out = "Tasks I can do: research <topic> · compare <product> · summarize <url> · exam [n]"
+                out = "Tasks I can do: research <topic> · compare <product> · summarize <url> · visit <site> | <question> · exam [n]"
         except Exception as e:  # noqa
             out = f"Task failed: {type(e).__name__}: {str(e)[:200]}"
         self.log("task_done", cmd=cmd, ms=int((time.time() - t0) * 1000), chars=len(out))

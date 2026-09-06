@@ -48,12 +48,16 @@ KIND is one of:
 - "research": the owner wants something looked up, checked, found or investigated on the web (find out, look up, check, search, what do people say, latest, prices of)
 - "summarize": the message contains a URL to read or summarize
 - "compare": the owner wants suppliers / options / prices for a product compared
+- "visit": the owner wants me to go to / open a specific website or app and report what is there (open YouTube, go to Amazon bestsellers, check Etsy trending)
 - "chat": greetings, thanks, small talk, feedback, or instructions about how to behave
 TOPIC is the subject in a few words (for summarize: the URL). Examples:
 "can you find out how epacket shipping works" -> {"kind": "research", "topic": "how ePacket shipping works"}
 "what is a good margin for dropshipping" -> {"kind": "ask", "topic": "good profit margin for dropshipping"}
 "look for suppliers of bamboo toothbrushes" -> {"kind": "compare", "topic": "bamboo toothbrush"}
 "thanks that was useful" -> {"kind": "chat", "topic": "thanks"}
+"open youtube and list the top 5 trending videos" -> {"kind": "visit", "topic": "youtube | list the top 5 trending videos"}
+"go to amazon and tell me the bestsellers in kitchen" -> {"kind": "visit", "topic": "amazon | bestsellers in kitchen"}
+For "visit", TOPIC is "<site> | <what to report>".
 Message: """
 
 
@@ -65,6 +69,7 @@ class Planner:
         self.model = os.environ.get("BAI_LLM_MODEL", "local")
         self.key = os.environ.get("BAI_LLM_KEY", "")
         self._proc = None
+        self.last_error = ""
         self._lock = threading.Lock()
         self.last_used = 0
         self.calls = self.tokens = 0
@@ -85,21 +90,51 @@ class Planner:
             return True
         if not self.installed():
             return False
-        env = dict(os.environ, LD_LIBRARY_PATH=str(LLM_DIR))
-        self._proc = subprocess.Popen([str(SERVER_BIN), "-m", str(MODEL_FILE), "--host", "127.0.0.1", "--port", str(PORT),
-                                       "-c", "6144", "-t", THREADS, "--no-warmup", "--log-disable"],
-                                      env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        env = dict(os.environ, LD_LIBRARY_PATH=str(LLM_DIR) + ":" + os.environ.get("LD_LIBRARY_PATH", ""))
+        self.last_error = ""
+        logf = open(config.LOG_DIR / "llm.log", "ab")
+        try:
+            self._proc = subprocess.Popen([str(SERVER_BIN), "-m", str(MODEL_FILE), "--host", "127.0.0.1", "--port", str(PORT),
+                                           "-c", "4096", "-np", "1", "-t", THREADS, "--no-warmup"],
+                                          env=env, stdout=logf, stderr=subprocess.STDOUT)
+        except OSError as e:
+            self.last_error = f"cannot execute llama-server: {e}"
+            self.log("llm_start_failed", error=self.last_error)
+            return False
         t0 = time.time()
-        while time.time() - t0 < 90:
+        while time.time() - t0 < 180:
             if self._ping():
                 self.log("llm_started", ms=int((time.time() - t0) * 1000))
                 return True
             if self._proc.poll() is not None:
                 break
             time.sleep(0.5)
-        self.log("llm_start_failed")
+        self.last_error = self._diagnose()
+        self.log("llm_start_failed", error=self.last_error)
         self._proc = None
         return False
+
+    def _diagnose(self):
+        """Human-readable reason the local server did not come up (last lines of its log + common causes)."""
+        try:
+            tail = (config.LOG_DIR / "llm.log").read_text(errors="replace")[-3000:]
+        except Exception:
+            tail = ""
+        low = tail.lower()
+        if not SERVER_BIN.exists() or not MODEL_FILE.exists():
+            return "not installed — run: sh scripts/get_model.sh"
+        if not os.access(SERVER_BIN, os.X_OK):
+            return "llama-server is not executable — run: chmod +x release/llm/llama-server"
+        if "glibc" in low or "glibcxx" in low or "not found" in low and ".so" in low:
+            return "the prebuilt llama-server does not match this system's libraries (see state/logs/llm.log) — run: sh scripts/get_model.sh --build"
+        if "cannot allocate" in low or "out of memory" in low or "failed to allocate" in low:
+            return "not enough free RAM to load the model (~1.3 GB needed) — close other programs or pick a smaller model"
+        if "address already in use" in low:
+            return f"port {PORT} is taken — set BAI_LLM_PORT to another port"
+        if "illegal instruction" in low:
+            return "this CPU lacks instructions the build expects — run: sh scripts/get_model.sh --build"
+        last = [l for l in tail.splitlines() if l.strip()][-3:]
+        return "server exited: " + (" | ".join(last)[:300] if last else "no output — try running it by hand: sh scripts/get_model.sh --test")
 
     def stop(self):
         if self._proc and self._proc.poll() is None:
@@ -124,6 +159,8 @@ class Planner:
     def describe(self):
         if not self.installed():
             return "thinking model: not installed (sh scripts/get_model.sh)"
+        if getattr(self, "last_error", ""):
+            return f"thinking model: NOT RUNNING — {self.last_error}"
         where = "remote " + re.sub(r"^https?://([^/]+).*", r"\1", self.url) if self.remote else f"local {MODEL_FILE.stat().st_size >> 20} MB"
         state = "running" if (self.remote or self._ping()) else "asleep"
         return f"thinking model: {where}, {state}, {self.calls} calls"
@@ -159,6 +196,9 @@ class Planner:
             return {"kind": "summarize", "topic": url.group(0)}
         if re.search(r"^(hi|hello|hey|thanks|thank you|ok|okay|good (morning|evening|night)|bye)\b", low) and len(low) < 40:
             return {"kind": "chat", "topic": m}
+        mv = re.search(r"\b(?:open|go to|goto|visit|check out|look at|browse)\s+(?:the\s+)?([a-z][a-z0-9 .-]{1,25}?)(?:\s+(?:and|,|to|then)\s+|\s*$)(.*)", low)
+        if mv and not url:
+            return {"kind": "visit", "topic": f"{mv.group(1).strip()} | {mv.group(2).strip(' ?.')}"}
         if re.search(r"\b(find|look|search|check|research|investigate|dig|see what|what do people|latest|current|today)\b", low) and \
            re.search(r"\b(supplier|suppliers|vendors?|wholesale|manufacturer)s?\b", low) and re.search(r"\b(compare|options|prices?|for)\b", low):
             return {"kind": "compare", "topic": re.sub(r".*\b(of|for)\b", "", low).strip(" ?.") or m}
@@ -166,7 +206,7 @@ class Planner:
             raw = self.chat("You classify messages. Output JSON only.", INTENT_PROMPT + json.dumps(m), max_tokens=60, stop=["\n\n"])
             j = json.loads(re.search(r"\{.*\}", raw, re.S).group(0))
             kind = j.get("kind", "ask")
-            if kind not in ("ask", "research", "summarize", "compare", "chat"):
+            if kind not in ("ask", "research", "summarize", "compare", "chat", "visit"):
                 kind = "ask"
             return {"kind": kind, "topic": str(j.get("topic") or m)[:120]}
         except Exception as e:
