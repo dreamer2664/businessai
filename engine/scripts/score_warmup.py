@@ -3,8 +3,9 @@ import sys, time
 sys.path.insert(0, ".")
 from agent.planner import Planner
 from agent.tasks import Tasks
+from agent.brain import Brain
 qf = next((a for a in sys.argv[1:] if not a.startswith("--")), "tests/warmup.txt"); show = "--show" in sys.argv
-P = Planner(); T = Tasks(planner=P)
+P = Planner(); T = Tasks(planner=P, brain=Brain())
 if not P.installed():
     sys.exit("thinking model not installed: sh scripts/get_model.sh")
 blocks, cur = {}, "misc"

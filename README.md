@@ -32,8 +32,8 @@ Knowledge brain (optional, ~65 MB): `sh scripts/get_brain.sh` downloads the engi
 question you send (or `/ask …`) is answered from the business pack with its source.
 
 ## Thinking model (planner)
-`agent/planner.py` runs a small open model locally through llama.cpp (default Qwen2.5-1.5B-Instruct, 940 MB, CPU only,
-`sh scripts/get_model.sh`). It is started on first use and stopped after 10 idle minutes, so RAM is only used while thinking.
+`agent/planner.py` runs a small open model locally through llama.cpp (`sh scripts/get_model.sh` picks Qwen2.5-3B-Instruct on machines with ≥ 6 GB RAM, else Qwen2.5-1.5B; CPU only; the
+server is our own fully static 16 MB build from the GitHub Release, so it runs on any x86-64 Linux/WSL). It is started on first use and stopped after 10 idle minutes, so RAM is only used while thinking.
 It never answers from thin air: it gets evidence (knowledge-pack passages, page notes, the agent's own notes) and must say
 when the evidence isn't enough. Any OpenAI-compatible endpoint can replace it (`BAI_LLM_URL`, `BAI_LLM_KEY`, `BAI_LLM_MODEL`).
 
@@ -43,6 +43,7 @@ Browser and thinking model together need ~2.5 GB. With less, the agent enters lo
 ## Memory
 `state/notes.jsonl` (everything researched/summarized, with sources), `state/todo.json` (to-do + learning goals).
 `/visit <site> | <question>` (or just "open Amazon and tell me the bestsellers") goes to a site and reports what is really on it — answers are checked word-for-word against the page, and empty/login-only pages (YouTube, TikTok) are reported as such instead of guessed.
+`/watch <video url or topic>` (or "watch a video about facebook ads and tell me what you learned") reads the video's captions — no download, no login — and reports the concrete claims plus whether the speaker is selling something.
 `/goal <topic>` gives the agent a standing learning goal: when idle it studies one new angle per session, at most 6 sessions
 a day, and sends a daily report at 20:00. That is the only thing it does on its own.
 
