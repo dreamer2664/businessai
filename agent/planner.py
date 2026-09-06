@@ -94,6 +94,7 @@ class Planner:
             return False
         env = dict(os.environ, LD_LIBRARY_PATH=str(LLM_DIR) + ":" + os.environ.get("LD_LIBRARY_PATH", ""))
         self.last_error = ""
+        self._self_repair(env)
         logf = open(config.LOG_DIR / "llm.log", "ab")
         try:
             self._proc = subprocess.Popen([str(SERVER_BIN), "-m", str(MODEL_FILE), "--host", "127.0.0.1", "--port", str(PORT),
@@ -116,6 +117,44 @@ class Planner:
         self._proc = None
         return False
 
+    STATIC_URL = "https://github.com/%s/%s/releases/download/latest/llama-server-static" % (
+        os.environ.get("GH_OWNER", "dreamer2664"), os.environ.get("GH_REPO", "businessai"))
+
+    def _self_repair(self, env):
+        """An old install may carry the upstream llama-server that needs system libraries (libgomp, newer glibc).
+        If the binary cannot even print its version, swap in the project's self-contained static build (16 MB)."""
+        try:
+            r = subprocess.run([str(SERVER_BIN), "--version"], env=env, capture_output=True, timeout=20)
+            out = (r.stdout + r.stderr).decode(errors="replace").lower()
+            if r.returncode == 0 and "version" in out:
+                return
+        except Exception as e:
+            out = str(e).lower()
+        if not ("shared librar" in out or "glibc" in out or "not found" in out or "no such file" in out or "exec format" in out):
+            return
+        self.log("llm_repair", reason=out.strip()[-160:])
+        try:
+            import urllib.request
+            tmp = SERVER_BIN.with_suffix(".new")
+            with urllib.request.urlopen(self.STATIC_URL, timeout=120) as resp, open(tmp, "wb") as f:
+                while True:
+                    chunk = resp.read(1 << 20)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            os.chmod(tmp, 0o755)
+            r = subprocess.run([str(tmp), "--version"], capture_output=True, timeout=20)
+            if r.returncode == 0:
+                os.replace(tmp, SERVER_BIN)
+                for so in LLM_DIR.glob("*.so*"):
+                    so.unlink()
+                self.log("llm_repaired", size=SERVER_BIN.stat().st_size)
+            else:
+                tmp.unlink(missing_ok=True)
+                self.log("llm_repair_failed", error=(r.stdout + r.stderr).decode(errors="replace")[-160:])
+        except Exception as e:
+            self.log("llm_repair_failed", error=str(e)[:160])
+
     def _diagnose(self):
         """Human-readable reason the local server did not come up (last lines of its log + common causes)."""
         try:
@@ -127,8 +166,8 @@ class Planner:
             return "not installed — run: sh scripts/get_model.sh"
         if not os.access(SERVER_BIN, os.X_OK):
             return "llama-server is not executable — run: chmod +x release/llm/llama-server"
-        if "glibc" in low or "glibcxx" in low or "not found" in low and ".so" in low:
-            return "the prebuilt llama-server does not match this system's libraries (see state/logs/llm.log) — run: sh scripts/get_model.sh --build"
+        if "glibc" in low or "glibcxx" in low or "shared librar" in low or ("not found" in low and ".so" in low):
+            return "the installed llama-server needs system libraries this machine lacks — run: sh scripts/get_model.sh (it swaps in the self-contained build), then restart me"
         if "cannot allocate" in low or "out of memory" in low or "failed to allocate" in low:
             return "not enough free RAM to load the model (~1.3 GB needed) — close other programs or pick a smaller model"
         if "address already in use" in low:

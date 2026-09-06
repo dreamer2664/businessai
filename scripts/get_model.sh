@@ -55,6 +55,11 @@ case "$1" in
     exit 0 ;;
 esac
 
+# an older install may have the upstream build that needs system libraries (libgomp, newer glibc) — replace it if it does not run here
+if [ -x release/llm/llama-server ] && ! release/llm/llama-server --version >/dev/null 2>&1; then
+  echo "the installed llama-server does not run on this system — replacing it with the self-contained build"
+  rm -f release/llm/llama-server release/llm/*.so*
+fi
 if [ ! -x release/llm/llama-server ]; then
   # our own fully static build (16 MB, needs no system libraries at all) from the project's GitHub Release
   echo "fetching llama-server (static build, 16 MB) ..."
