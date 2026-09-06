@@ -22,6 +22,11 @@ INBOX = config.STATE_DIR / "inbox.jsonl"
 OUTBOX = config.STATE_DIR / "outbox.jsonl"
 DECISIONS = config.STATE_DIR / "inbox_decisions.jsonl"
 POLICY = config.STATE_DIR / "policy.json"
+STYLE = config.STATE_DIR / "style.json"          # learned from the owner's edits: greeting, length, closing — never his text
+
+GREET_RE = re.compile(r"^\s*(hi|hello|hey|ciao|dear|hallo|salve|buongiorno|good (morning|afternoon|evening))\b([^\n,!.:]{0,40})([,!.:]|\n|$)", re.I)
+STOP_CLOSINGS = {"thanks", "thank you", "thanks again", "cheers", "best", "regards", "best regards", "kind regards", "take care",
+                 "have a nice day", "talk soon", "bye", "ciao", "many thanks", "all the best", "sincerely"}
 
 DEFAULT_POLICY = {
     "store_name": "our store",
@@ -32,6 +37,7 @@ DEFAULT_POLICY = {
     "refunds": "refund issued within 5 business days after the returned item arrives; faulty/wrong items refunded or replaced at once, no return needed for items under 10 EUR",
     "ships_to": "",
     "products": "",
+    "greeting": "",
     "discounts": "no discount codes given out in chat; newsletter subscribers get 10% on the first order",
     "escalate": "legal threats, chargeback mentions, injuries or safety complaints, press/influencer requests, anything about personal data",
     "sign_off": "Best regards,\nCustomer care",
@@ -87,6 +93,10 @@ class Inbox:
         self.log = log or (lambda kind, **f: None)
         config.ensure_dirs()
         self.policy = self.load_policy()
+        try:
+            self.style = json.loads(STYLE.read_text(encoding="utf-8"))
+        except Exception:
+            self.style = {}
 
     # ---- policy ------------------------------------------------------------
     def load_policy(self):
@@ -103,13 +113,72 @@ class Inbox:
         POLICY.write_text(json.dumps(self.policy, ensure_ascii=False, indent=1), encoding="utf-8")
         return f"Policy updated: {key} = {value}"
 
-    POLICY_HELP = {"ships_to": "countries you deliver to, e.g. 'EU countries, UK, Switzerland' (empty = I'll say the owner will confirm)",
+    POLICY_HELP = {"greeting": "how replies open, e.g. 'Ciao {name}!' — {name} becomes the customer's first name when I know it (empty = learned from your edits, else 'Hi {name},')",
+                   "sign_off": "how replies end, e.g. 'Carlo' (learned automatically when you sign an edited reply)",
+                   "ships_to": "countries you deliver to, e.g. 'EU countries, UK, Switzerland' (empty = I'll say the owner will confirm)",
                    "products": "facts about your products the AI may quote, e.g. 'LED lamp: 8 h battery, 3 brightness levels' (empty = I defer product questions to you)"}
+
+    def style_text(self):
+        st = self.style
+        if not st.get("samples"):
+            return ""
+        bits = []
+        if st.get("greeting"): bits.append(f"opens with '{st['greeting']}'")
+        if st.get("sentences"): bits.append(f"about {st['sentences']} sentences")
+        if st.get("closing"): bits.append(f"signs '{st['closing']}'")
+        return f"learned from {st['samples']} of your edits: " + ", ".join(bits) if bits else ""
+
+    # ---- what the owner's edits teach (style only — his words are never copied into another customer's reply)
+    @staticmethod
+    def first_name(rec):
+        who = (rec or {}).get("from", "") or ""
+        who = who.split("<")[0].strip()                                   # "Anna K. <anna@x>" → "Anna K."
+        if not who or "@" in who or who.lower() in ("a customer", "customer"):
+            return ""
+        w = who.split()[0].strip(",.")
+        return w if w[:1].isupper() and w.isalpha() and len(w) >= 2 else ""
+
+    def learn_style(self, text, rec=None):
+        st = self.style
+        name = self.first_name(rec)
+        m = GREET_RE.match(text)
+        if m:
+            g = m.group(0).strip()
+            if name and name.lower() in g.lower():
+                g = re.sub(re.escape(name), "{name}", g, flags=re.I)
+            st["greeting"] = g
+        body = text[m.end():] if m else text
+        body = body.strip()
+        tail = body.splitlines()[-1].strip() if body else ""
+        if len(tail.split()) > 3:                                          # closing glued to the last sentence: "... latest. Carlo"
+            tail = re.split(r"[.!?]\s+", tail)[-1].strip()
+        tail = tail.strip(" .!-—,")
+        words = tail.split()
+        changed_signoff = None
+        if 1 <= len(words) <= 3 and all(w[:1].isupper() for w in words) and tail.lower() not in STOP_CLOSINGS \
+                and not re.search(r"\d", tail) and tail.lower() != name.lower():
+            st["closing"] = tail
+            if self.policy["sign_off"] != tail:
+                self.set_policy("sign_off", tail)
+                changed_signoff = tail
+        n = len(re.findall(r"[.!?](\s|$)", body)) or 1
+        st["sentences"] = max(1, round((st["sentences"] + n) / 2)) if st.get("sentences") else n
+        st["samples"] = st.get("samples", 0) + 1
+        STYLE.write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
+        return changed_signoff
+
+    def greeting_for(self, rec):
+        g = (self.policy.get("greeting") or self.style.get("greeting") or "Hi {name},").strip()
+        name = self.first_name(rec)
+        if name:
+            return g.replace("{name}", name) if "{name}" in g else g
+        g = re.sub(r"\s*\{name\}", "", g)                                # "Ciao {name}!" → "Ciao!"
+        return g if re.search(r"[,!.:]$", g) else g + ","
 
     def policy_text(self):
         out = []
         for k, v in self.policy.items():
-            if k == "sign_off":
+            if k in ("sign_off", "greeting"):
                 continue
             if k == "ships_to" and not v:
                 out.append("ships_to: UNKNOWN — never state which countries we ship to; say the owner will confirm")
@@ -177,7 +246,9 @@ class Inbox:
             needs.append("order number")
         if quick == "damaged_or_wrong" and not re.search(r"\b(photo|picture|attached|image)\b", low):
             needs.append("photo of the damage")
-        result = {"kind": quick or "other", "urgency": "high" if escalate or quick == "damaged_or_wrong" else "normal", "needs": needs, "escalate": escalate}
+        mo = re.search(r"(?:order|#|no\.?|number)\s*#?\s*(\d{4,})|\b(\d{5,})\b", text, re.I)
+        order_no = (mo.group(1) or mo.group(2)) if mo else ""
+        result = {"kind": quick or "other", "urgency": "high" if escalate or quick == "damaged_or_wrong" else "normal", "needs": needs, "escalate": escalate, "order_no": order_no}
         if quick is None and self.planner and self.planner.installed():
             try:
                 raw = self.planner.chat("You classify customer messages. Output JSON only.", CLASSIFY_PROMPT + json.dumps(text[:1200]), max_tokens=80, stop=["\n\n"])
@@ -198,15 +269,14 @@ class Inbox:
         if c["kind"] == "spam_or_scam":
             return {**c, "text": "", "checks": [], "note": "no reply (spam)"}
         if c["escalate"] or c["kind"] == "partnership_or_press":
-            hold = ("Thank you for your message. I am passing it to the owner personally, who will get back to you within one business day.\n\n"
-                    + self.policy["sign_off"])
+            hold = self._sanitize("Thank you for your message. I am passing it to the owner personally, who will get back to you within one business day.", rec)
             return {**c, "text": hold, "checks": [], "note": "holding reply only — owner must handle this one"}
         facts = ""
         if c["kind"] == "product_question":
             about_shipping = bool(re.search(r"\b(ship|deliver|delivery|shipping)\b", rec["text"].lower()))
             have = (self.policy.get("ships_to") if about_shipping else self.policy.get("products")) or ""
             if not have.strip():                                            # nothing to answer from → defer, never guess
-                text = self._sanitize(self._template(c))
+                text = self._sanitize(self._template(c), rec)
                 c["note"] = "no product/shipping facts in the policy — deferring to the owner (set them with /policy)"
                 return {**c, "text": text, "checks": []}
             facts = have
@@ -216,6 +286,8 @@ class Inbox:
         if c["kind"] == "return_or_refund" and re.search(r"\bafter \d+ days|\d+ days ago|too late\b", rec["text"].lower()):
             needs += "\nTHE CUSTOMER ASKS ABOUT THE RETURN WINDOW: state the window from the returns policy explicitly (30 days from delivery) and do not say 'of course'."
         extra = f"\nBACKGROUND FACTS you may use (do not quote sources): \n{facts}" if facts else ""
+        if self.style.get("sentences"):
+            extra += f"\nLENGTH: the owner prefers about {self.style['sentences']} sentence(s)."
         text = None
         if self.planner and self.planner.installed():
             try:
@@ -226,7 +298,7 @@ class Inbox:
                 self.log("draft_failed", error=str(e)[:100])
         if not text:
             text = self._template(c)
-        text = self._sanitize(text)
+        text = self._sanitize(text, rec)
         checks = self._check(text, c, rec["text"])
         if checks and self.planner and self.planner.installed():
             try:                                                           # one repair round with the problems spelled out
@@ -234,13 +306,13 @@ class Inbox:
                                           DRAFT_PROMPT % (self.policy_text() + needs + extra, c["kind"].replace("_", " "), rec.get("from", "customer"), rec["text"][:1500])
                                           + f"\n\nYour previous draft was rejected because it: {'; '.join(checks)}. Write a corrected reply.",
                                           max_tokens=260, temperature=0.2, timeout=240)
-                fixed = self._sanitize(fixed)
+                fixed = self._sanitize(fixed, rec)
                 if len(self._check(fixed, c, rec["text"])) < len(checks):
                     text, checks = fixed, self._check(fixed, c, rec["text"])
             except Exception:
                 pass
         if checks:                                                          # still unsafe → the plain template (always policy-true)
-            tmpl = self._sanitize(self._template(c))
+            tmpl = self._sanitize(self._template(c), rec)
             if not self._check(tmpl, c, rec["text"]):
                 text, checks = tmpl, []
                 c["note"] = "model draft failed the checks; using the safe template"
@@ -248,11 +320,12 @@ class Inbox:
 
     def _template(self, c):
         p = self.policy
+        o = f" {c['order_no']}" if c.get("order_no") else ""
         body = {
-            "where_is_my_order": f"Thank you for reaching out, and sorry for the wait. Standard delivery takes {p['shipping'].split(';')[0].replace('standard delivery ', '')}. I will check your order and send you the tracking details within one business day" + ("." if not c["needs"] else " — could you send me your order number first?"),
-            "return_or_refund": f"Thank you for your message. Our returns policy: {p['returns']}. {p['refunds'].split(';')[0].capitalize()}. Please send me your order number and I will start the return for you.",
-            "damaged_or_wrong": "I am sorry your order did not arrive as it should. " + ("Please send me " + " and ".join(("your " + n) if n == "order number" else "a " + n for n in c["needs"]) + ", and I will sort out a replacement or refund straight away." if c["needs"] else "I will sort out a replacement or refund straight away and confirm the details within one business day."),
-            "cancel_or_change": "Thank you for letting me know. I will check whether your order has already left the warehouse: if not, it will be cancelled and refunded; if it has, I will send you the return options. You will hear from me within one business day" + ("." if not c["needs"] else " — please send me your order number first."),
+            "where_is_my_order": f"Thank you for reaching out, and sorry for the wait. Standard delivery takes {p['shipping'].split(';')[0].replace('standard delivery ', '')}. I will check your order{o} and send you the tracking details within one business day" + ("." if not c["needs"] else " — could you send me your order number first?"),
+            "return_or_refund": f"Thank you for your message. Our returns policy: {p['returns']}. {p['refunds'].split(';')[0].capitalize()}. " + (f"I will start the return for order{o} and send you the instructions within one business day." if o else "Please send me your order number and I will start the return for you."),
+            "damaged_or_wrong": f"I am sorry your order{o} did not arrive as it should. " + ("Please send me " + " and ".join(("your " + n) if n == "order number" else "a " + n for n in c["needs"]) + ", and I will sort out a replacement or refund straight away." if c["needs"] else "I will sort out a replacement or refund straight away and confirm the details within one business day."),
+            "cancel_or_change": f"Thank you for letting me know. I will check whether your order{o} has already left the warehouse: if not, it will be cancelled and refunded; if it has, I will send you the return options. You will hear from me within one business day" + ("." if not c["needs"] else " — please send me your order number first."),
             "discount_request": f"Thank you for asking. {p['discounts'].split(';')[-1].strip().capitalize()}.",
             "product_question": "Thank you for your question. I want to give you a precise answer, so I will check this with the owner and come back to you within one business day.",
             "complaint": "I am sorry about your experience. Could you tell me a little more (and your order number, if you have one) so I can put this right?",
@@ -260,10 +333,14 @@ class Inbox:
         }.get(c["kind"], "Thank you for your message. I will check this with the owner and come back to you within one business day.")
         return body
 
-    def _sanitize(self, text):
+    def _sanitize(self, text, rec=None):
         text = re.sub(r"\[[^\]]{1,40}\]", "", text)                       # placeholders like [tracking link]
         text = re.sub(r"!{2,}", "!", text)
-        lines = [l.rstrip() for l in text.strip().splitlines()]
+        text = text.strip()
+        m = GREET_RE.match(text)
+        if m and m.group(4) != "":                                         # drop the model's own greeting line
+            text = text[m.end():].strip()
+        lines = [l.rstrip() for l in text.splitlines()]
         first = self.policy["sign_off"].splitlines()[0].strip(" ,").lower()
         cut = len(lines)
         for i, l in enumerate(lines):                                      # drop any sign-off the model wrote
@@ -273,7 +350,10 @@ class Inbox:
                 break
         body = "\n".join(lines[:cut]).strip()
         body = re.sub(r"\n{3,}", "\n\n", body)
-        return body + "\n\n" + self.policy["sign_off"]
+        closing = self.style.get("closing", "").lower()
+        if closing and body.lower().rstrip(" .!").endswith(" " + closing):   # "... latest. Carlo" → strip the copied closing
+            body = body[: -len(closing)].rstrip(" .!,-—") + "."
+        return self.greeting_for(rec) + "\n\n" + body + "\n\n" + self.policy["sign_off"]
 
     def _check(self, text, c, source=""):
         """Automatic safety checks on a draft — shown to the owner next to the Approve button."""
@@ -283,14 +363,16 @@ class Inbox:
         foreign = [n for n in set(re.findall(r"\d{3,}", text)) if n not in allowed]
         if foreign:
             flags.append(f"contains a number the customer never gave: {', '.join(foreign)}")
-        if re.search(r"\b(order|tracking) (number|no\.?|#)\s*[:#]?\s*[a-z0-9]{5,}", low):
-            flags.append("mentions a specific order/tracking number — verify it")
+        if re.search(r"\b(i've|i have|we've|we have|i|we) (already |just )?(checked|contacted|spoken|called|looked into|escalated|forwarded|asked)\b", low):
+            flags.append("claims to have already done something — nothing has been done yet")
         if re.search(r"\b(full refund|refund(ed)?|replacement)\b", low) and c["kind"] not in ("damaged_or_wrong", "return_or_refund", "cancel_or_change"):
             flags.append("promises a refund/replacement outside the return/damage cases")
         if re.search(r"\b\d{1,2}%\s*(off|discount)|\b(code|coupon)\s+[A-Z0-9]{4,}\b", text) and "newsletter" not in low:
             flags.append("offers a discount not in the policy")
         if re.search(r"\b(within|in) \d+ (hours?|days?)\b", low) and not re.search(r"one business day|5 business days|7-15 business days|30 days", low):
             flags.append("makes a time promise not in the policy")
+        if re.search(r"\b(tomorrow|tonight|this week|next week|by (mon|tues|wednes|thurs|fri|satur|sun)day|refund today)\b", low):
+            flags.append("promises a specific day — only the owner can do that")
         if re.search(r"\[[^\]]+\]|\bhere: *$|:\s*\.", text, re.M):
             flags.append("contains a placeholder or a dangling blank")
         if re.search(r"\b(find|here is|attached is) (the|your) tracking\b", low):
@@ -311,6 +393,8 @@ class Inbox:
             flags.append("discount reply must state the policy (newsletter 10%) and nothing else")
         if len(text) > 1200:
             flags.append("too long")
+        if c.get("order_no") and c["kind"] in ("where_is_my_order", "return_or_refund", "damaged_or_wrong", "cancel_or_change") and c["order_no"] not in text:
+            flags.append(f"does not repeat the customer's order number {c['order_no']}")
         for n in c["needs"]:
             key = {"order number": "order number", "photo of the damage": "photo"}.get(n, n.split()[0])
             if key not in low:
@@ -320,12 +404,15 @@ class Inbox:
         return flags
 
     # ---- decisions --------------------------------------------------------------
-    def decide(self, mid, decision, final_text=None, note=""):
-        rec = {"t": now(), "id": mid, "decision": decision, "text": final_text or "", "note": note}
+    def decide(self, mid, decision, final_text=None, note="", kind=None, draft=None):
+        rec = {"t": now(), "id": mid, "decision": decision, "text": final_text or "", "note": note,
+               "kind": kind or "", "draft": (draft or "")[:1500]}
         _append(DECISIONS, rec)
         if decision in ("approved", "edited") and final_text:
             m = self.get(mid) or {}
             _append(OUTBOX, {"t": now(), "id": mid, "channel": m.get("channel", "practice"), "to": m.get("from", ""), "text": final_text})
+        if decision == "edited" and final_text:
+            rec["signoff_learned"] = self.learn_style(final_text, self.get(mid))
         if self.memory and decision in ("approved", "edited"):
             self.memory.note("reply", f"{decision} reply to {mid}", final_text or "", [])
         return rec
@@ -335,29 +422,53 @@ class Inbox:
         return (f"customer messages: {len(self.items('new'))} waiting · {st['decisions']} decided "
                 f"({st['approved']} approved, {st['edited']} edited, {st['rejected']} rejected)")
 
+    AUTO_WINDOW, AUTO_RATE = 30, 0.9      # a kind may be sent automatically only after 30 decisions with ≥ 90 % approved as written
+
     def stats(self):
-        d = _load(DECISIONS)
+        d = [x for x in _load(DECISIONS) if x.get("note") != "spam"]
         n = len(d)
         appr = sum(1 for x in d if x["decision"] == "approved")
         edit = sum(1 for x in d if x["decision"] == "edited")
         rej = sum(1 for x in d if x["decision"] == "rejected")
+        kinds = {}
+        for x in d:
+            k = x.get("kind") or "unknown"
+            kinds.setdefault(k, []).append(x["decision"])
+        per = {}
+        for k, decs in kinds.items():
+            last = decs[-self.AUTO_WINDOW:]
+            rate = sum(1 for z in last if z == "approved") / len(last)
+            per[k] = {"decided": len(decs), "rate": rate,
+                      "ready": len(last) >= self.AUTO_WINDOW and rate >= self.AUTO_RATE}
         return {"decisions": n, "approved": appr, "edited": edit, "rejected": rej,
-                "approval_rate": (appr / n) if n else 0.0}
+                "approval_rate": (appr / n) if n else 0.0, "kinds": per}
+
+    def stats_text(self):
+        st = self.stats()
+        if not st["decisions"]:
+            return "No customer replies decided yet. Forward me a customer message, or /inbox practice."
+        lines = [f"Customer replies: {st['decisions']} decided — {st['approved']} approved as written, {st['edited']} edited, {st['rejected']} rejected (approval {st['approval_rate']:.0%})."]
+        for k, v in sorted(st["kinds"].items(), key=lambda kv: -kv[1]["decided"]):
+            todo = max(0, self.AUTO_WINDOW - min(v["decided"], self.AUTO_WINDOW))
+            lines.append(f"• {k.replace('_', ' ')}: {v['decided']} decided, {v['rate']:.0%} approved as written" +
+                         (" — would qualify for automatic sending" if v["ready"] else f" — {todo} more needed" if todo else " — rate too low for automatic sending"))
+        lines.append("Automatic sending is switched off for every type until a real channel exists and you turn it on.")
+        return "\n".join(lines)
 
     # ---- practice set --------------------------------------------------------------
     PRACTICE = [
-        ("anna.k@example.com", "Order 48213 still not here", "Hi, I ordered a bamboo toothbrush set on the 2nd (order 48213) and it still hasn't arrived. Where is it?"),
-        ("marco@example.com", "", "The mug arrived broken, the handle is off. What now? Order #51190, photo attached."),
-        ("lisa.m@example.com", "return", "I want to return the yoga mat, I don't like the colour. Can I get my money back?"),
-        ("tom_b@example.com", "", "Do you ship to Switzerland and how long does it take?"),
-        ("julia@example.com", "cancel", "Please cancel my order, I changed my mind. Order 51302."),
+        ("Anna K. <anna.k@example.com>", "Order 48213 still not here", "Hi, I ordered a bamboo toothbrush set on the 2nd (order 48213) and it still hasn't arrived. Where is it?"),
+        ("Marco <marco@example.com>", "", "The mug arrived broken, the handle is off. What now? Order #51190, photo attached."),
+        ("Lisa M. <lisa.m@example.com>", "return", "I want to return the yoga mat, I don't like the colour. Can I get my money back?"),
+        ("Tom <tom_b@example.com>", "", "Do you ship to Switzerland and how long does it take?"),
+        ("Julia <julia@example.com>", "cancel", "Please cancel my order, I changed my mind. Order 51302."),
         ("dave99@example.com", "", "Is there any discount code? Your competitor is cheaper."),
-        ("sam@example.com", "", "Love the phone case, best purchase this year, thanks!!"),
+        ("Sam <sam@example.com>", "", "Love the phone case, best purchase this year, thanks!!"),
         ("influencer.zoe@example.com", "collab", "Hi! I have 80k followers on Instagram, would love to collaborate on a sponsored post. What can you offer?"),
         ("angry.customer@example.com", "", "This is the second time your product arrived late. If I don't get a refund today I'll do a chargeback with my bank."),
         ("seo.pro@example.com", "Rank #1 guaranteed", "We can put your website on the first page of Google in 7 days, guaranteed. Reply for prices."),
-        ("kim@example.com", "", "The dog leash I got is the wrong size (I ordered L, got S). Order 50877."),
-        ("paul@example.com", "", "How long does the battery of the LED desk lamp last and is the light adjustable?"),
+        ("Kim <kim@example.com>", "", "The dog leash I got is the wrong size (I ordered L, got S). Order 50877."),
+        ("Paul <paul@example.com>", "", "How long does the battery of the LED desk lamp last and is the light adjustable?"),
     ]
 
     def load_practice(self):

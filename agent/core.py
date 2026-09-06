@@ -34,6 +34,7 @@ Commands (optional):
 /todo — my to-do list · /todo add <text> · /todo done <n>
 /goal <topic> — give me a standing learning goal; I study it on my own when idle (max 6 sessions a day) and keep notes
 /goals · /goal drop <n> · /notes [topic] — my notes · /learned — facts I've folded into my own knowledge pack · /report — today's summary
+Forward me any customer message (or write /customer <their text>) → I draft the answer, you tap Approve / Edit / Reject, and I hand you the final text to paste back. Nothing is ever sent by itself.
 /inbox — customer messages waiting; /inbox practice loads 12 sample messages so you can see how I'd answer them
 /policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
 /screen · /watch on|off — see my browser · /status · /selftest
@@ -166,13 +167,27 @@ class Agent:
             self.log("stranger", username=user.get("username"), id=user.get("id"), text=text[:80])
             self.bot.send(chat_id, "Sorry, I only work for my owner.")
             return
+        fwd = msg.get("forward_origin") or msg.get("forward_from") or msg.get("forward_sender_name") or msg.get("forward_date")
+        if not text:
+            text = (msg.get("caption") or "").strip()
         self.log("in", text=text)
+        if (fwd or re.match(r"^/customer\b", text, re.I)) and not self.editing:
+            body = re.sub(r"^/customer\b[:\s]*", "", text, flags=re.I).strip()
+            if not body:
+                self.bot.send(chat_id, "Paste the customer's message after /customer, or forward it to me.")
+                return
+            self.bot.send(chat_id, f"Got it — drafting a reply for {self._forward_name(msg)}. You'll get it with Approve / Edit / Reject buttons.")
+            self.inbox.add("owner", self._forward_name(msg), body)
+            threading.Thread(target=self.process_inbox, daemon=True).start()
+            return
         if self.editing and not text.startswith("/"):
             mid, self.editing = self.editing, None
-            d = self.drafts.pop(mid, None)
-            self.inbox.decide(mid, "edited", text)
-            self.bot.send(chat_id, f"Saved your version for message {mid} and marked it approved. I'll learn from the difference.")
+            d = self.drafts.pop(mid, None) or {}
+            dec = self.inbox.decide(mid, "edited", text, kind=d.get("kind"), draft=d.get("text"))
+            learned = f" I noticed you sign as “{dec['signoff_learned']}” — I'll end every reply that way from now on (change it with /policy set sign_off …)." if dec.get("signoff_learned") else ""
+            self.bot.send(chat_id, "Saved your version. I learn your style from edits (greeting, length, how you sign) — never the details, those stay with this customer." + learned)
             self.log("inbox_edited", id=mid)
+            self.deliver(mid, text)
             return
         # a pending free-text question takes the next message as its answer
         for qid, p in list(self.pending.items()):
@@ -185,6 +200,14 @@ class Agent:
         if reply:
             self.log("out", text=reply)
             self.bot.send(chat_id, reply)
+
+    @staticmethod
+    def _forward_name(msg):
+        o = msg.get("forward_origin") or {}
+        u = o.get("sender_user") or msg.get("forward_from") or {}
+        name = " ".join(x for x in (u.get("first_name"), u.get("last_name")) if x) or o.get("sender_user_name") or \
+               msg.get("forward_sender_name") or (o.get("chat") or {}).get("title") or "a customer"
+        return name
 
     def handle_callback(self, cq):
         data = cq.get("data") or ""
@@ -233,17 +256,18 @@ class Agent:
                 return
             if action == "ok":
                 self.drafts.pop(mid, None)
-                self.inbox.decide(mid, "approved", d["text"])
+                self.inbox.decide(mid, "approved", d["text"], kind=d["kind"], draft=d["text"])
                 self.bot.answer_callback(cq["id"], "Approved")
                 if m:
-                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n✅ approved (practice: written to state/outbox.jsonl)")
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n✅ approved")
+                self.deliver(mid, d["text"])
             elif action == "edit":
                 self.editing = mid
                 self.bot.answer_callback(cq["id"], "Type your version")
                 self.bot.send(self.owner_id, f"Type the reply you want to send for message {mid} (your next message is taken as the reply).")
             elif action == "no":
                 self.drafts.pop(mid, None)
-                self.inbox.decide(mid, "rejected", "")
+                self.inbox.decide(mid, "rejected", "", kind=d["kind"], draft=d["text"])
                 self.bot.answer_callback(cq["id"], "Rejected")
                 if m:
                     self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n❌ rejected — nothing sent")
@@ -252,6 +276,14 @@ class Agent:
             self.bot.answer_callback(cq["id"])
 
     # ---- customer messages ---------------------------------------------
+    def deliver(self, mid, final_text):
+        """Hand an approved reply to its channel. practice: log only; owner (pasted/forwarded): give back copyable text."""
+        rec = self.inbox.get(mid) or {}
+        ch = rec.get("channel", "practice")
+        if ch == "owner":
+            self.bot.send(self.owner_id, f"📋 Reply for {rec.get('from', 'the customer')} — long-press to copy, then paste it where they wrote you:\n\n{final_text}")
+        self.log("inbox_delivered", id=mid, channel=ch)
+
     def process_inbox(self):
         """Draft a reply for every new message and put each in front of the owner with buttons."""
         if self.busy:
@@ -263,7 +295,7 @@ class Agent:
                     continue
                 d = self.inbox.draft(rec)
                 if d["kind"] == "spam_or_scam":
-                    self.inbox.decide(rec["id"], "rejected", "", note="spam")
+                    self.inbox.decide(rec["id"], "rejected", "", note="spam", kind=d["kind"])
                     self.notify(f"🗑 Spam from {rec['from']} — no reply: “{rec['text'][:120]}”")
                     continue
                 self.drafts[rec["id"]] = d
@@ -271,7 +303,8 @@ class Agent:
                 flags = ("\n⚠️ " + "; ".join(d["checks"])) if d["checks"] else ""
                 note = f"\nℹ️ {d['note']}" if d.get("note") else ""
                 body = f"{head}\n\n“{rec['text'][:600]}”\n\n— my draft —\n{d['text']}{flags}{note}"
-                self.bot.send(self.owner_id, body, buttons=[[("✅ Approve", f"r:ok:{rec['id']}"), ("✏️ Edit", f"r:edit:{rec['id']}"), ("❌ Reject", f"r:no:{rec['id']}")]])
+                ok_label = "⚠️ Approve anyway" if d["checks"] else "✅ Approve"
+                self.bot.send(self.owner_id, body, buttons=[[(ok_label, f"r:ok:{rec['id']}"), ("✏️ Edit", f"r:edit:{rec['id']}"), ("❌ Reject", f"r:no:{rec['id']}")]])
                 self.log("inbox_draft", id=rec["id"], mtype=d["kind"], flags=d["checks"])
         except Exception as e:
             self.log("inbox_error", error=str(e)[:200])
@@ -364,12 +397,16 @@ class Agent:
             if m:
                 return self.inbox.set_policy(m.group(1).lower(), m.group(2).strip())
             fields = "\n".join(f"• {k}: {v or '(empty)'}" for k, v in self.inbox.policy.items() if k != "sign_off")
+            fields += f"\n• sign_off: {self.inbox.policy['sign_off'].replace(chr(10), ' / ')}"
+            st = self.inbox.style_text()
             tips = "\n".join(f"  {k}: {v}" for k, v in self.inbox.POLICY_HELP.items())
-            return f"Store policy (every customer reply obeys this):\n{fields}\n\nChange one: /policy set <field> <text>\n{tips}"
+            return f"Store policy (every customer reply obeys this):\n{fields}" + (f"\n• style {st}" if st else "") + f"\n\nChange one: /policy set <field> <text>\n{tips}"
         if low.startswith("/stats"):
-            st = self.inbox.stats()
-            return (f"Customer replies: {st['decisions']} decided — {st['approved']} approved as written, {st['edited']} edited, {st['rejected']} rejected "
-                    f"(approval rate {st['approval_rate']:.0%}). Automatic sending unlocks per message type once the rate stays ≥ 90 % over 30 replies.")
+            return self.inbox.stats_text()
+        if low.startswith("/cancel"):
+            had = self.editing
+            self.editing = None
+            return "Okay, edit cancelled — the draft is still waiting with its buttons." if had else "Nothing to cancel."
         if low.startswith("/learned"):
             if "rebuild" in low:
                 threading.Thread(target=lambda: self.notify(self.learner.build(force=True)), daemon=True).start()

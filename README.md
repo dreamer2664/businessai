@@ -78,7 +78,12 @@ Try it without Telegram: `python3 -m agent.viewer --demo` (runs a few read-only 
   repaired once, otherwise a safe template is used. Legal, chargeback, injury, personal-data and press messages get a
   holding reply and are handed to the owner; spam gets no reply.
 - Every draft goes to the owner's phone with **Approve / Edit / Reject** buttons. Approved or edited text is written to
-  `state/outbox.jsonl` (practice) — the agent never sends anything by itself. `/stats` shows the approval rate.
+  `state/outbox.jsonl` — the agent never sends anything by itself. `/stats` shows the approval rate per message type
+  and how far each is from the automatic-sending bar (30 decisions, ≥ 90 % approved as written; still off by design).
+- Channel "owner": forward any customer message to the bot (or `/customer <text>`) → draft → tap → the final reply comes
+  back as copyable text to paste into the shop chat / e-mail / Instagram. Real channels through official APIs come later.
+- Edits teach style, not facts: from an edited reply the agent learns the greeting (`Ciao {name}!`), preferred length and
+  sign-off (`state/style.json`, visible in `/policy`); the customer-specific words are never reused for another customer.
 - `/inbox practice` loads 12 sample messages; `python3 engine/scripts/score_inbox.py` scores 23 messages
   (kind + must/must-not phrases + zero safety flags), currently 22/23.
 

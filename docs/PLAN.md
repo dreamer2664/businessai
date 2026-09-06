@@ -50,6 +50,8 @@ messages and social media, reports to the owner and asks questions via phone.
    numbers, no status/tracking claims, no discounts, no promises, defer product/shipping facts the policy does not
    contain, escalate legal/chargeback/injury/data/press), and sent to the owner's phone with Approve / Edit / Reject.
    Approved or edited text goes to state/outbox.jsonl — nothing is ever sent by itself. Score: tests/inbox.txt 22/23.
+   Channel "owner": forwarded/pasted customer messages → draft → tap → copyable final text. Edits teach greeting, length
+   and sign-off (style.json), never the facts of another customer; /stats tracks approval per type.
    Still to do in this milestone: real channels through official APIs (shop e-mail, Instagram/Facebook messaging),
    social posts with the same approval gate, and automatic sending of a message type only after the owner's
    approval rate for that type stays ≥ 90 % over 30 replies.
