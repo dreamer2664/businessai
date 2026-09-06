@@ -195,12 +195,13 @@ class Agent:
         backoff = 2
         while True:
             try:
-                updates = self.bot.get_updates(offset=self.state.get("offset", 0) or None, timeout=25)
+                updates = self.bot.get_updates(offset=self.state.get("offset", 0) or None, timeout=15)
                 backoff = 2
             except TelegramError as e:
                 self.log("poll_error", error=str(e))
-                time.sleep(backoff)
-                backoff = min(backoff * 2, 60)
+                if "timed out" not in str(e):
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 30)
                 continue
             for u in updates:
                 self.state["offset"] = u["update_id"] + 1

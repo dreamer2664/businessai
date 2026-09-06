@@ -50,7 +50,7 @@ class Bot:
         return self.call("getMe", _timeout=15)
 
     def get_updates(self, offset=None, timeout=30):
-        return self.call("getUpdates", _timeout=timeout + 10, offset=offset, timeout=timeout,
+        return self.call("getUpdates", _timeout=timeout + 30, offset=offset, timeout=timeout,
                          allowed_updates=["message", "callback_query"])
 
     def send(self, chat_id, text, buttons=None, parse_mode=None, reply_to=None):
