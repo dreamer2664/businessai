@@ -251,7 +251,11 @@ def main(argv):
         return
     if "--selftest" in argv:
         threading.Thread(target=agent.selftest, daemon=True).start()
-    agent.run(once="--once" in argv)
+    try:
+        agent.run(once="--once" in argv)
+    except KeyboardInterrupt:
+        agent.log("stop", reason="Ctrl-C")
+        print("stopped.")
 
 
 if __name__ == "__main__":
