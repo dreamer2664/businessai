@@ -41,6 +41,11 @@ when the evidence isn't enough. Any OpenAI-compatible endpoint can replace it (`
 Browser and thinking model together need ~2.5 GB. With less, the agent enters low-memory mode automatically: it closes the browser before thinking and reopens it for the next task (slower, but no stalls). `/status` and `state/logs/llm.log` show why the model isn't running, and `sh scripts/get_model.sh --test` / `--build` fix a prebuilt server that doesn't match the machine.
 
 ## Memory
+**Learning loop (bulk-feed → trim → pack).** Everything it reads (research, page summaries, videos, self-study) becomes a note;
+when idle it boils new notes down to one-sentence facts (numbers/names kept, hype dropped, duplicates removed) and folds
+them into its own knowledge pack `release/packs/learned.kdw`, searched together with the business pack. `/learned` shows the
+latest facts and pack size; `/learned rebuild` forces a rebuild. Budget: ~40 KB per 100 facts, capped at 5000 facts.
+
 `state/notes.jsonl` (everything researched/summarized, with sources), `state/todo.json` (to-do + learning goals).
 `/visit <site> | <question>` (or just "open Amazon and tell me the bestsellers") goes to a site and reports what is really on it — answers are checked word-for-word against the page, and empty/login-only pages (YouTube, TikTok) are reported as such instead of guessed.
 `/watch <video url or topic>` (or "watch a video about facebook ads and tell me what you learned") reads the video's captions — no download, no login — and reports the concrete claims plus whether the speaker is selling something.

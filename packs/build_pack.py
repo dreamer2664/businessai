@@ -4,7 +4,7 @@
 import numpy as np, os, sys, subprocess, shutil
 H = os.path.expanduser; ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ext, out = sys.argv[1], sys.argv[2]; dims = sys.argv[sys.argv.index("--dims") + 1] if "--dims" in sys.argv else "128"
-KK, KE = H("~/.cache/bai/known_keys.npy"), H("~/.cache/bai/known_emb.npy")
+KK, KE = H("~/.cache/bai/known_keys.npy"), H("~/.cache/bai/known_emb.npy"); os.makedirs(H("~/.cache/bai"), exist_ok=True)
 keys = list(np.load(KK, allow_pickle=True)) if os.path.exists(KK) else []; emb = np.load(KE) if os.path.exists(KE) else np.zeros((0, 384), np.float32)
 known = {k: i for i, k in enumerate(keys)}
 ps = [l.rstrip("\n").split("\t", 1)[1] for l in open(os.path.join(ext, "passages.tsv"), encoding="utf-8")]

@@ -20,6 +20,7 @@ from .tasks import Tasks
 from .viewer import Viewer
 from .planner import Planner
 from .memory import Memory
+from .learn import Learner
 from .telegram import Bot, TelegramError
 
 VERSION = "0.5 (milestone 3: thinking model, plain-language, memory)"
@@ -31,7 +32,7 @@ Commands (optional):
 /research <topic> · /compare <product> · /summarize <url> · /visit <site> | <question> · /watch <video url or topic> · /exam [n]
 /todo — my to-do list · /todo add <text> · /todo done <n>
 /goal <topic> — give me a standing learning goal; I study it on my own when idle (max 6 sessions a day) and keep notes
-/goals · /goal drop <n> · /notes [topic] — what I've learned · /report — today's summary
+/goals · /goal drop <n> · /notes [topic] — my notes · /learned — facts I've folded into my own knowledge pack · /report — today's summary
 /screen · /watch on|off — see my browser · /status · /selftest
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
@@ -56,6 +57,7 @@ class Agent:
         self.memory = Memory()
         self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer,
                            planner=self.planner, memory=self.memory)
+        self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
         self.busy = None
         self.last_idle_check = time.time()
         self.report_sent = ""
@@ -281,6 +283,12 @@ class Agent:
             return "\n\n".join(f"{n['t'][:16]} · {n['kind']} · {n['topic']}\n{n['text'][:500]}" for n in ns)
         if low.startswith("/report"):
             return self.memory.daily_report() or "Nothing to report yet today."
+        if low.startswith("/learned"):
+            if "rebuild" in low:
+                threading.Thread(target=lambda: self.notify(self.learner.build(force=True)), daemon=True).start()
+                return "Rebuilding my learned pack — I'll tell you when it's done."
+            rec = self.learner.recent(8)
+            return self.learner.status() + ("\n\nLatest facts:\n" + "\n".join(f"• {f['text']}" for f in rec) if rec else "")
         # ---- plain language: work out what the owner wants --------------------
         it = self.planner.intent(text) if self.planner.installed() else {"kind": "ask", "topic": text}
         self.log("intent", intent=it["kind"], topic=it["topic"])
@@ -338,9 +346,28 @@ class Agent:
             self.report_sent = today
             if rep:
                 self.notify(rep)
+        if self.learner.pending() and self.planner.installed():
+            threading.Thread(target=self.run_digest, daemon=True).start()
+            return
         goal = self.memory.next_goal()
         if goal and 8 <= hour < 23 and self.owner_id:
             threading.Thread(target=self.run_study, args=(goal,), daemon=True).start()
+
+    def run_digest(self):
+        """Trim: boil new notes down to facts; when enough new facts, fold them into learned.kdw."""
+        self.busy = "digesting my notes into facts"
+        try:
+            from .learn import MIN_NEW_FOR_BUILD
+            self.learner.digest(max_notes=3)
+            if self.learner.new_since_build >= MIN_NEW_FOR_BUILD:
+                self.busy = "rebuilding my learned knowledge pack"
+                msg = self.learner.build()
+                if msg.startswith("learned.kdw"):
+                    self.notify("🧠 " + msg)
+        except Exception as e:
+            self.log("digest_error", error=str(e)[:200])
+        finally:
+            self.busy = None
 
     def run_study(self, goal):
         self.busy = f"studying g{goal['id']}: {goal['topic'][:40]}"
@@ -358,6 +385,7 @@ class Agent:
         return (f"Business AI {VERSION}\n"
                 f"up {up // 3600}h {up % 3600 // 60}m · brain: {self.brain.describe()}\n"
                 f"{self.planner.describe()} · notes: {len(self.memory.notes(limit=100000))} · {self.memory.list_text().splitlines()[-1]}\n"
+                f"{self.learner.status()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")

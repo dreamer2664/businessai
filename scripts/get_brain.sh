@@ -14,3 +14,5 @@ done
 chmod +x release/kdr-brain-lite
 echo "brain ready:"; ls -la release release/packs
 echo "test:"; ./release/kdr-brain-lite release/brain.kdr --wiki release/packs/business.kdw wiki "What is dropshipping?" 2>/dev/null | head -c 300; echo
+# python packages the pack builder needs (learned.kdw is rebuilt on this machine as the agent learns)
+python3 -c "import numpy, zstandard" 2>/dev/null || python3 -m pip install -q --user --break-system-packages numpy zstandard 2>/dev/null || python3 -m pip install -q --user numpy zstandard || echo "note: could not install numpy/zstandard — run: pip install numpy zstandard"

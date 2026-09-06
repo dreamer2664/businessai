@@ -41,6 +41,8 @@ messages and social media, reports to the owner and asks questions via phone.
    its own words from evidence with sources; agent/memory.py: notes (state/notes.jsonl), to-do, learning goals with
    self-study when idle (≤6 runs/day), daily report at 20:00. Exam: 27/30 = 90 % (retrieval alone 18/30). Warm-up ladder (visit/find/refuse/watch/ask) 14/14.
    Video 'watching' = captions → summary (agent/video.py). Static llama-server on the Release; 3B model on ≥ 6 GB RAM.
+   Bulk-feed → trim → pack (agent/learn.py): notes are digested into one-sentence facts (quality gate, de-dup), folded
+   into release/packs/learned.kdw (~40 KB / 100 facts, cap 5000) which the brain searches alongside business.kdw.
 4. (moved to the very end at the owner's request) Practice store (free test shop) — listings, descriptions, pricing rules;
    every change approved by the owner.
 5. Customer messages & social — drafts → approval → automatic for routine

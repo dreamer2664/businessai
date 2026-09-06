@@ -30,7 +30,13 @@ class Brain:
         packs = ", ".join(f"{os.path.basename(p)} {mb(p)}" for p in self.packs) or "no knowledge packs yet"
         return f"engine {mb(self.bin)} + models {mb(self.kdr)}; packs: {packs}"
 
+    def refresh(self):
+        self.packs = sorted(str(p) for p in config.PACKS_DIR.glob("*.kdw")) if config.PACKS_DIR.exists() else []
+        return self.packs
+
     def ask_raw(self, question, pack=None, timeout=60):
+        if pack is None:
+            self.refresh()
         if not self.ready or not question:
             return None
         pack = pack or self.packs[0]
@@ -45,7 +51,7 @@ class Brain:
     def ask(self, question, min_conf=0.35):
         """Best answer across packs, formatted for the owner. None if the brain isn't confident."""
         best = None
-        for pack in self.packs:
+        for pack in self.refresh():
             d = self.ask_raw(question, pack)
             if d and (best is None or d.get("confidence", 0) > best.get("confidence", 0)):
                 best = d

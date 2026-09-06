@@ -294,9 +294,16 @@ class Tasks:
         """Answer from what I already know (knowledge pack + my notes), written by the thinking model."""
         ev, titles = [], []
         if self.brain and self.brain.ready:
-            d = self.brain.ask_raw(question) or {}
-            for h in d.get("hits", [])[:5]:
-                ev.append(f"[{h.get('title', '')}] {h.get('text', '')}")
+            hits = []
+            for pack in self.brain.refresh():
+                d = self.brain.ask_raw(question, pack) or {}
+                for h in d.get("hits", [])[:5]:
+                    h["_pack"] = pack.rsplit("/", 1)[-1]
+                    hits.append(h)
+            hits.sort(key=lambda h: -float(h.get("score", 0)))
+            for h in hits[:6]:
+                tag = " (learned by me)" if h["_pack"].startswith("learned") else ""
+                ev.append(f"[{h.get('title', '')}{tag}] {h.get('text', '')}")
                 titles.append(h.get("title", ""))
         if self.memory:
             rec = self.memory.recall(question)

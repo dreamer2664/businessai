@@ -16,6 +16,9 @@ Layout ("KDRW" magic, same blob table of contents as brain.kdr):
 """
 import sys, os, struct, time, numpy as np, zstandard as zstd
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# the engine binaries live in <repo>/release (businessai) or <repo>/engine/release (kdr-brain): use whichever exists
+if not os.path.exists(os.path.join(ROOT, "release", "brain.kdr")) and os.path.exists(os.path.join(os.path.dirname(ROOT), "release", "brain.kdr")):
+    ROOT = os.path.dirname(ROOT)
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 from bertref import WordPiece, quantize_int8_rows
 

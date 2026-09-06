@@ -10,3 +10,4 @@
 | plain-language intent (milestone 3) | 12 varied owner messages → ask/research/compare/summarize/chat | **12/12** | regex fast-path + model; ~3 s when the model is needed |
 | tests/chat.txt, tests/general.txt | inherited from kdr-brain (small talk, arithmetic, world knowledge) | not wired yet | needs the composer model (milestone 3+) |
 | tests/warmup.txt (milestone 3) | 14 light tasks: visit pages, find facts, refuse to invent on empty/login pages, watch 2 videos, 2 plain questions | **14/14** | with the 1.5B model on 2 sandbox cores: ~15 min total; run: `python3 engine/scripts/score_warmup.py` |
+| learning loop (milestone 3) | question answerable only from a self-learned fact ("which supplier connects retailers to European growers?") | **answered from learned.kdw** | 7 facts from 2 notes → 0.20 MB pack; junk notes (empty YouTube page, Amazon menu) filtered by the quality gate |
