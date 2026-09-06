@@ -104,11 +104,24 @@ class Agent:
             self.pending[qid]["options"] = list(options)
         msg = self.bot.send(self.owner_id, f"❓ {question}", buttons=rows)
         self.pending[qid]["message_id"] = msg.get("message_id") if msg else None
+        self.state.setdefault("open", {})[qid] = {"question": question, "options": options,
+                                                 "message_id": self.pending[qid]["message_id"]}
+        self._save_state()
         self.log("ask", qid=qid, question=question, options=options)
         ev.wait(timeout)
         ans = self.pending.pop(qid)["answer"]
+        if ans is not None:
+            self.state.get("open", {}).pop(qid, None)
+            self._save_state()
         self.log("ask_result", qid=qid, answer=ans)
         return ans
+
+    def record_answer(self, qid, question, answer, late=False):
+        """Append every owner answer to state/answers.jsonl (modules read late answers from here)."""
+        rec = {"t": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+               "qid": qid, "question": question, "answer": answer, "late": late}
+        with open(config.STATE_DIR / "answers.jsonl", "a") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     # ---- incoming ------------------------------------------------------
     def handle_update(self, upd):
@@ -146,17 +159,33 @@ class Agent:
         if data.startswith("q:"):
             _, qid, idx = data.split(":", 2)
             p = self.pending.get(qid)
+            m = cq.get("message") or {}
             if p and p["answer"] is None:
                 try:
                     p["answer"] = p["options"][int(idx)]
                 except (ValueError, IndexError, KeyError):
                     p["answer"] = data
                 p["event"].set()
+                self.record_answer(qid, p["question"], p["answer"])
                 self.bot.answer_callback(cq["id"], "Noted")
-                m = cq.get("message") or {}
                 if m:
                     self.bot.clear_buttons(m["chat"]["id"], m["message_id"],
                                            new_text=f"❓ {p['question']}\n✅ {p['answer']}")
+            elif qid in self.state.get("open", {}):
+                # asked by a previous run (before a restart): still accept and record the answer
+                o = self.state["open"].pop(qid)
+                self._save_state()
+                try:
+                    ans = (o.get("options") or [])[int(idx)]
+                except (ValueError, IndexError):
+                    ans = data
+                self.record_answer(qid, o["question"], ans, late=True)
+                self.log("ask_result_late", qid=qid, answer=ans)
+                self.bot.answer_callback(cq["id"], "Noted")
+                if m:
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"],
+                                           new_text=f"❓ {o['question']}\n✅ {ans}")
+                self.bot.send(self.owner_id, f"Noted: {ans!r} (answer to an earlier question — I had restarted in between).")
             else:
                 self.bot.answer_callback(cq["id"], "That question is already closed.")
         else:
@@ -219,6 +248,8 @@ def main(argv):
     if "--say" in argv:
         agent.notify(" ".join(argv[argv.index("--say") + 1:]) or "hello")
         return
+    if "--selftest" in argv:
+        threading.Thread(target=agent.selftest, daemon=True).start()
     agent.run(once="--once" in argv)
 
 

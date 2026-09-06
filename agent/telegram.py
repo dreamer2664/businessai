@@ -26,21 +26,27 @@ class Bot:
         self.timeout = timeout
 
     # ---- low level -----------------------------------------------------
-    def call(self, method, _timeout=None, **params):
+    def call(self, method, _timeout=None, _retries=3, **params):
         data = {k: (json.dumps(v) if isinstance(v, (dict, list)) else v)
                 for k, v in params.items() if v is not None}
         body = urllib.parse.urlencode(data).encode()
-        req = urllib.request.Request(self.base + method, data=body)
-        try:
-            with urllib.request.urlopen(req, timeout=_timeout or self.timeout) as r:
-                out = json.loads(r.read().decode())
-        except urllib.error.HTTPError as e:
+        for attempt in range(_retries):
+            req = urllib.request.Request(self.base + method, data=body)
             try:
-                out = json.loads(e.read().decode())
-            except Exception:
-                out = {"ok": False, "description": f"HTTP {e.code}"}
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            raise TelegramError(f"network: {config.redact(str(e))}")
+                with urllib.request.urlopen(req, timeout=_timeout or self.timeout) as r:
+                    out = json.loads(r.read().decode())
+                break
+            except urllib.error.HTTPError as e:
+                try:
+                    out = json.loads(e.read().decode())
+                except Exception:
+                    out = {"ok": False, "description": f"HTTP {e.code}"}
+                break
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                # flaky network (SSL EOF, reset, timeout): retry sends, but never retry a long poll
+                if method == "getUpdates" or attempt == _retries - 1:
+                    raise TelegramError(f"network: {config.redact(str(e))}")
+                time.sleep(1.5 * (attempt + 1))
         if not out.get("ok"):
             raise TelegramError(f"{method}: {out.get('error_code')} {out.get('description')}")
         return out["result"]
