@@ -215,9 +215,10 @@ class Agent:
                 f"pending questions: {len(self.pending)}")
 
     def selftest(self):
-        a = self.ask("Self-test: which one?", ["Option A", "Option B", "Skip"], timeout=300)
-        self.notify(f"Self-test result: {a!r}. The phone line works both ways." if a
-                    else "Self-test: no answer within 5 minutes.")
+        a = self.ask("Self-test (the buttons mean nothing, just checking that your tap reaches me): tap one",
+                     ["Tap me", "Or me"], timeout=300)
+        self.notify(f"Self-test passed: I received your tap ({a}). The phone line works both ways." if a
+                    else "Self-test: no tap within 5 minutes.")
 
     # ---- main loop -----------------------------------------------------
     def run(self, once=False):
