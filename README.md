@@ -20,7 +20,7 @@ state/      runtime memory + logs (git-ignored)
 .secrets/   keys (git-ignored) — template in .secrets.example
 ```
 
-## Run it (Linux / WSL, free, nothing to install beyond python3)
+## Run it (Linux / WSL, free, nothing to install beyond python3) — Windows step-by-step: [docs/INSTALL_WINDOWS.md](docs/INSTALL_WINDOWS.md)
 ```sh
 git clone https://github.com/dreamer2664/businessai && cd businessai
 sh scripts/install.sh          # creates .secrets/env — put the bot token + your Telegram username in it

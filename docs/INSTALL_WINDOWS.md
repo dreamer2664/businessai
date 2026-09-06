@@ -1,0 +1,75 @@
+# Install the Business AI on a Windows PC (free, ~10 minutes)
+
+The agent runs inside **WSL** (Windows Subsystem for Linux) — a small Linux
+that Windows 10/11 ships for free. It uses about 100 MB of RAM at this stage.
+The bot answers whenever the PC is on and connected.
+
+## 1. Turn on WSL (once)
+Open **PowerShell as Administrator** (right-click Start → "Terminal (Admin)" or
+"Windows PowerShell (Admin)") and run:
+```powershell
+wsl --install -d Ubuntu
+```
+Reboot when asked. A window "Ubuntu" opens and asks for a username and a
+password (anything you like — you'll need the password for `sudo`).
+If it doesn't open by itself: Start menu → "Ubuntu".
+
+## 2. Get the code (inside the Ubuntu window)
+```sh
+sudo apt update && sudo apt install -y git python3
+git clone https://github.com/dreamer2664/businessai
+cd businessai
+sh scripts/install.sh
+```
+`install.sh` creates `.secrets/env`. Open it with `nano .secrets/env` and fill in:
+```
+TELEGRAM_BOT_TOKEN=<the bot token from @BotFather>
+TELEGRAM_OWNER_USERNAME=<your Telegram username, without @>
+```
+Save with Ctrl-O, Enter, then Ctrl-X. (The GitHub lines are optional on the PC.)
+
+## 3. Start it
+Try it once in the foreground:
+```sh
+sh scripts/run.sh
+```
+Send `/status` to the bot on your phone — it should answer within seconds.
+Stop it with Ctrl-C, then install it as a service so it starts by itself:
+```sh
+sh scripts/service.sh
+```
+From now on it runs whenever Ubuntu is running. Check / control it with:
+```sh
+systemctl --user status businessai     # is it running?
+journalctl --user -u businessai -f     # live log (Ctrl-C to leave)
+systemctl --user restart businessai    # restart after an update
+```
+
+## 4. Keep it running when the PC is on
+WSL stops when the last Ubuntu window is closed, unless something keeps it
+alive. Two options:
+- **Simple:** keep an Ubuntu window open (minimised is fine).
+- **Automatic:** make Windows start it at login. Press Win+R, type
+  `shell:startup`, Enter; in that folder create a file `businessai.vbs` with:
+  ```
+  CreateObject("WScript.Shell").Run "wsl -d Ubuntu -u " & CreateObject("WScript.Network").UserName & " -- sh -lc 'systemctl --user start businessai; sleep infinity'", 0
+  ```
+  (If your Ubuntu username differs from your Windows username, replace the
+  `CreateObject("WScript.Network").UserName` part with `"yourubuntuname"`.)
+  This starts Ubuntu invisibly at every login.
+
+Also, in Windows **Settings → System → Power**, set "sleep" to Never while
+plugged in, otherwise the bot naps with the PC.
+
+## 5. Updating
+```sh
+cd ~/businessai && git pull && systemctl --user restart businessai
+```
+
+## Troubleshooting
+- `python3 -m agent.selfcheck` (in the businessai folder) tells you whether the
+  token and owner name are right.
+- Bot answers "Sorry, I only work for my owner": the username in `.secrets/env`
+  doesn't match your Telegram username exactly (Telegram → Settings → Username).
+- Log lines with `409 Conflict`: two copies are running (e.g. sandbox + PC).
+  Only one can poll Telegram at a time — stop the other one.
