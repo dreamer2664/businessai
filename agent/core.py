@@ -21,9 +21,10 @@ from .viewer import Viewer
 from .planner import Planner
 from .memory import Memory
 from .learn import Learner
+from .inbox import Inbox
 from .telegram import Bot, TelegramError
 
-VERSION = "0.5 (milestone 3: thinking model, plain-language, memory)"
+VERSION = "0.6 (milestone 5: customer replies with approval)"
 
 HELP = """Just talk to me. I work out whether you're asking a question, want something looked up on the web, want a page summarized, or want suppliers compared.
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.
@@ -33,6 +34,8 @@ Commands (optional):
 /todo — my to-do list · /todo add <text> · /todo done <n>
 /goal <topic> — give me a standing learning goal; I study it on my own when idle (max 6 sessions a day) and keep notes
 /goals · /goal drop <n> · /notes [topic] — my notes · /learned — facts I've folded into my own knowledge pack · /report — today's summary
+/inbox — customer messages waiting; /inbox practice loads 12 sample messages so you can see how I'd answer them
+/policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
 /screen · /watch on|off — see my browser · /status · /selftest
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
@@ -58,6 +61,9 @@ class Agent:
         self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer,
                            planner=self.planner, memory=self.memory)
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
+        self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log)
+        self.drafts = {}            # message id -> draft dict awaiting the owner's tap
+        self.editing = None         # message id whose reply the owner is typing
         self.busy = None
         self.last_idle_check = time.time()
         self.report_sent = ""
@@ -161,6 +167,13 @@ class Agent:
             self.bot.send(chat_id, "Sorry, I only work for my owner.")
             return
         self.log("in", text=text)
+        if self.editing and not text.startswith("/"):
+            mid, self.editing = self.editing, None
+            d = self.drafts.pop(mid, None)
+            self.inbox.decide(mid, "edited", text)
+            self.bot.send(chat_id, f"Saved your version for message {mid} and marked it approved. I'll learn from the difference.")
+            self.log("inbox_edited", id=mid)
+            return
         # a pending free-text question takes the next message as its answer
         for qid, p in list(self.pending.items()):
             if "options" not in p and p["answer"] is None:
@@ -211,8 +224,59 @@ class Agent:
                 self.bot.send(self.owner_id, f"Noted: {ans!r} (answer to an earlier question — I had restarted in between).")
             else:
                 self.bot.answer_callback(cq["id"], "That question is already closed.")
+        elif data.startswith("r:"):
+            _, action, mid = data.split(":", 2)
+            d = self.drafts.get(mid)
+            m = cq.get("message") or {}
+            if not d:
+                self.bot.answer_callback(cq["id"], "Already handled.")
+                return
+            if action == "ok":
+                self.drafts.pop(mid, None)
+                self.inbox.decide(mid, "approved", d["text"])
+                self.bot.answer_callback(cq["id"], "Approved")
+                if m:
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n✅ approved (practice: written to state/outbox.jsonl)")
+            elif action == "edit":
+                self.editing = mid
+                self.bot.answer_callback(cq["id"], "Type your version")
+                self.bot.send(self.owner_id, f"Type the reply you want to send for message {mid} (your next message is taken as the reply).")
+            elif action == "no":
+                self.drafts.pop(mid, None)
+                self.inbox.decide(mid, "rejected", "")
+                self.bot.answer_callback(cq["id"], "Rejected")
+                if m:
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n❌ rejected — nothing sent")
+            self.log("inbox_decision", id=mid, action=action)
         else:
             self.bot.answer_callback(cq["id"])
+
+    # ---- customer messages ---------------------------------------------
+    def process_inbox(self):
+        """Draft a reply for every new message and put each in front of the owner with buttons."""
+        if self.busy:
+            return
+        self.busy = "drafting customer replies"
+        try:
+            for rec in self.inbox.items("new"):
+                if rec["id"] in self.drafts:
+                    continue
+                d = self.inbox.draft(rec)
+                if d["kind"] == "spam_or_scam":
+                    self.inbox.decide(rec["id"], "rejected", "", note="spam")
+                    self.notify(f"🗑 Spam from {rec['from']} — no reply: “{rec['text'][:120]}”")
+                    continue
+                self.drafts[rec["id"]] = d
+                head = f"📨 {rec['from']} ({rec['channel']}) · {d['kind'].replace('_', ' ')} · {d['urgency']}" + (" · ⚠️ ESCALATION" if d.get("escalate") else "")
+                flags = ("\n⚠️ " + "; ".join(d["checks"])) if d["checks"] else ""
+                note = f"\nℹ️ {d['note']}" if d.get("note") else ""
+                body = f"{head}\n\n“{rec['text'][:600]}”\n\n— my draft —\n{d['text']}{flags}{note}"
+                self.bot.send(self.owner_id, body, buttons=[[("✅ Approve", f"r:ok:{rec['id']}"), ("✏️ Edit", f"r:edit:{rec['id']}"), ("❌ Reject", f"r:no:{rec['id']}")]])
+                self.log("inbox_draft", id=rec["id"], mtype=d["kind"], flags=d["checks"])
+        except Exception as e:
+            self.log("inbox_error", error=str(e)[:200])
+        finally:
+            self.busy = None
 
     # ---- live screen ---------------------------------------------------
     def _on_step(self, action, shot):
@@ -283,6 +347,29 @@ class Agent:
             return "\n\n".join(f"{n['t'][:16]} · {n['kind']} · {n['topic']}\n{n['text'][:500]}" for n in ns)
         if low.startswith("/report"):
             return self.memory.daily_report() or "Nothing to report yet today."
+        if low.startswith("/inbox"):
+            arg = low[6:].strip()
+            if arg.startswith("practice"):
+                n = self.inbox.load_practice()
+                threading.Thread(target=self.process_inbox, daemon=True).start()
+                return f"Loaded {n} practice messages. I'll draft a reply for each and send it to you with Approve / Edit / Reject buttons — nothing is sent anywhere, this is a dry run."
+            new = self.inbox.items("new")
+            if not new:
+                return "Inbox: nothing waiting. (/inbox practice loads sample messages.)"
+            threading.Thread(target=self.process_inbox, daemon=True).start()
+            return f"{len(new)} message(s) waiting — drafting replies now."
+        if low.startswith("/policy"):
+            arg = text[7:].strip()
+            m = re.match(r"set\s+(\w+)\s+(.+)", arg, re.S | re.I)
+            if m:
+                return self.inbox.set_policy(m.group(1).lower(), m.group(2).strip())
+            fields = "\n".join(f"• {k}: {v or '(empty)'}" for k, v in self.inbox.policy.items() if k != "sign_off")
+            tips = "\n".join(f"  {k}: {v}" for k, v in self.inbox.POLICY_HELP.items())
+            return f"Store policy (every customer reply obeys this):\n{fields}\n\nChange one: /policy set <field> <text>\n{tips}"
+        if low.startswith("/stats"):
+            st = self.inbox.stats()
+            return (f"Customer replies: {st['decisions']} decided — {st['approved']} approved as written, {st['edited']} edited, {st['rejected']} rejected "
+                    f"(approval rate {st['approval_rate']:.0%}). Automatic sending unlocks per message type once the rate stays ≥ 90 % over 30 replies.")
         if low.startswith("/learned"):
             if "rebuild" in low:
                 threading.Thread(target=lambda: self.notify(self.learner.build(force=True)), daemon=True).start()
@@ -343,6 +430,8 @@ class Agent:
         today = _dt.date.today().isoformat()
         if hour >= 20 and self.report_sent != today and self.owner_id:
             rep = self.memory.daily_report()
+            if rep:
+                rep += "\n" + self.inbox.status()
             self.report_sent = today
             if rep:
                 self.notify(rep)
@@ -386,6 +475,7 @@ class Agent:
                 f"up {up // 3600}h {up % 3600 // 60}m · brain: {self.brain.describe()}\n"
                 f"{self.planner.describe()} · notes: {len(self.memory.notes(limit=100000))} · {self.memory.list_text().splitlines()[-1]}\n"
                 f"{self.learner.status()}\n"
+                f"{self.inbox.status()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")

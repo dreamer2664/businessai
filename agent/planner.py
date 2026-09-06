@@ -173,7 +173,7 @@ class Planner:
             if not self.available():
                 raise RuntimeError("thinking model not available")
             body = {"model": self.model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                    "max_tokens": max_tokens, "temperature": temperature}
+                    "max_tokens": max_tokens, "temperature": temperature, "cache_prompt": False}
             if stop:
                 body["stop"] = stop
             req = urllib.request.Request(self.url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})

@@ -45,8 +45,14 @@ messages and social media, reports to the owner and asks questions via phone.
    into release/packs/learned.kdw (~40 KB / 100 facts, cap 5000) which the brain searches alongside business.kdw.
 4. (moved to the very end at the owner's request) Practice store (free test shop) — listings, descriptions, pricing rules;
    every change approved by the owner.
-5. Customer messages & social — drafts → approval → automatic for routine
-   replies once its score earns it.
+5. ✅ (practice channel) Customer messages — agent/inbox.py: every message is classified (11 kinds), answered with a
+   draft that obeys the store policy (state/policy.json, edit with /policy), checked by hard rules (no invented
+   numbers, no status/tracking claims, no discounts, no promises, defer product/shipping facts the policy does not
+   contain, escalate legal/chargeback/injury/data/press), and sent to the owner's phone with Approve / Edit / Reject.
+   Approved or edited text goes to state/outbox.jsonl — nothing is ever sent by itself. Score: tests/inbox.txt 22/23.
+   Still to do in this milestone: real channels through official APIs (shop e-mail, Instagram/Facebook messaging),
+   social posts with the same approval gate, and automatic sending of a message type only after the owner's
+   approval rate for that type stays ≥ 90 % over 30 replies.
 6. Real store — owner handles accounts, payments, legal; AI operates with
    approval gates on money and public posts.
 7+. Vision (screenshots) and desktop/cursor control for what the browser

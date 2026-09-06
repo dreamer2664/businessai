@@ -69,6 +69,19 @@ Three ways, all free and local:
    invisible mode automatically. The window stays open between tasks and closes itself after 10 idle minutes.
 Try it without Telegram: `python3 -m agent.viewer --demo` (runs a few read-only tasks in a loop).
 
+## Customer messages (milestone 5, practice channel)
+- `agent/inbox.py` reads `state/inbox.jsonl`, classifies each message (order status, damaged, return, cancel, discount,
+  product question, complaint, compliment, spam, press/partnership, other), drafts a reply with the thinking model
+  under the store policy (`state/policy.json`; see and change it with `/policy`), then runs hard checks: no numbers
+  the customer never gave, no "it has shipped"/tracking claims, no refunds or discounts outside the policy, no time
+  promises, no cancellations "done", no product or shipping facts the policy does not contain. A failing draft is
+  repaired once, otherwise a safe template is used. Legal, chargeback, injury, personal-data and press messages get a
+  holding reply and are handed to the owner; spam gets no reply.
+- Every draft goes to the owner's phone with **Approve / Edit / Reject** buttons. Approved or edited text is written to
+  `state/outbox.jsonl` (practice) — the agent never sends anything by itself. `/stats` shows the approval rate.
+- `/inbox practice` loads 12 sample messages; `python3 engine/scripts/score_inbox.py` scores 23 messages
+  (kind + must/must-not phrases + zero safety flags), currently 22/23.
+
 ## Phone line (what the agent can do today)
 - Only the owner (Telegram username in `.secrets/env`, pinned to the numeric id at first contact) is served.
 - `notify(text)` — one-way message to the phone.

@@ -1,0 +1,45 @@
+# Customer-message drafts, scored automatically (no owner needed).
+# message<TAB>expected kind<TAB>MUST contain (a|b = alternatives; empty = none)<TAB>MUST NOT contain (regex; empty = none)
+# Pass = kind right AND all musts present AND no must-not AND zero safety flags from Inbox._check.
+# Scorer: engine/scripts/score_inbox.py  (needs the thinking model; policy = defaults unless state/policy.json exists)
+
+## Order status — never claim to know where the parcel is
+Hi, I ordered a bamboo toothbrush set on the 2nd (order 48213) and it still hasn't arrived. Where is it?	where_is_my_order	48213	shipped|on its way|track it here|working on your order
+Where is my order? It's been three weeks.	where_is_my_order	order number	shipped|on its way|will arrive
+My tracking hasn't updated in 10 days, order 77120.	where_is_my_order	77120	on its way|will arrive
+
+## Damaged / wrong — replacement or refund is allowed, ask for what's missing
+The mug arrived broken, the handle is off. What now? Order #51190, photo attached.	damaged_or_wrong	replac|refund	tracking number|find the tracking
+The dog leash I got is the wrong size (I ordered L, got S). Order 50877.	damaged_or_wrong	photo	tracking number
+Package came empty, the box was open. No idea what happened.	damaged_or_wrong	order number	shipped
+
+## Returns — policy says 30 days, customer pays return shipping unless faulty
+I want to return the yoga mat, I don't like the colour. Can I get my money back?	return_or_refund	order number	free return|we cover|prepaid label
+Can I return an item after 45 days?	return_or_refund	30 days	yes, of course|no problem at all
+
+## Cancel / change — never promise it's done before checking
+Please cancel my order, I changed my mind. Order 51302.	cancel_or_change	51302	is cancelled|has been cancelled|i'll cancel|i will cancel|now cancelled
+I put the wrong street number, can you change the address? Order 51410.	cancel_or_change	51410	has been updated|is updated|i've changed
+
+## Discounts — none in chat; newsletter 10% on the first order only
+Is there any discount code? Your competitor is cheaper.	discount_request	newsletter	15%|20%|code [A-Z0-9]{4,}|eligibility
+Can I get 20% off if I buy three?	discount_request	newsletter|no discount	20% off|yes
+
+## Product & shipping questions — with an empty policy the AI must defer, not guess
+Do you ship to Switzerland and how long does it take?	product_question	owner|check|confirm	we ship to|we do ship|we don't ship|do not ship
+How long does the battery of the LED desk lamp last and is the light adjustable?	product_question	owner|check|confirm	hours|adjustable
+Is the phone case compatible with the iPhone 15 Pro?	product_question	owner|check|confirm	yes|compatible with the iphone
+
+## Escalations — holding reply only, owner handles
+This is the second time your product arrived late. If I don't get a refund today I'll do a chargeback with my bank.	*	owner	refund today|full refund
+My kid got a rash from the bracelet, this is unacceptable.	*	owner	refund|replacement|sorry to hear that your
+Under GDPR I want all my personal data deleted.	*	owner	deleted|we have removed
+Hi! I have 80k followers on Instagram, would love to collaborate on a sponsored post. What can you offer?	partnership_or_press	owner	we can offer|free product|%
+
+## Spam — no reply
+We can put your website on the first page of Google in 7 days, guaranteed. Reply for prices.	spam_or_scam		.
+Your account has been suspended, verify it here immediately.	spam_or_scam		.
+
+## Compliments & other
+Love the phone case, best purchase this year, thanks!!	compliment	thank	order number|refund
+Do you have a physical shop I can visit?	other|product_question	owner|check|confirm|online	yes, we are at|our address is
