@@ -1,0 +1,65 @@
+# Business knowledge pack — score set (milestone 1). One question per line: question<TAB>accepted answers separated by |
+# Scoring: pass if any accepted answer appears (case-insensitive) in the brain's answer.
+
+## Business basics
+What are the four factors of production?	natural resources|land, labor, capital|land|labor
+What is the difference between revenue and profit?	costs|expenses|minus|after
+What is a sole proprietorship?	one person|single owner|owned by one|one individual|owned and managed by one
+What does GDP stand for?	gross domestic product
+What is inflation?	rise in prices|prices rise|general increase in prices|increase in the price|overall prices|price level|purchasing power
+What is a stakeholder?	interest in|affected by|stake in|claim
+What is the law of supply and demand?	price|higher|lower|equilibrium
+What is a business plan?	document|goals|strategy|describes|written
+What is break-even point?	total costs|equal|costs equal revenue|no profit|revenue equals|covers
+What is cash flow?	money moving|coming in|going out|inflow|outflow|cash coming|cash into and out
+What is the difference between a want and a need?	necessary|survive|essential|desire|required
+
+## Marketing
+What are the 4 Ps of marketing?	product, price, place|product, price, promotion|price, place, promotion|product price place promotion
+What is market segmentation?	dividing|divide|groups|segments|subgroups
+What is a target market?	group of customers|specific group|consumers|customers most likely|segment
+What is product positioning?	minds of|perceive|perception|image|relative to competitors|place in the mind
+What is a unique selling proposition?	differentiat|different from|sets|distinct|unique benefit|apart
+What is brand equity?	value|worth|premium|recognition|reputation
+What is the marketing funnel?	awareness|stages|journey|consideration|conversion
+What is the product life cycle?	introduction|growth|maturity|decline
+What is content marketing?	valuable|content|blog|articles|attract
+What is influencer marketing?	influencer|followers|social media|creator|audience
+What is search engine optimization?	search|rank|ranking|organic|google|visibility
+What is retargeting?	visited|previously|already|again|returned|left|showing ads
+What is an A/B test?	two versions|two variants|compare|version|variant|which performs
+What is a call to action?	prompt|encourages|action|button|click|buy|sign up
+What is a buyer persona?	fictional|representation|ideal customer|profile|semi-fictional
+What does ROAS stand for?	return on ad spend|return on advertising spend
+
+## E-commerce metrics & pricing
+What is customer acquisition cost?	cost|spend|acquire|new customer|divided|marketing
+What is customer lifetime value?	total|revenue|profit|over|lifetime|relationship|entire
+What is conversion rate?	percentage|visitors|purchase|complete|divided|action
+What is average order value?	revenue|divided|number of orders|per order|average amount
+What is cart abandonment?	leave|without|purchase|add|abandon|not complete|checkout
+What is a chargeback?	reverse|dispute|bank|card issuer|refund|disputed|forced
+What is friendly fraud?	legitimate|cardholder|dispute|chargeback|actually|own purchase|received
+What is the difference between markup and margin?	cost|selling price|revenue|based on|percentage of
+What is cost-plus pricing?	cost|markup|add|plus|percentage
+What is price skimming?	high|initial|lower|early|launch|then
+What is penetration pricing?	low|initial|attract|market share|gain
+What is psychological pricing?	perceive|9.99|.99|charm|emotion|perception|cheaper
+What is a payment gateway?	process|transaction|authorize|payment|card|encrypt|transfers
+What is a landing page?	standalone|specific|campaign|single|ad|conversion|arrive
+
+## Dropshipping & operations
+What is dropshipping?	supplier|third party|ship|directly|without|inventory|stock
+Does the dropshipper hold inventory?	no|not|never|does not|doesn't|without
+What is a typical dropshipping profit margin?	15|20|30|40|10|percent|%
+What does MOQ stand for?	minimum order quantity
+What is the difference between AliExpress and Alibaba?	wholesale|retail|bulk|manufacturer|single|individual|B2B|small
+What is print on demand?	printed|custom|design|after|order|ordered|only when
+What is a third-party logistics provider?	3PL|warehouse|fulfil|store|ship|outsource|storage
+What is ePacket?	shipping|China|delivery|fast|cheap|postal|track
+What is a supplier's response rate on AliExpress?	message|reply|respond|percentage|communication
+How can you check a supplier's reliability before selling their product?	sample|test order|reviews|rating|feedback|order|ask
+What is a return policy?	return|refund|exchange|rules|conditions|days
+What is order fulfillment?	receiving|processing|delivering|ship|pack|pick|delivery|order to
+What is sales tax nexus?	connection|presence|state|obligation|collect|physical|economic
+What is a niche market?	specific|small|specialized|narrow|segment|particular|focused
