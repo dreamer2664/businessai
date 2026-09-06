@@ -15,15 +15,19 @@ import time
 import traceback
 
 from . import brain, config
+from .tasks import Tasks
 from .telegram import Bot, TelegramError
 
-VERSION = "0.2 (milestone 1: business knowledge pack)"
+VERSION = "0.3 (milestone 2: own browser, read-only research tasks)"
 
-HELP = """I'm your Business AI. For now I can:
-/status — what I'm running and how much I know
+HELP = """I'm your Business AI. I can:
 /ask <question> — answer from my business knowledge pack (e-commerce, dropshipping, marketing, business basics)
-/help — this list
-Any plain question is looked up in the pack too."""
+/research <topic> — search the web in my own browser, read the best pages, report with sources (~30 s)
+/compare <product> — look for suppliers of a product and tabulate prices / shipping / MOQ notes (~1 min)
+/summarize <url> — open a page or PDF and give me the key points
+/exam [n] — sit n questions of the marketing exam bank offline and report my score
+/status — what I'm running and how much I know
+Any plain question is looked up in the pack too. Browsing is read-only: I never log in, pass CAPTCHAs, buy or post."""
 
 
 class Agent:
@@ -40,6 +44,8 @@ class Agent:
         self.pending = {}          # question_id -> {"event": Event, "answer": str|None}
         self.started = time.time()
         self.brain = brain.Brain()
+        self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain)
+        self.busy = None
         self.log("start", version=VERSION, bot=self.me.get("username"))
 
     # ---- persistence / logging ----------------------------------------
@@ -203,6 +209,14 @@ class Agent:
         if low.startswith("/selftest"):
             threading.Thread(target=self.selftest, daemon=True).start()
             return "Running a self-test: I'll ask you something with buttons."
+        for cmd in ("/research", "/compare", "/summarize", "/summarise", "/exam"):
+            if low.startswith(cmd):
+                if self.busy:
+                    return f"I'm still busy with: {self.busy}. Ask me again in a minute."
+                arg = text[len(cmd):].strip()
+                threading.Thread(target=self.run_task, args=(cmd[1:] + " " + arg,), daemon=True).start()
+                return {"/exam": "Sitting the exam now — this takes a few minutes; I'll send the score.",
+                        "/compare": "Looking for suppliers in my browser — about a minute."}.get(cmd, "On it — browsing now, report in ~30 seconds.")
         # default: try the knowledge brain, otherwise be honest
         ans = self.brain.ask(text)
         if ans:
@@ -211,12 +225,21 @@ class Agent:
             return "My knowledge brain isn't installed on this machine yet — run: sh scripts/get_brain.sh"
         return "I couldn't find a confident answer in my business pack for that."
 
+    def run_task(self, command):
+        self.busy = command[:60]
+        try:
+            out = self.tasks.run(command)
+        finally:
+            self.busy = None
+        self.log("out", text=out[:300])
+        self.bot.send(self.owner_id, out)
+
     def status_text(self):
         up = int(time.time() - self.started)
         return (f"Business AI {VERSION}\n"
                 f"up {up // 3600}h {up % 3600 // 60}m · brain: {self.brain.describe()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
-                f"pending questions: {len(self.pending)}")
+                f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}")
 
     def selftest(self):
         a = self.ask("Self-test (the buttons mean nothing, just checking that your tap reaches me): tap one",

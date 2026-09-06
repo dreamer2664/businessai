@@ -4,7 +4,7 @@ An AI that (eventually) runs an online store end to end: product and supplier
 research, listings, customer messages, social media — reporting to its owner
 and asking questions through Telegram.
 
-**Status: milestone 1 — business knowledge pack (52/55 on its score set).** Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
+**Status: milestone 2 — own browser + read-only research tasks** (browse tasks 18/19, knowledge pack 52/55, marketing exam 60 % offline). Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
 for the roadmap and the rules (score-driven, frugal, owner-in-the-loop, no
 CAPTCHA-breaking, official platform connections only).
 
@@ -30,6 +30,12 @@ Then message the bot on Telegram: `/start`, `/status`, `/selftest` (asks you a q
 
 Knowledge brain (optional, ~65 MB): `sh scripts/get_brain.sh` downloads the engine + models + packs from the release; after that any
 question you send (or `/ask …`) is answered from the business pack with its source.
+
+## Browser (eyes & hands)
+`agent/browser.py` drives a headless Chromium: every page is turned into numbered text (`[7] button: Add to cart`), actions
+refer to the numbers, and every step is logged in plain words. Built-in rules: never passes CAPTCHAs or logins (it stops and
+reports), refuses buy/pay/post/submit clicks unless a task is explicitly allowed to act, blocklist for adult/gambling/banking.
+Telegram: `/research <topic>`, `/compare <product>`, `/summarize <url>`, `/exam [n]`. Install: `sh scripts/install_browser.sh`.
 
 ## Phone line (what the agent can do today)
 - Only the owner (Telegram username in `.secrets/env`, pinned to the numeric id at first contact) is served.

@@ -9,4 +9,8 @@ mkdir -p .secrets state/logs release
 [ -f .secrets/env ] || { cp .secrets.example .secrets/env; chmod 600 .secrets/env; echo "created .secrets/env - fill in your keys"; }
 chmod 700 .secrets
 python3 -m agent.selfcheck
+echo
+echo "Optional — the agent's own browser (needed for /research, /compare, /summarize; ~300 MB):"
+echo "   sh scripts/install_browser.sh"
+echo "Optional — the knowledge brain (needed for /ask and /exam; ~65 MB):   sh scripts/get_brain.sh"
 echo "install OK. start with:  sh scripts/run.sh   (or install the service: sh scripts/service.sh)"

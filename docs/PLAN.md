@@ -30,8 +30,10 @@ messages and social media, reports to the owner and asks questions via phone.
 ## Milestones (one per session; each has a score set and a size budget)
 0. ✅ Home & skeleton — new repo, install script, Telegram line. (runs on the owner's Windows PC via WSL)
 1. ✅ Knowledge pack #1 — business.kdw 5.7 MB, 52/55 on tests/business.txt; hard test banks collected in tests/banks/ (to be sat alone once it has a browser).
-2. Eyes & hands v1 — read-only browsing (research a product, compare 3
-   suppliers, summarise a document). Score: 20 tasks.
+2. ✅ Eyes & hands v1 — own headless browser (agent/browser.py: tabs, numbered page text, click/type,
+   screenshots, CAPTCHA/login walls detected and never passed, buy/pay/post clicks refused); read-only tasks
+   /research /compare /summarize (tests/browse.txt 18/19); offline exam solver (agent/mcq.py) 57–60 % on the
+   440-question marketing bank, 87 % on the half it is confident about.
 3. Memory — notes, task list, daily plan; asks the owner when stuck.
 4. Practice store (free test shop) — listings, descriptions, pricing rules;
    every change approved by the owner.
