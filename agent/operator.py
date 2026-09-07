@@ -106,6 +106,7 @@ class Operator:
         prev_sig = None
         verify_next = False
         asks = 0
+        done_sigs = set()
         before, last_action = None, ""
         while steps < MAX_STEPS:
             if time.time() - t0 > MAX_SECONDS:
@@ -143,12 +144,25 @@ class Operator:
                     decision, step = {"step": "click", "target": tgt}, "click"            # "type 'Add to cart' into 'Add to cart'" = a click
             if question and step in ("click", "type") and DANGER.search(str(decision.get("target", ""))):
                 decision, step = {"step": "scroll", "direction": "down"}, "scroll"      # no buying/submitting to answer a question
+            if step == "type" and where == "browser":
+                tgt = str(decision.get("target") or "")
+                n = self._field_number(seen, tgt) or self._element_number(seen, tgt)
+                cur = next((v for k, v in (seen.get("values") or {}).items() if k == n), None)
+                if cur is not None and cur.strip() == str(decision.get("text") or "").strip():
+                    self.history.append(f"'{tgt}' already says {cur!r} — nothing to type")
+                    decision, step = self._obvious_step(goal, seen) or {"step": "scroll", "direction": "down"}, None
+                    step = decision.get("step")
             sig = (step, str(decision.get("target") or decision.get("url") or decision.get("direction") or "").lower())
+            if sig in done_sigs and step in ("click", "type") and not str(decision.get("text", "")):
+                self.history.append(f"not repeating '{sig[1]}' — looking further down instead")
+                decision, step = {"step": "scroll", "direction": "down"}, "scroll"
+                sig = (step, "down")
             if sig == prev_sig and step in ("click", "type"):
                 self.history.append(f"not repeating '{sig[1]}' — looking further down instead")
                 decision, step = {"step": "scroll", "direction": "down"}, "scroll"
                 sig = (step, "down")
             prev_sig = sig
+            done_sigs.add(sig)
             self.log("operator_step", n=steps, step=step, target=str(decision.get("target") or decision.get("url") or decision.get("direction") or "")[:60])
             if step == "done":
                 return self._finish(str(decision.get("answer") or "Done."), t0, steps)
@@ -439,15 +453,16 @@ class Operator:
                 except Exception:
                     full = b.extract_text()
                 items = [(it.get("n"), (it.get("label") or "")[:80], it.get("role", "")) for it in (b.items or [])]
-                return st, shot, full[:12000], b.page.url, b.page.title(), items, banner
+                values = {it.get("n"): it.get("value") for it in (b.items or []) if it.get("value") is not None}
+                return st, shot, full[:12000], b.page.url, b.page.title(), items, banner, values
             try:
-                st, shot, full, url, title, items, banner = self.tasks.on_hands(lambda: grab(self.tasks.browser()), timeout=60)
+                st, shot, full, url, title, items, banner, values = self.tasks.on_hands(lambda: grab(self.tasks.browser()), timeout=60)
             except Exception as e:
                 out["elements"] = f"(browser error: {str(e)[:80]})"
                 return out
             if banner:
                 self.history.append(f"closed a cookie banner ({banner})")
-            out.update(shot=shot, elements=full[:3000], fulltext=full, url=url, title=title, items=items)
+            out.update(shot=shot, elements=full[:3000], fulltext=full, url=url, title=title, items=items, values=values)
             if st in ("captcha", "login"):
                 out["wall"] = "captcha" if st == "captcha" else "login wall"
             elif any((lab or "").lower() in ("password", "passwort", "contraseña", "mot de passe") and role == "textbox" for _, lab, role in items) \
@@ -505,7 +520,8 @@ class Operator:
             if not lab:
                 continue
             if role in ("textbox", "searchbox", "combobox", "textarea"):
-                fields.append(lab)
+                cur = (seen.get("values") or {}).get(n)
+                fields.append(f"{lab} (currently: {cur})" if cur else lab)
             else:
                 rel = sum(1 for k in keys if k in lab.lower())
                 clicks.append((-rel, 0 if role == "button" else 1, lab))
@@ -533,6 +549,10 @@ class Operator:
         if not m:
             # a button whose whole label is inside the goal ("Buy the set now" → button "Buy now") is the obvious click
             gw = set(re.findall(r"[a-z0-9]+", goal.lower()))
+            if gw & {"cart", "basket", "bag"} and gw & {"put", "add", "place", "drop"}:
+                gw |= {"add", "to", "cart", "basket", "bag"}                              # "put one X in the cart" ≙ "Add to cart"
+            if "buy" in gw or "purchase" in gw or "order" in gw:
+                gw |= {"buy", "now"}
             best = None
             for n, label, role in seen.get("items") or []:
                 lw = [w for w in re.findall(r"[a-z0-9]+", (label or "").lower()) if w not in ("the", "a", "to", "in", "on")]
