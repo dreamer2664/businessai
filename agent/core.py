@@ -84,7 +84,7 @@ class Agent:
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
         self.shopfacts = ShopFacts(tasks=self.tasks, log=self.log)
         self.store = practice_store.Store(log=self.log)          # the practice shop (milestone 11); served only when /store open
-        self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log, shopfacts=self.shopfacts)
+        self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log, shopfacts=self.shopfacts, store=self.store)
         self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
         self.channels = Channels(inbox=self.inbox, log=self.log)
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
@@ -514,6 +514,11 @@ class Agent:
                 ok_label = ("⚠️ Send anyway" if real else "⚠️ Approve anyway") if d["checks"] else ("✅ Approve & send" if real else "✅ Approve")
                 self.bot.send(self.owner_id, body, buttons=[[(ok_label, f"r:ok:{rec['id']}"), ("✏️ Edit", f"r:edit:{rec['id']}"), ("❌ Reject", f"r:no:{rec['id']}")]])
                 self.log("inbox_draft", id=rec["id"], mtype=d["kind"], flags=d["checks"])
+                if rec.get("channel") == "store" and d.get("order_no") and d["kind"] in ("cancel_or_change", "damaged_or_wrong"):
+                    prop = self.store.proposal_for_message(d["kind"], d["order_no"])
+                    if prop:
+                        self.bot.send(self.owner_id, f"🏪 Proposal — {prop['kind']} order {prop['target']}\n{prop['why']}",
+                                      buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
         except Exception as e:
             self.log("inbox_error", error=str(e)[:200])
         finally:

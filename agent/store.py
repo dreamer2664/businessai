@@ -238,6 +238,31 @@ class Store:
             self.save()
             return True
 
+    # ---- what a customer-care reply may know about an order ----------------------------
+    def order_facts(self, n, email=None):
+        """Plain sentences about one order for the reply writer — only what the ledger really says. None when the order
+        does not exist or belongs to another e-mail address (a customer must not learn about someone else's order)."""
+        o = self.order(n) if str(n).isdigit() else None
+        if not o:
+            return None
+        if email and o["customer"].get("email") and o["customer"]["email"].lower() != email.lower():
+            return {"n": o["n"], "mismatch": True, "lines": [f"Order {o['n']} exists but was placed with a different e-mail address — ask the customer to write from the address used for the order (or to send the order confirmation)."]}
+        items = ", ".join(f"{l['name']}" + (f" ({l['option']})" if l.get("option") else "") + f" ×{l['qty']}" for l in o["lines"])
+        days_ago = max(0, self.data["day"] - o.get("day", self.data["day"]))
+        lines = [f"Order {o['n']}: {items}, total {money(o['total'])}, to {o['country']}, placed {days_ago} day(s) ago (practice day {o.get('day')})."]
+        st = o["status"]
+        if st == "paid":
+            lines.append(f"Status: PAID, NOT YET SHIPPED — it is still in the warehouse; it can still be cancelled and refunded in full; no tracking number exists yet.")
+        elif st == "shipped":
+            lines.append(f"Status: SHIPPED with GLS, tracking number {o.get('tracking', '')}. It can no longer be cancelled; the customer can return it within 30 days of delivery.")
+        elif st == "delivered":
+            lines.append(f"Status: DELIVERED (tracking {o.get('tracking', '')}). Returns possible within 30 days of delivery.")
+        elif st == "cancelled":
+            lines.append("Status: CANCELLED and refunded.")
+        elif st == "refunded":
+            lines.append("Status: REFUNDED.")
+        return {"n": o["n"], "status": st, "lines": lines, "tracking": o.get("tracking", ""), "days_ago": days_ago, "order": o}
+
     # ---- proposals (the AI suggests, the owner applies) ----------------------------
     def propose(self, kind, target, change, why):
         with self.lock:
@@ -303,6 +328,18 @@ class Store:
                 self.save()
                 return True
             return False
+
+    def proposal_for_message(self, kind, order_no, text=""):
+        """A customer asks to cancel / reports damage / wants to return → the matching proposal (or None)."""
+        o = self.order(order_no) if str(order_no).isdigit() else None
+        if not o:
+            return None
+        open_ = {(p["kind"], p["target"]) for p in self.data["proposals"] if p["status"] == "open"}
+        if kind == "cancel_or_change" and o["status"] == "paid" and ("cancel", str(o["n"])) not in open_:
+            return self.propose("cancel", str(o["n"]), "cancelled", f"the customer asked to cancel order #{o['n']} ({', '.join(l['name'] for l in o['lines'])}, {money(o['total'])}) and it has not shipped — cancel and refund in full")
+        if kind == "damaged_or_wrong" and o["status"] in ("shipped", "delivered") and ("refund", str(o["n"])) not in open_:
+            return self.propose("refund", str(o["n"]), "refunded", f"the customer reports order #{o['n']} arrived damaged/wrong ({', '.join(l['name'] for l in o['lines'])}, {money(o['total'])}) — policy: refund or replace at once, no return needed for items under € 10")
+        return None
 
     # ---- numbers -----------------------------------------------------------------
     def numbers(self, day=None):

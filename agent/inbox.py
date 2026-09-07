@@ -87,8 +87,9 @@ def _load(path):
 
 
 class Inbox:
-    def __init__(self, planner=None, brain=None, memory=None, log=None, shopfacts=None):
+    def __init__(self, planner=None, brain=None, memory=None, log=None, shopfacts=None, store=None):
         self.shopfacts = shopfacts          # ShopFacts: exact sentences from the owner's own shop pages (may be None)
+        self.store = store                  # practice Store: real order facts for channel "store" messages (may be None)
         self.planner = planner
         self.brain = brain
         self.memory = memory
@@ -290,6 +291,12 @@ class Inbox:
             hold = self._sanitize("Thank you for your message. I am passing it to the owner personally, who will get back to you within one business day.", rec)
             return {**c, "text": hold, "checks": [], "note": "holding reply only — owner must handle this one"}
         facts = ""
+        order = None
+        if self.store is not None and rec.get("channel") == "store" and c.get("order_no"):
+            order = self.store.order_facts(c["order_no"], email=rec.get("from"))
+            if order:
+                c["order"] = {k: v for k, v in order.items() if k != "order"}
+                c["needs"] = [n for n in c["needs"] if "order" not in n.lower()]
         shop = self.shopfacts.prompt_block(rec["text"]) if self.shopfacts else ""
         prod = self.shopfacts.product_block(rec["text"]) if (self.shopfacts and c["kind"] in ("product_question", "other", "compliment")) else ""
         if prod:
@@ -323,6 +330,14 @@ class Inbox:
                       "(and who pays the return shipping if asked), then what happens next. Do not say 'of course' and do not repeat the customer's question.")
         if shop and "?" in rec["text"]:
             needs += "\nTHE CUSTOMER ASKS A QUESTION THAT THE SHOP FACTS BELOW ANSWER: answer it first, plainly, with the exact figures (cost, days, who pays, where); only after that ask for anything else."
+        if order and not order.get("mismatch"):
+            needs += ("\nYOU DO HAVE THIS ORDER IN FRONT OF YOU (from the shop's own order system) — ignore the rule about not having access to orders "
+                      "for THIS order only. Tell the customer its real status in plain words, with the tracking number if there is one. "
+                      "Never invent a delivery date. If it is not shipped yet, say it is still in the warehouse and leaves within 1 business day; "
+                      "if the customer wants to cancel and it is not shipped, say it will be cancelled and refunded in full (the owner confirms); "
+                      "if it is shipped, say it cannot be cancelled any more but can be returned within 30 days of delivery.\nORDER FACTS:\n- " + "\n- ".join(order["lines"]))
+        elif order and order.get("mismatch"):
+            needs += "\nORDER CHECK: " + order["lines"][0] + " Do not reveal anything about the order."
         if prod and c["kind"] != "product_question":
             needs += f"\nThe product is known: {c['product']} (its page is below). Never ask which product the customer means."
         if prod and "?" in rec["text"]:
@@ -385,8 +400,26 @@ class Inbox:
             return (f"Thank you for your question about the {c['product']}. Our product page does not mention "
                     f"{' or '.join(c['unmentioned'][:2]) if c.get('unmentioned') else 'that'}, so I will check it with the owner and come back to you within one business day.")
         o = f" {c['order_no']}" if c.get("order_no") else ""
+        od = c.get("order") or {}
+        if od.get("mismatch"):
+            return (f"Thank you for your message. For your security I can only discuss order{o} with the e-mail address it was placed with — "
+                    "could you write to me from that address, or forward me the order confirmation? Then I will help straight away.")
+        if od and not od.get("mismatch") and c["kind"] in ("where_is_my_order", "cancel_or_change", "return_or_refund", "damaged_or_wrong"):
+            st, trk = od.get("status"), od.get("tracking") or ""
+            if c["kind"] == "where_is_my_order":
+                if st == "paid":
+                    return f"Thank you for your message. Your order{o} is still in our warehouse and leaves within 1 business day; you will receive the GLS tracking number by e-mail the moment it ships."
+                if st in ("shipped", "delivered"):
+                    return f"Thank you for your message. Your order{o} was shipped with GLS — tracking number {trk}. If the tracking does not move for more than 3 business days, write to me again and I will open an enquiry with the carrier."
+                if st in ("cancelled", "refunded"):
+                    return f"Order{o} was {st} and the amount refunded; if you do not see the refund on your statement within 5 business days, please tell me."
+            if c["kind"] == "cancel_or_change":
+                if st == "paid":
+                    return f"Thank you for letting me know. Order{o} has not left the warehouse yet, so it can be cancelled and refunded in full — I have passed it to the owner to confirm, and you will receive the confirmation shortly."
+                if st in ("shipped", "delivered"):
+                    return f"Order{o} has already been shipped (tracking {trk}), so it cannot be cancelled any more; you can return it within 30 days of delivery — return shipping costs € 4,90 unless the item was faulty or wrong — and I will refund it within 5 business days after it arrives."
         body = {
-            "where_is_my_order": f"Thank you for reaching out, and sorry for the wait. Standard delivery takes {p['shipping'].split(';')[0].replace('standard delivery ', '')}. I will check your order{o} and send you the tracking details within one business day" + ("." if not c["needs"] else " — could you send me your order number first?"),
+            "where_is_my_order": "Thank you for reaching out, and sorry for the wait. " + (f"{self.shopfacts.best_sentence('how long does delivery take').rstrip('.')}. " if self.shopfacts and self.shopfacts.covers("delivery time") else f"Standard delivery takes {p['shipping'].split(';')[0].replace('standard delivery ', '')}. ") + f"I will check your order{o} and send you the tracking details within one business day" + ("." if not c["needs"] else " — could you send me your order number first?"),
             "return_or_refund": f"Thank you for your message. Our returns policy: {(self.shopfacts.best_sentence('return refund') if self.shopfacts and self.shopfacts.covers('returns & refunds') else p['returns']).rstrip('.')}. {p['refunds'].split(';')[0].capitalize()}. " + (f"I will start the return for order{o} and send you the instructions within one business day." if o else "Please send me your order number and I will start the return for you."),
             "damaged_or_wrong": f"I am sorry your order{o} did not arrive as it should. " + ("Please send me " + " and ".join(("your " + n) if n == "order number" else "a " + n for n in c["needs"]) + ", and I will sort out a replacement or refund straight away." if c["needs"] else "I will sort out a replacement or refund straight away and confirm the details within one business day."),
             "cancel_or_change": f"Thank you for letting me know. I will check whether your order{o} has already left the warehouse: if not, it will be cancelled and refunded; if it has, I will send you the return options. You will hear from me within one business day" + ("." if not c["needs"] else " — please send me your order number first."),
@@ -446,6 +479,8 @@ class Inbox:
         shop_nums = self.shopfacts.numbers() if self.shopfacts else set()
         shop_text = " ".join(f["text"] for f in self.shopfacts.facts).lower() if self.shopfacts else ""
         allowed = set(re.findall(r"\d{3,}", source or "")) | set(re.findall(r"\d{3,}", self.policy_text())) | {n for n in shop_nums if len(n) >= 3}
+        if c.get("order") and not c["order"].get("mismatch"):
+            allowed |= set(re.findall(r"\d{3,}", " ".join(c["order"]["lines"]) + " " + (c["order"].get("tracking") or "")))
         foreign = [n for n in set(re.findall(r"\d{3,}", text)) if n not in allowed]
         if foreign:
             flags.append(f"contains a number the customer never gave: {', '.join(foreign)}")
@@ -517,10 +552,24 @@ class Inbox:
                     if re.search(r"\b" + re.escape(w[:5]), low):
                         flags.append(f"makes a claim about '{w}' which the product page never mentions — only 'I will check with the owner' is safe")
                         break
-        if re.search(r"\b(has (been )?shipped|is on its way|will arrive (on|by)|arrives? (tomorrow|on)|track it here|has been dispatched|we're working on your order)\b", low):
-            flags.append("claims to know the order status — it doesn't")
-        if re.search(r"\b(i'll|i will|we'll|we will|have) cancel+ed|(i'll|i will|we will) cancel\b|is (now )?cancel+ed\b", low):
-            flags.append("promises a cancellation without checking if it shipped")
+        od = c.get("order") or {}
+        if od.get("mismatch") and re.search(r"\b(shipped|warehouse|tracking|delivered|cancel+ed|refunded|gls)\b", low):
+            flags.append("reveals order details to an e-mail address that did not place the order")
+        if od and not od.get("mismatch"):
+            st = od.get("status", "")
+            if st == "paid" and re.search(r"\b(has (been )?shipped|is on its way|has been dispatched|has left|was shipped|delivered)\b", low):
+                flags.append("says the order shipped — the order system says it is still in the warehouse")
+            if st in ("shipped", "delivered") and re.search(r"\b(not (yet )?(been )?shipped|still in (the|our) warehouse|has not left|will be cancelled|cancelled and refunded)\b", low):
+                flags.append(f"contradicts the order system (order is {st})")
+            if od.get("tracking") and st in ("shipped", "delivered") and od["tracking"].lower() not in low and c["kind"] in ("where_is_my_order",):
+                flags.append("does not give the tracking number that the order system has")
+            if re.search(r"\b(arrive|delivered|be there|with you) (on|by) (monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|\d)", low):
+                flags.append("invents a delivery date")
+        else:
+            if re.search(r"\b(has (been )?shipped|is on its way|will arrive (on|by)|arrives? (tomorrow|on)|track it here|has been dispatched|we're working on your order)\b", low):
+                flags.append("claims to know the order status — it doesn't")
+            if re.search(r"\b(i'll|i will|we'll|we will|have) cancel+ed|(i'll|i will|we will) cancel\b|is (now )?cancel+ed\b", low):
+                flags.append("promises a cancellation without checking if it shipped")
         if c["kind"] == "discount_request" and (re.search(r"\b(check your eligibility|get back to you as soon as possible|order number|sure, i can)\b", low) or "newsletter" not in low):
             flags.append("discount reply must state the policy (newsletter 10%) and nothing else")
         if len(text) > 1200:
