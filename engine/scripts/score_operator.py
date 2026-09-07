@@ -17,7 +17,7 @@ P = Planner(); T = Tasks(planner=P)
 asked = []
 def ask(q, opts):
     asked.append(q)
-    return opts[0] if allow_click else opts[-1]
+    return opts[0] if (allow_click and want_ask and want_ask.lower() in q.lower()) else opts[-1]   # the owner only approves the expected click
 O = Operator(P, tasks=T, log=lambda k, **f: None, ask_owner=ask)
 score, t_all, lines = 0, time.time(), []
 for page, goal, expect in rows:

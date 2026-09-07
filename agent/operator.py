@@ -67,9 +67,15 @@ class Operator:
         self.history = []
 
     # ---- public --------------------------------------------------------------------------
+    NEVER = re.compile(r"\b(sign in|log ?in|password|passcode|captcha|verify (?:i am|you are) (?:a )?human|enter (?:my|the) (?:card|credit card|iban|cvv)|"
+                       r"pay(?:ment)? (?:with|by|using) (?:my )?(?:card|paypal)|checkout|check out|place (?:the |my )?order|complete (?:the |my )?(?:purchase|order))\b", re.I)
+
     def run(self, goal, where="browser", start_url=None, allow=None):
         """Work towards `goal`. where: 'browser' | 'desktop'. Returns a plain-language report."""
         self.history = []
+        if self.NEVER.search(goal):
+            return ("I stopped before starting: that goal means logging in, paying or handling a password/captcha, and I never do those by "
+                    "myself. Do that step yourself, then give me the goal that comes after it.")
         allow = set(allow or [])            # labels the owner pre-approved for this goal
         t0 = time.time()
         steps = 0
@@ -219,6 +225,9 @@ class Operator:
             out.update(shot=shot, elements=full[:3000], fulltext=full, url=url, title=title, items=items)
             if st in ("captcha", "login"):
                 out["wall"] = "captcha" if st == "captcha" else "login wall"
+            elif any((lab or "").lower() in ("password", "passwort", "contraseña", "mot de passe") and role == "textbox" for _, lab, role in items) \
+                    and len(items) <= 8 and len(full) < 600:
+                out["wall"] = "login wall"                                  # a bare sign-in form and nothing else
         else:
             shot = self.desktop.screenshot("see")
             out["shot"] = shot
@@ -286,6 +295,16 @@ class Operator:
         m = re.search(r"\b(?:search|look up|look for|find)\b[^'\"“]*['\"“]([^'\"”]{2,60})['\"”]", goal, re.I) or \
             re.search(r"\bsearch(?: for)?\s+([a-z0-9 -]{2,40}?)\s+(?:on|in|at)\b", goal, re.I)
         if not m:
+            # a button whose whole label is inside the goal ("Buy the set now" → button "Buy now") is the obvious click
+            gw = set(re.findall(r"[a-z0-9]+", goal.lower()))
+            best = None
+            for n, label, role in seen.get("items") or []:
+                lw = [w for w in re.findall(r"[a-z0-9]+", (label or "").lower()) if w not in ("the", "a", "to", "in", "on")]
+                if role == "button" and 1 <= len(lw) <= 3 and all(w in gw for w in lw) and not any(h.lower().startswith(f"click {label.lower()}") for h in self.history):
+                    if best is None or len(lw) > best[0]:
+                        best = (len(lw), label)
+            if best and (best[0] >= 2 or len(best[1]) >= 4):
+                return {"step": "click", "target": best[1]}
             mo = re.match(r"^\s*(?:open|go to|click|click on|visit|show)\s+(?:the\s+)?['\"“]?([^'\"”,.]{2,50}?)['\"”]?(?:\s+(?:page|tab|link|button|section|product))?(?:\s+(?:and|then|,)\b|\s*$)", goal, re.I)
             if mo:
                 want = mo.group(1).strip().lower()
@@ -384,11 +403,21 @@ class Operator:
         new = [re.sub(r"\[\d+\]\s*", "", l) for l in new]
         return " | ".join(new)[:600]
 
+    OUTCOME = [(r"\b(buy|purchase|order)\b", r"\b(order (?:placed|confirmed|number|complete)|thank you for your (?:order|purchase)|paid|payment (?:received|complete)|receipt|confirmation)\b"),
+               (r"\b(cart|basket|bag)\b", r"\b(added to (?:cart|basket|bag)|in your (?:cart|basket|bag)|cart \(\d+\)|item added)\b"),
+               (r"\b(subscribe|sign up|newsletter)\b", r"\b(subscribed|thank you|check your (?:e-?mail|inbox)|confirm)\b"),
+               (r"\b(send|post|publish|submit|reply)\b", r"\b(sent|posted|published|submitted|thank you|received|delivered)\b")]
+
     def _verify(self, goal, action, before, after):
         """Action goals: did my last action finish the goal? Judged only by what newly appeared. Returns that text or ''."""
         new = self._new_text(before, after)
         if not new:
             return ""
+        for goal_pat, proof_pat in self.OUTCOME:                       # "bought" needs an order confirmation, not just "added to cart"
+            if re.search(goal_pat, goal, re.I):
+                if not re.search(proof_pat, new, re.I):
+                    return ""
+                break
         try:
             raw = self.planner.chat("You judge whether a task is complete. Answer YES or NO.",
                                     f"I {action}. New text appeared on the screen:\n\"{new}\"\n\nMy task was: {goal}\nIs the task now done? Answer YES or NO.",
