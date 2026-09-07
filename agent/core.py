@@ -25,7 +25,7 @@ from .inbox import Inbox
 from .social import Social
 from .telegram import Bot, TelegramError
 
-VERSION = "0.6 (milestone 5: customer replies with approval)"
+VERSION = "0.7 (milestone 5: customer replies + social posts, self-repairing thinking model)"
 
 HELP = """Just talk to me. I work out whether you're asking a question, want something looked up on the web, want a page summarized, or want suppliers compared.
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.
