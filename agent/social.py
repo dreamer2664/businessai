@@ -27,12 +27,17 @@ PLATFORMS = {
     "pinterest": (500, 4, "descriptive title-like first sentence, 2-3 sentences, keywords over hashtags"),
 }
 
+WORDS = {"instagram": (30, 70), "facebook": (30, 80), "tiktok": (10, 30), "x": (12, 40), "linkedin": (50, 110), "pinterest": (25, 60)}
+
 POST_PROMPT = """You write social media posts for a small online store.
 STORE POLICY (facts you may state; never invent others):
 %s
 
 PLATFORM: %s — style: %s. Hard limit %d characters, at most %d hashtags.
-RULES: write in the store's voice, plain and warm, no clickbait, no ALL CAPS words, at most 3 emoji. Never state a price, a
+RULES: write in the store's voice, plain and warm, no clickbait, no ALL CAPS words, at most 3 emoji. Keep it SHORT: %d to %d
+words of text, then ONE line of hashtags (each starting with #, separated by single spaces, none longer than 25 letters). Do not
+describe what is inside the product, its materials, parts or accessories unless the policy above says so — you have not seen it.
+Do not repeat the same idea twice. Never state a price, a
 discount, a delivery time, a review count, a rating or a "best/#1" claim unless it is written in the policy above. Never make
 health, safety, environmental or guarantee claims ("cures", "100%% safe", "saves the planet", "guaranteed"). Never mention a
 competitor. Never write placeholders like [link] or [price]. If you know nothing about the product beyond the owner's words,
@@ -85,19 +90,21 @@ class Social:
     def draft(self, platform, topic):
         platform = platform if platform in PLATFORMS else "instagram"
         limit, max_tags, style = PLATFORMS[platform]
+        wmin, wmax = WORDS.get(platform, (30, 70))
+        max_tok = int(wmax * 1.8) + 12 * max_tags + 20            # words + hashtags, nothing more (stops runaway hashtag chains)
         policy = self.inbox.policy if self.inbox else {}
         facts = "\n".join(f"{k}: {v}" for k, v in policy.items() if k in ("store_name", "tone", "shipping", "returns", "products", "ships_to") and v)
         known = ""
         if self.memory:
-            hits = self.memory.notes(topic, limit=2)
+            hits = [h for h in self.memory.notes(topic, limit=6) if h.get("kind") in ("research", "summary", "video", "study", "learned")][:2]
             if hits:
                 known = "WHAT I HAVE LEARNED (use only if relevant, never invent beyond it):\n" + "\n".join(f"- {h['text'][:300]}" for h in hits)
         text = ""
         if self.planner and self.planner.installed():
             try:
                 text = self.planner.chat("You are the social media writer of a small online store.",
-                                         POST_PROMPT % (facts or "(none beyond the owner's words)", platform, style, limit, max_tags, topic[:400], known),
-                                         max_tokens=min(320, limit // 3 + 60), temperature=0.4, timeout=240)
+                                         POST_PROMPT % (facts or "(none beyond the owner's words)", platform, style, limit, max_tags, wmin, wmax, topic[:400], known),
+                                         max_tokens=max_tok, temperature=0.4, timeout=240, stop=["\n\n\n"])
             except Exception as e:
                 self.log("post_failed", error=str(e)[:100])
         text = self._sanitize(text, platform)
@@ -105,9 +112,9 @@ class Social:
         if checks and self.planner and self.planner.installed():
             try:
                 fixed = self.planner.chat("You are the social media writer of a small online store.",
-                                          POST_PROMPT % (facts or "(none beyond the owner's words)", platform, style, limit, max_tags, topic[:400], known)
+                                          POST_PROMPT % (facts or "(none beyond the owner's words)", platform, style, limit, max_tags, wmin, wmax, topic[:400], known)
                                           + f"\n\nYour previous draft was rejected because it: {'; '.join(checks)}. Write a corrected post.",
-                                          max_tokens=min(320, limit // 3 + 60), temperature=0.3, timeout=240)
+                                          max_tokens=max_tok, temperature=0.3, timeout=240, stop=["\n\n\n"])
                 fixed = self._sanitize(fixed, platform)
                 if len(self._check(fixed, platform, topic, facts)) < len(checks):
                     text, checks = fixed, self._check(fixed, platform, topic, facts)
@@ -131,10 +138,17 @@ class Social:
         text = text.strip('"“” ')
         text = re.sub(r"!{2,}", "!", text)
         limit, max_tags, _ = PLATFORMS[platform]
-        tags = re.findall(r"#\w+", text)
-        if len(tags) > max_tags:                                          # keep the first N hashtags, drop the rest
-            for t in tags[max_tags:]:
-                text = text.replace(" " + t, "").replace(t, "")
+        tags = []
+        for t in re.findall(r"#\w+", text):
+            if 2 <= len(t) <= 26 and t.lower() not in [x.lower() for x in tags]:
+                tags.append(t)
+        tags = tags[:max_tags]
+        body = re.sub(r"#\w+", "", text)                                 # take every tag out of the prose ...
+        body = re.sub(r"[ \t]{2,}", " ", body)
+        body = "\n".join(l.strip() for l in body.splitlines())
+        body = re.sub(r"\n{2,}", "\n\n", body).strip(" \n,")
+        body = "\n".join(l for l in body.splitlines() if re.search(r"[a-zA-Z]", l) or not l.strip())
+        text = body + ("\n\n" + " ".join(tags) if tags else "")           # ... and put them back as one final line
         text = re.sub(r"[ \t]+\n", "\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text).strip()
         return text
@@ -155,7 +169,9 @@ class Social:
         m = re.search(r"\b\d{1,2}\s?%\s?(off|discount|sale)|\b(sale|discount|coupon|promo code|free shipping)\b", low)
         if m and m.group(0) not in allowed:
             flags.append(f"promises '{m.group(0)}' which is not in the policy")
-        m = re.search(r"\b(ships? (in|within) \d+|\d+[- ]day (delivery|shipping)|delivered (by|within)|arrives? (tomorrow|in \d+))\b", low)
+        if re.match(r"\s*(hi|hello|dear|ciao)\s+[A-Z][a-z]+[,!]", text) or re.search(r"\b(sorry about|your order|order \d{4,}|keep the broken)\b", low):
+            flags.append("reads like a message to one customer, not a public post")
+        m = re.search(r"\b(ships? (in|within) \d+|ships? (tomorrow|today|next week)|\d+[- ]day (delivery|shipping)|delivered (by|within)|arrives? (tomorrow|in \d+))\b", low)
         if m and m.group(0) not in allowed:
             flags.append("makes a delivery promise not in the policy")
         m = re.search(r"\b(cures?|heals?|100 ?% (safe|natural|effective)|guaranteed?|risk[- ]free|clinically|doctor[- ]recommended|saves? the planet|zero waste|carbon neutral|best in the world|#1|number one|the best [a-z]+ ever)\b", low)
@@ -166,6 +182,16 @@ class Social:
             flags.append(f"invents social proof ('{m.group(0)}')")
         if re.search(r"\[[^\]]+\]|\b(link in bio|shop now at) *$", text, re.M | re.I) and "link in bio" not in allowed:
             flags.append("contains a placeholder")
+        if not re.search(r"products:", facts) and re.search(r"\b(includes?|comes with|made (of|from)|features?|bristles?|case|pouch|pack of \d|set of \d|\d+ ?(pcs|pieces|pack)|stainless|cotton|silicone|organic|biodegradable|recycl\w+)\b", low) \
+                and not re.search(r"\b(includes?|comes with|made (of|from)|features?|bristles?|case|pouch|pack of|set of|stainless|cotton|silicone|organic|biodegradable|recycl)", allowed):
+            flags.append("describes product contents/materials the owner never gave")
+        sents = [x.strip().lower() for x in re.split(r"[.!?]\s+", re.sub(r"#\w+", "", text)) if len(x.split()) >= 4]
+        if len(sents) != len(set(sents)) or (len(sents) >= 3 and len({s[:25] for s in sents}) < len(sents)):
+            flags.append("repeats itself")
+        nwords = len(re.findall(r"\b\w+\b", re.sub(r"#\w+", "", text)))
+        wmin, wmax = WORDS.get(platform, (30, 70))
+        if nwords > wmax * 1.5:
+            flags.append(f"too wordy ({nwords} words, aim for {wmin}-{wmax})")
         caps = [w for w in re.findall(r"\b[A-Z]{4,}\b", text) if w not in ("LED", "USB", "SALE", "NEW")]
         if len(caps) > 1:
             flags.append("shouting in capitals")
