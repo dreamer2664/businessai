@@ -106,3 +106,7 @@ messages and social media, reports to the owner and asks questions via phone.
   (score.py / eval_*.py), pack builders (pack.py, wiki_pack.py), CI/release
   scripts (push_to_github.sh, upload_release.sh, restore.sh).
 - Not the Kingdom facts (data/passages.json, tests/kingdom.txt).
+
+## Feeding log (bulk in → trimmed → kept; the brain must not get "stupider": all earlier scores re-run)
+- 2026-09-07 pack #2 `operations.kdw`: 113 docs, 1.71 M chars in → 1.14 M kept (67 %), 1.7 MB. Customer service, returns &
+  chargebacks, shipping & inventory, pricing/payments/metrics, EU seller rules. tests/operations.txt 39/41; business.txt still 52/55.

@@ -6,7 +6,7 @@ def get(u):
     with urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=40) as r: return r.read().decode('utf-8', 'ignore')
 def extract(h):
     h = re.sub(r'<(script|style|noscript|svg|nav|footer|header|form|aside|figure|iframe)\b.*?</\1>', ' ', h, flags=re.S | re.I)
-    m = re.search(r'<article\b.*?</article>', h, re.S | re.I); body = m.group(0) if m else h
+    m = re.search(r'<article\b.*?</article>', h, re.S | re.I) or re.search(r'<main\b.*?</main>', h, re.S | re.I); body = m.group(0) if m else h
     t = re.search(r'<title>(.*?)</title>', h, re.S | re.I); title = html.unescape(t.group(1)).strip() if t else ''
     paras = []
     for m in re.finditer(r'<(h[1-4]|p|li)\b[^>]*>(.*?)</\1>', body, re.S | re.I):
@@ -26,7 +26,7 @@ for line in open(src, encoding='utf-8'):
     if u in have: continue
     try:
         title, paras = extract(get(u)); txt = '\n'.join(paras)
-        if len(txt) < 2000: print('thin', u); continue
+        if len(txt) < (1000 if topic == 'eu-law' else 2000): print('thin', u); continue
         out.write(f"{title}\t{topic}\t{u}\t{txt.replace(chr(9), ' ').replace(chr(10), chr(92) + 'n')}\n"); out.flush(); n += 1
     except Exception as e: print('FAIL', u, str(e)[:60], flush=True)
     time.sleep(0.5)

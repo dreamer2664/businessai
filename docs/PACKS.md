@@ -27,6 +27,25 @@ informative words (definitions, numbers, mechanisms, steps are kept). Density th
 - Coverage probe on the 440-question OpenStax marketing MCQ bank (`engine/scripts/coverage.py`, 100-question sample): the correct answer is present in the retrieved passages **77 %** of the time — that is the ceiling for the exam it will sit later.
 - Engine setting: `KDR_WIKI_READK=3` (read the 3 best passages instead of 8): +3 questions, 2.5× faster (0.4 s per answer on 2 cores).
 
+## operations.kdw (knowledge pack #2, 2026-09-07) — 1.7 MB, 4,303 passages, 113 documents
+
+| source | bulk in | kept | what |
+|---|---|---|---|
+| Shopify blog — 99 guides on customer service, returns/refunds/chargebacks, shipping & fulfillment, inventory, pricing & payments, metrics, checkout, reviews, loyalty | 1.62 M chars | 68 % | how a store is actually run day to day |
+| Your Europe (europa.eu) — 14 pages: consumer guarantees & withdrawal right, contract information, GDPR, VAT rules & cross-border VAT, CE marking, selling products in the EU, customs declarations | 0.09 M chars | 70 % | the rules an EU (Italian) online seller must follow |
+| **total** | **1.71 M chars (~380 pages)** | **1.14 M chars (67 %)** | |
+
+Same trim pipeline as pack #1 (`packs/trim.py`, density 5.5); sources listed in `packs/sources/web_urls_ops.tsv`.
+`web_fetch.py` now falls back to `<main>` when a page has no `<article>` (europa.eu) and accepts shorter eu-law pages.
+
+### Scores
+- `tests/operations.txt` (41 questions, 5 blocks): **39/41** on the pack alone — customer service 10/10, returns & disputes 6/7,
+  shipping & fulfillment 10/11, pricing/payments/metrics 7/7, EU rules 6/6. Misses: "how to prevent chargebacks" (answer is a list,
+  reader returns the heading) and Incoterms/DDP (reader picks the neighbouring DAP term).
+- With **both packs** loaded the brain picks the better pack per question by reader confidence × meaning match of the best passage
+  (`Brain._quality`; confidence alone let a confident span from an off-topic passage win): business 52/55 (unchanged), operations 38/41.
+- Size: +1.7 MB for ~380 pages of material; both packs together 7.4 MB.
+
 ### Rebuild
 ```sh
 python3 packs/openstax_fetch.py packs/openstax_books.json ~/.cache/bai/txt     # textbooks → clean TSV
@@ -34,4 +53,9 @@ python3 packs/web_fetch.py packs/sources/web_urls.tsv ~/.cache/bai/web/web.tsv  
 python3 packs/trim.py ~/.cache/bai/txt/*.tsv ~/.cache/bai/web/web.tsv ~/.cache/bai/ext_final
 python3 packs/build_pack.py ~/.cache/bai/ext_final release/packs/business.kdw   # embeds new passages, packs
 python3 engine/scripts/score_pack.py tests/business.txt release/packs/business.kdw
+# pack #2
+python3 packs/web_fetch.py packs/sources/web_urls_ops.tsv ~/.cache/bai/web2/web.tsv
+python3 packs/trim.py ~/.cache/bai/web2/web.tsv ~/.cache/bai/ext_ops
+python3 packs/build_pack.py ~/.cache/bai/ext_ops release/packs/operations.kdw
+python3 engine/scripts/score_pack.py tests/operations.txt release/packs/operations.kdw
 ```

@@ -1,0 +1,53 @@
+# Knowledge pack #2 — customer service, store operations, EU rules. question<TAB>must-contain (a|b = alternatives)
+# Scored by engine/scripts/score_pack.py tests/operations.txt release/packs/operations.kdw
+
+## Customer service
+How fast should a store reply to customer messages on social media?	24 hours|two hours|within
+What is a customer satisfaction score (CSAT) and how is it measured?	survey|satisf|scale|rating
+What is the Net Promoter Score and how is it calculated?	promoters|detractors|0 to 10|likely to recommend
+What is customer effort score?	effort|easy|ease
+What is first response time in customer service?	first response|time it takes|first reply|respond
+How should you handle an angry customer?	listen|apolog|calm|empath|acknowledge
+What should an apology to a customer contain?	apolog|responsib|sorry|solution|fix
+Why are negative reviews useful and how should you respond to them?	respond|apolog|publicly|address|fix|feedback
+How do you encourage customers to leave reviews?	email|ask|after|request|incentive|follow-up
+What is a knowledge base or help center for?	self-serv|answers|questions|articles|support|customers find
+
+## Returns, refunds, disputes
+What should a return policy include?	days|condition|refund|how|timeframe|who pays
+What is a restocking fee?	fee|percentage|returned|restock
+What is friendly fraud in chargebacks?	dispute|legitimate|chargeback|customer|purchase
+How can a store prevent chargebacks?	clear|descriptor|tracking|communicat|policy|refund|address verification|evidence
+What is reverse logistics?	return|back|from the customer|moving goods|process
+What is return fraud?	wardrobing|used|fraud|return|stolen|receipt
+What evidence helps win a chargeback dispute?	tracking|proof of delivery|signature|communication|evidence|receipt|invoice
+
+## Shipping & fulfillment
+What is dimensional weight and why does it matter for shipping costs?	volume|length|width|height|divisor|size|larger
+What is a 3PL and what does it do?	third-party logistics|warehous|fulfil|storage|pick|pack|ship
+What is a reorder point and how is it calculated?	lead time|demand|safety stock|reorder
+What is safety stock?	buffer|extra|stockout|unexpected|demand|inventory
+What is economic order quantity?	order|cost|holding|ordering|quantity|minimi
+What is dead stock?	unsold|not sold|sit|inventory|never sold|no longer
+What are Incoterms and what does DDP mean?	delivered duty paid|seller|duties|responsib|incoterm
+What is a packing slip?	list|items|order|package|contents|document
+What information belongs in a shipping confirmation email?	tracking|order|delivery|number|estimated|carrier
+What is a delivery exception?	delay|unexpected|carrier|held|weather|address|cannot deliver|stopped
+What is flat-rate shipping?	same|fixed|regardless|weight|single rate|one rate
+
+## Pricing, payments & metrics
+What is the difference between markup and margin?	markup|margin|cost|price|percentage
+What is cost-plus pricing?	cost|percentage|markup|add
+What is a payment gateway?	authoriz|transfer|process|payment|card|encrypt|between
+What is average order value and how do you raise it?	revenue|orders|divid|bundle|upsell|free shipping|threshold
+What is customer lifetime value?	total|revenue|profit|over|relationship|lifetime|spend
+What is the cart abandonment rate?	percentage|abandon|carts|purchase|complete|checkout
+What is a psychological pricing tactic like charm pricing?	9|.99|odd|perceive|cheaper|round
+
+## EU rules for online sellers
+How long is the legal guarantee for goods sold to consumers in the EU?	2 year|two year|2-year|24 month
+How long does an EU consumer have to withdraw from an online purchase?	14 day|fourteen
+When must an online seller refund a consumer who cancels an order under the EU withdrawal right?	14 days|refund|withdraw|cancel
+Which country's VAT rate applies to EU cross-border online sales above the €10,000 threshold?	customer|buyer|destination|where the customer|country of the consumer|member state where
+What does the CE marking on a product mean?	conform|health|safety|environment|requirement|EU
+What does the GDPR require before you use a customer's personal data for marketing?	consent|inform|purpose|legal basis|opt|permission

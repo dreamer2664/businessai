@@ -87,6 +87,13 @@ class Agent:
         self.last_idle_check = time.time()
         self.report_sent = ""
         self.log("start", version=VERSION, bot=self.me.get("username"))
+        if self.brain.ready and self.brain.missing_packs():
+            threading.Thread(target=self._fetch_packs, daemon=True).start()
+
+    def _fetch_packs(self):
+        got = self.brain.fetch_missing(log=self.log)
+        if got and self.owner_id:
+            self.notify("📚 New knowledge pack" + ("s" if len(got) > 1 else "") + f" installed: {', '.join(got)} — {self.brain.describe()}")
 
     # ---- persistence / logging ----------------------------------------
     def _load_state(self):

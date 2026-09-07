@@ -30,9 +30,43 @@ class Brain:
         packs = ", ".join(f"{os.path.basename(p)} {mb(p)}" for p in self.packs) or "no knowledge packs yet"
         return f"engine {mb(self.bin)} + models {mb(self.kdr)}; packs: {packs}"
 
+    RELEASE_PACKS = ("business.kdw", "operations.kdw")     # packs published on the GitHub Release (scripts/get_brain.sh fetches the same list)
+
     def refresh(self):
         self.packs = sorted(str(p) for p in config.PACKS_DIR.glob("*.kdw")) if config.PACKS_DIR.exists() else []
         return self.packs
+
+    def missing_packs(self):
+        return [n for n in self.RELEASE_PACKS if not (config.PACKS_DIR / n).is_file()]
+
+    def fetch_missing(self, log=None):
+        """Download release packs that are not on this machine yet (new packs arrive with a plain `git pull` this way)."""
+        got = []
+        for name in self.missing_packs():
+            url = f"https://github.com/{os.environ.get('BAI_REPO', 'dreamer2664/businessai')}/releases/download/latest/{name}"
+            tmp = config.PACKS_DIR / (name + ".part")
+            try:
+                config.PACKS_DIR.mkdir(parents=True, exist_ok=True)
+                import urllib.request
+                with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as f:
+                    while True:
+                        chunk = r.read(1 << 20)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                if tmp.stat().st_size > 100_000:
+                    tmp.rename(config.PACKS_DIR / name)
+                    got.append(name)
+                else:
+                    tmp.unlink(missing_ok=True)
+            except Exception as e:
+                tmp.unlink(missing_ok=True)
+                if log:
+                    log("pack_fetch_failed", pack=name, error=str(e)[:120])
+        if got and log:
+            log("pack_fetched", packs=got)
+        self.refresh()
+        return got
 
     def ask_raw(self, question, pack=None, timeout=60):
         if pack is None:
@@ -48,12 +82,21 @@ class Brain:
         except (subprocess.TimeoutExpired, OSError, ValueError):
             return None
 
+    @staticmethod
+    def _quality(d):
+        """How good is this pack's answer? The reader's confidence alone prefers a confident span from an off-topic passage;
+        weighting it by how well the best passage matched the question in meaning fixes that (tested: business 52/55 + operations 38/41
+        with both packs loaded, vs 49/55 + 38/41 on confidence alone)."""
+        hits = d.get("hits") or []
+        dense = max((h.get("dense", 0) for h in hits), default=0)      # meaning match of the best passage (0..1)
+        return d.get("confidence", 0) * dense
+
     def ask(self, question, min_conf=0.35):
         """Best answer across packs, formatted for the owner. None if the brain isn't confident."""
         best = None
         for pack in self.refresh():
             d = self.ask_raw(question, pack)
-            if d and (best is None or d.get("confidence", 0) > best.get("confidence", 0)):
+            if d and d.get("answer") and (best is None or self._quality(d) > self._quality(best)):
                 best = d
         if not best or best.get("confidence", 0) < min_conf or not best.get("answer"):
             return None
@@ -63,4 +106,4 @@ class Brain:
         if len(text) > 700:
             text = text[:700].rsplit(" ", 1)[0] + "…"
         src = best.get("title") or ""
-        return f"{text}\n— {src} (business pack, confidence {best['confidence']:.2f})"
+        return f"{text}\n— {src} (knowledge pack, confidence {best['confidence']:.2f})"
