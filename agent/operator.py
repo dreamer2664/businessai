@@ -929,7 +929,13 @@ class Operator:
         words = [w for w in re.findall(r"[a-z]{5,}", answer.lower()) if w not in stop and stem(w) not in goal_stems]
         if not words:
             return bool(nums) or bool(goal_stems & {stem(w) for w in re.findall(r"[a-z]{4,}", answer.lower())})
-        return sum(1 for w in words if w in screen or stem(w) in screen) >= max(1, int(0.6 * len(words)))
+        if sum(1 for w in words if w in screen or stem(w) in screen) >= max(1, int(0.6 * len(words))):
+            return True
+        # a page in another language: the reader answers in English, so its words cannot appear literally.
+        # Then the figures (already checked) plus the goal's own words carry the answer.
+        foreign = len(re.findall(r"\b(il|la|di|che|per|del|della|der|die|und|das|le|les|des|el|los|una|het|een|van)\b", screen)) > 25 \
+                  and len(re.findall(r"\b(the|and|of|to|is|for|with)\b", screen)) < 15
+        return foreign and bool(nums) and bool(goal_stems & {stem(w) for w in re.findall(r"[a-z]{4,}", answer.lower())})
 
     def _on_screen(self, target, seen):
         want = target.lower().strip()
