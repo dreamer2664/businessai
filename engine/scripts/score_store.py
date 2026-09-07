@@ -1,0 +1,121 @@
+"""Score the practice store end to end: python3 engine/scripts/score_store.py [--model]
+Without --model: everything that needs no thinking model (shop works, ledger, days, proposals, reading its own pages,
+operator on the store front, safety). With --model: also the customer replies from store customers (5 messages)."""
+import base64, http.cookiejar, json, os, re, sys, time, urllib.parse, urllib.request
+sys.path.insert(0, ".")
+os.environ.pop("DISPLAY", None)
+os.environ["BAI_STATE"] = os.environ.get("BAI_STATE", "/tmp/bai_state_score_store")
+from agent import store as ST
+from agent.inbox import Inbox
+from agent.shopfacts import ShopFacts
+from agent.tasks import Tasks
+from agent.operator import Operator
+
+use_model = "--model" in sys.argv
+PORT = 8097
+checks = []
+
+
+def check(name, ok, info=""):
+    checks.append((name, bool(ok)))
+    print(f"{'OK  ' if ok else 'FAIL'} {name}" + (f"  — {info}" if info else ""), flush=True)
+
+
+import pathlib, shutil
+shutil.rmtree(os.environ["BAI_STATE"], ignore_errors=True)          # a clean state for every run
+pathlib.Path(os.environ["BAI_STATE"]).mkdir(parents=True, exist_ok=True)
+from agent import config as _cfg
+_cfg.ensure_dirs()
+I = Inbox(planner=None)
+S = ST.Store(log=lambda k, **f: None)
+S.reset()
+srv, url = ST.start(S, inbox=I, port=PORT)
+cj = http.cookiejar.CookieJar(); op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+get = lambda p: op.open(url.rstrip("/") + p, timeout=10)
+post = lambda p, **f: op.open(urllib.request.Request(url.rstrip("/") + p, data=urllib.parse.urlencode(f).encode()), timeout=10)
+t0 = time.time()
+try:
+    # 1. the shop works like a shop
+    b = get("/").read().decode(); check("front page lists the catalogue", b.count("class=card") == 5)
+    b = get("/p/stoneware-mug").read().decode(); check("product page: price, options, details", "€ 14,90" in b and "Charcoal" in b and "Dishwasher safe" in b)
+    r = post("/cart/add", id="stoneware-mug", option="Colour: Sand", qty="2"); check("add to cart → cart page", r.geturl().endswith("/cart") and "2 items" in r.read().decode())
+    r = post("/checkout/pay", name="Anna Rossi", email="anna@example.com", country="IT"); b = r.read().decode()
+    check("checkout (practice payment) → order page, Italian shipping € 3,90 not free under € 39", "/order/51001" in r.geturl() and "€ 3,90" in b and "€ 33,70" in b)
+    check("stock reserved by the order", S.product("stoneware-mug")["stock"] == 19)
+    post("/cart/add", id="cork-phone-case", option="Model: iPhone 14", qty="1")
+    b = post("/checkout/pay", name="Jo", email="jo@example.com", country="GB").read().decode(); check("checkout outside the EU refused (shop says not yet)", "cannot ship" in b)
+    try:
+        get("/admin"); check("admin needs a login", False)
+    except urllib.error.HTTPError as e:
+        check("admin needs a login", e.code == 401)
+    auth = {"Authorization": "Basic " + base64.b64encode(f"admin:{S.data['token']}".encode()).decode()}
+    b = op.open(urllib.request.Request(url + "admin", headers=auth)).read().decode(); check("admin panel shows the order", "#51001" in b and "Anna Rossi" in b)
+    # 2. days pass: visits, orders, messages; numbers add up
+    tot_orders = 0; tot_msgs = 0
+    for _ in range(4):
+        r = S.simulate_day(inbox=I); tot_orders += len(r["orders"]); tot_msgs += len(r["messages"])
+    n = S.numbers()
+    check("4 practice days: visits, orders and customer messages happened", n["visits"] > 100 and tot_orders >= 3 and tot_msgs >= 4, f"visits {n['visits']}, orders {tot_orders}, messages {tot_msgs}")
+    calc = round(n["revenue"] - n["cogs"] - n["shipping_cost"] - n["fees"], 2)
+    check("profit = revenue − goods − shipping − fees", abs(calc - n["profit"]) < 0.02, f"{n['profit']}")
+    check("every paid order's total = lines + shipping", all(abs(sum(l["qty"] * l["price"] for l in o["lines"]) + o["shipping"] - o["total"]) < 0.01 for o in S.data["orders"]))
+    check("store customer messages landed in the inbox as channel 'store'", all(m["channel"] == "store" for m in I.items("new")) and len(I.items("new")) == tot_msgs)
+    # 3. the AI's review proposes the right things, and nothing changes without a tap
+    stock_before = {p["id"]: p["stock"] for p in S.products()}
+    props = S.review()
+    kinds = {(p["kind"], p["target"]) for p in props}
+    check("proposes to ship every paid order", all(("ship", str(o["n"])) in kinds for o in S.data["orders"] if o["status"] == "paid"))
+    check("proposes to reorder the sold-out and the low-stock product", ("stock", "beeswax-wraps") in kinds and ("stock", "led-desk-lamp") in kinds)
+    check("proposes a price fix only where the margin is thin (lamp 54 %)", [p["target"] for p in props if p["kind"] == "price"] == ["led-desk-lamp"])
+    check("proposals change nothing by themselves", {p["id"]: p["stock"] for p in S.products()} == stock_before and all(o["status"] == "paid" for o in S.data["orders"]))
+    ship = next(p for p in props if p["kind"] == "ship"); out = S.apply(ship["id"])
+    check("owner's tap applies a proposal (order shipped, tracking assigned)", "shipped" in out and S.order(int(ship["target"]))["status"] == "shipped" and S.order(int(ship["target"])).get("tracking"))
+    check("a second tap on the same proposal does nothing", "no longer open" in S.apply(ship["id"]))
+    price = next(p for p in props if p["kind"] == "price"); old = S.product("led-desk-lamp")["price"]; S.reject(price["id"])
+    check("'Leave it' keeps the price", S.product("led-desk-lamp")["price"] == old and S.proposal(price["id"])["status"] == "rejected")
+    check("review does not repeat open proposals", not [p for p in S.review() if p["kind"] == "stock"])
+    check("ledger survives a restart", ST.Store(log=lambda k, **f: None).data["orders"][0]["n"] == 51001 and ST.Store(log=lambda k, **f: None).data["day"] == 4)
+    # 4. the AI reads its own store like any shop
+    T = Tasks(); F = ShopFacts(tasks=T, log=lambda k, **f: None)
+    rep = F.learn(url)
+    check("/shop on the store: help facts + 5 product pages (no model)", len(F.products) == 5 and F.covers("returns & refunds") and F.covers("delivery time") and F.covers("where we ship"), f"{len(F.facts)} facts")
+    lamp = next(p for p in F.products if "Lamp" in p["name"])
+    check("product page details kept word for word", any("no power adapter included" in d for d in lamp["details"]) and lamp["price"] == "€ 39,00")
+    check("matches 'the cork case' to the product, not 'phone number'", F.match_products("Does the cork case fit the iPhone 14?") and not F.match_products("Is there a phone number?"))
+    # 5. the operator works the store front (model-free rules)
+    O = Operator(None, tasks=T, log=lambda k, **f: None)
+    O._browser_open(url); seen = O._see("browser")
+    step = O._obvious_step("Open the first product on the page and tell me its price", seen)
+    ok = step and step["step"] == "click" and "Bamboo" in step["target"]
+    if ok:
+        O._act_click("browser", step["target"], seen); s2 = O._see("browser"); ok = "12,90" in s2["fulltext"]
+    check("operator: 'open the first product' → toothbrush set page with its price", ok)
+    O.history = []
+    O._browser_open(url + "p/led-desk-lamp"); seen = O._see("browser")
+    from agent.operator import DANGER
+    labels = " | ".join(str(it) for it in seen["items"])
+    check("'Add to cart' is visible to the operator and classed as a money/cart action (owner is asked first)", "Add to cart" in labels and bool(DANGER.search("Add to cart")) and not DANGER.search("Details"))
+    T.close_browser()
+    # 6. customer replies from store customers (model)
+    if use_model:
+        from agent.planner import Planner
+        P = Planner(); I2 = Inbox(planner=P, shopfacts=F)
+        good = 0; rows = [
+            ("How long does delivery to Germany take and what does it cost?", r"4.6 business days|4–6", r"7-15"),
+            ("Is the LED desk lamp still in stock? The page says only a few left.", r"3 left|only 3|few left|in stock|check", r"7-15"),
+            ("Does the desk lamp come with a power adapter?", r"\bno\b|not included|without", r"yes, it comes"),
+            ("Can I still return the mug after 3 weeks? Who pays the return shipping?", r"30 days", r"7-15"),
+            ("Do you ship to Switzerland? I'd like the cork phone case.", r"not yet|2027|do not ship|don't ship|only .*eu", r"yes, we ship"),
+        ]
+        try:
+            for msg, must, mustnot in rows:
+                d = I2.draft({"id": "t", "from": "c@example.com", "text": msg}); low = d["text"].lower()
+                ok = re.search(must, low) and not re.search(mustnot, low) and not d["checks"]; good += bool(ok)
+                print(f"   {'ok ' if ok else 'BAD'} {msg[:55]} -> {d['text'].split(chr(10)+chr(10))[1][:150]!r} {d['checks']}", flush=True)
+        finally:
+            P.stop()
+        check("store customers answered from the store's own pages (≥ 4/5)", good >= 4, f"{good}/5")
+finally:
+    ST.stop(S)
+ok = sum(1 for _, v in checks if v)
+print(f"STORE SCORE: {ok}/{len(checks)}  ({time.time() - t0:.0f} s)")
