@@ -108,7 +108,7 @@ class Planner:
         logf = open(config.LOG_DIR / "llm.log", "ab")
         args = [str(SERVER_BIN), "-m", str(MODEL_FILE), "--host", "127.0.0.1", "--port", str(PORT),
                 "-c", "4096", "-np", "1", "-t", THREADS, "--no-warmup"]
-        if _mem_available_mb() < 3000:
+        if _mem_available_mb() < 2000:
             # small machines: keep the weights memory-mapped (evictable) instead of copied into private RAM,
             # otherwise the browser + model together get the model killed by the kernel (OOM)
             args.append("--no-repack")

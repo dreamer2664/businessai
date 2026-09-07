@@ -318,7 +318,7 @@ class Operator:
             # small models often list several options: a grounded "done" wins, then the first actionable step
             screen = self._screen_text(seen).lower()
             for j in cands:
-                if j.get("step") == "done" and self._grounded(str(j.get("answer", "")), screen):
+                if j.get("step") == "done" and self._grounded(str(j.get("answer", "")), screen, goal):
                     return j
             for j in cands:
                 if j.get("step") in ("click", "type") and self._on_screen(str(j.get("target", "")), seen):
@@ -345,20 +345,23 @@ class Operator:
         full = seen.get("fulltext") or ""
         screen = self._relevant(goal, full) if len(full) > 3000 else self._screen_text(seen)
         screen = re.sub(r"[ \t]{2,}", " ", re.sub(r"\[\s*\d+\s*\]\s*", "", screen))     # drop [n] element numbers: they confuse the reader
+        screen = "\n".join(l for l in screen.splitlines()
+                           if not re.match(r"^\s*(From Wikipedia|This article (needs|is about)|Find sources:|Jump to|See our advice)", l))
         if len(screen) < 40:
             return ""
         try:
-            raw = self.planner.chat("You are a careful reader. Use only the given text.",
-                                    f"TEXT:\n{screen[:3000]}\n\nUsing only the TEXT above, answer: {goal}\nAnswer in one short sentence with the exact words and figures from the text. "
-                                    f"If the text does not say, answer: NOT ON SCREEN",
+            raw = self.planner.chat("You are a careful reader. Use only the given text. Never add outside knowledge.",
+                                    f"TEXT:\n{screen[:3000]}\n\nUsing only the TEXT above: {goal}\nAnswer in one short sentence, quoting the exact words and figures from the text.",
                                     max_tokens=70, timeout=200)
         except Exception as e:
             self.log("operator_read_failed", error=str(e)[:80])
             return ""
-        raw = raw.strip().splitlines()[0].strip() if raw.strip() else ""
-        if not raw or "NOT ON SCREEN" in raw.upper() or raw.upper().startswith(("NONE", "UNKNOWN", "I DON'T", "I DO NOT")):
+        raw = raw.strip().splitlines()[0].strip().strip('"') if raw.strip() else ""
+        if not raw or re.search(r"\b(not on screen|does not|doesn't|do not|no information|not mention|not provide|not specif|not state|not say|cannot be determined|unknown|unclear)\b", raw, re.I):
             return ""
-        return raw if self._grounded(raw, screen.lower()) else ""
+        if re.search(r"\b(how many|how much|price|cost|when|year|date|number of|count)\b", goal.lower()) and not re.search(r"\d", raw):
+            return ""                                               # a counting/price/date question needs a figure
+        return raw if self._grounded(raw, screen.lower(), goal) else ""
 
     def _new_text(self, before, after):
         """Lines that appeared on the screen since `before` (what my last action changed)."""
@@ -404,6 +407,13 @@ class Operator:
             sc = sum(1.0 / df[k] for k in keys if df[k] and k in low)
             scored.append((sc, i))
         keep, size = set(), 0
+        # always keep the opening of the page (title + first real paragraph): "first sentence", "what is this page" goals
+        for i, l in enumerate(lines[:40]):
+            if size > 700:
+                break
+            if len(l) > 60 or i < 3:
+                keep.add(i)
+                size += len(l) + 1
         for sc, i in sorted(scored, key=lambda x: (-x[0], x[1])):
             if sc <= 0:
                 break
@@ -422,8 +432,8 @@ class Operator:
         return bool(wa) and len(wa & wb) >= max(2, int(0.6 * len(wa)))
 
     @staticmethod
-    def _grounded(answer, screen):
-        """A 'done' answer must have its numbers/years and most of its long words on the screen."""
+    def _grounded(answer, screen, goal=""):
+        """A 'done' answer must have its numbers/years and most of its long words on the screen (words echoed from the goal don't count)."""
         def norm(t):                                   # "12.90" == "12,90" == "12 90"; "1,000" == "1000"
             return re.sub(r"[.,\s]", "", t)
         screen_nums = {norm(n) for n in re.findall(r"\d[\d.,\s]*\d|\d", screen)}
@@ -432,9 +442,10 @@ class Operator:
             return False
         stop = ("found", "there", "which", "about", "their", "these", "those", "answer", "shows", "screen", "contains", "costs", "pieces", "piece",
                 "according", "states", "total", "price", "amount", "number", "years", "around", "approximately", "including", "currently")
-        words = [w for w in re.findall(r"[a-z]{5,}", answer.lower()) if w not in stop]
+        goal_words = set(re.findall(r"[a-z]{5,}", goal.lower()))
+        words = [w for w in re.findall(r"[a-z]{5,}", answer.lower()) if w not in stop and w not in goal_words]
         if not words:
-            return bool(nums)
+            return bool(nums) or bool(goal_words & set(re.findall(r"[a-z]{5,}", answer.lower())))
         return sum(1 for w in words if w in screen) >= max(1, int(0.6 * len(words)))
 
     def _on_screen(self, target, seen):
