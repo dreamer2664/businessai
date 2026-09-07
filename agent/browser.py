@@ -191,7 +191,7 @@ class Browser:
             raise BrowserError(f"blocked domain: {url}")
 
     def open(self, url):
-        if not re.match(r"^https?://", url):
+        if not re.match(r"^(https?|file)://", url):
             url = "https://" + url
         self._check(url)
         t0 = time.time()
