@@ -346,7 +346,16 @@ class Operator:
         screen = self._relevant(goal, full) if len(full) > 3000 else self._screen_text(seen)
         screen = re.sub(r"[ \t]{2,}", " ", re.sub(r"\[\s*\d+\s*\]\s*", "", screen))     # drop [n] element numbers: they confuse the reader
         screen = "\n".join(l for l in screen.splitlines()
-                           if not re.match(r"^\s*(From Wikipedia|This article (needs|is about)|Find sources:|Jump to|See our advice)", l))
+                           if not re.match(r"^\s*(From Wikipedia|This article (needs|is about)|\(Redirected from|For other uses|Find sources:|Jump to|See our advice|Not to be confused)", l))
+        # menu links and field values are not part of the page text but often carry the answer ("Cart (2)", "Quantity: 1")
+        keys = {w for w in re.findall(r"[a-z0-9]{3,}", goal.lower())}
+        extra = []
+        for n, label, role in seen.get("items") or []:
+            lab = (label or "").strip()
+            if lab and any(k in lab.lower() for k in keys) and lab not in screen:
+                extra.append(lab[:60])
+        if extra:
+            screen += "\nMenu / links on the page: " + ", ".join(extra[:12])
         if len(screen) < 40:
             return ""
         try:

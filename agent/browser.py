@@ -64,7 +64,7 @@ _JS_SNAPSHOT = r"""
 
 _JS_TEXT = r"""
 () => {
-  const skip = new Set(['SCRIPT','STYLE','NOSCRIPT','SVG','IFRAME','NAV','FOOTER','HEADER','ASIDE','FORM','TEMPLATE']);
+  const skip = new Set(['SCRIPT','STYLE','NOSCRIPT','SVG','IFRAME','NAV','FOOTER','HEADER','ASIDE','FORM','TEMPLATE','FIGURE','FIGCAPTION']);
   const out = [];
   const walk = (node) => {
     if (node.nodeType === 3) { const t = node.textContent.replace(/\s+/g, ' ').trim(); if (t) out.push(t); return; }
