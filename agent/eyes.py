@@ -243,7 +243,7 @@ class Eyes:
         return self.look(after, "In one sentence: what does this screen show now?") or "could not compare"
 
     # ---- OCR -------------------------------------------------------------------------------
-    def _ocr_pass(self, im, tag):
+    def _ocr_pass(self, im, tag, scale=1):
         buf = io.BytesIO()
         im.save(buf, "PNG")
         r = subprocess.run(["tesseract", "stdin", "stdout", "--psm", "11", "tsv"], input=buf.getvalue(), capture_output=True, timeout=60)
@@ -251,33 +251,28 @@ class Eyes:
         for line in r.stdout.decode(errors="replace").splitlines()[1:]:
             p = line.split("\t")
             if len(p) == 12 and p[11].strip() and float(p[10]) >= 30:
-                words.append({"text": p[11].strip(), "x": int(p[6]), "y": int(p[7]), "w": int(p[8]), "h": int(p[9]),
-                              "conf": float(p[10]), "line": (tag, int(p[2]), int(p[3]), int(p[4]))})
+                words.append({"text": p[11].strip(), "x": int(p[6]) // scale, "y": int(p[7]) // scale, "w": int(p[8]) // scale,
+                              "h": int(p[9]) // scale, "conf": float(p[10]), "line": (tag, int(p[2]), int(p[3]), int(p[4]))})
         return words
 
     @staticmethod
     def _light_on_colour(im):
-        """Second OCR view: keep only near-white pixels that sit inside coloured areas (button labels, header text)
-        and paint them black on white — plain tesseract misses white-on-orange/blue text otherwise."""
-        from PIL import ImageFilter
+        """Second OCR view for light labels on coloured buttons/bars. Per pixel: how much brighter than its surroundings
+        (25 px window) is it? Light text on a darker button stands out strongly; the page background does not.
+        The result is grey-level (edges preserved), then upscaled 2x for tesseract."""
+        from PIL import ImageFilter, Image
         g = im.convert("L")
-        white = g.point(lambda v: 255 if v > 235 else 0)
-        density = white.filter(ImageFilter.BoxBlur(12))
         try:
             import numpy as np
-            W = np.array(white) > 0
-            L = np.array(density)
-            from PIL import Image
-            return Image.fromarray(np.where(W & (L < 140), 0, 255).astype("uint8"))
-        except ImportError:                                                   # no numpy: pixel loop (slower, same result)
-            from PIL import Image, ImageChops
-            out = Image.new("L", g.size, 255)
-            px_w, px_d, px_o = white.load(), density.load(), out.load()
-            for y in range(g.height):
-                for x in range(g.width):
-                    if px_w[x, y] and px_d[x, y] < 140:
-                        px_o[x, y] = 0
-            return out
+        except ImportError:
+            return Image.eval(g, lambda v: 255 - v)
+        a = np.array(g).astype(np.int16)
+        mean = np.array(g.filter(ImageFilter.BoxBlur(12))).astype(np.int16)
+        diff = np.clip(a - mean, 0, 255)                                  # brighter-than-surroundings amount
+        diff = np.where(mean < 200, diff, 0)                              # only inside non-white regions
+        out = (255 - np.clip(diff * 3, 0, 255)).astype("uint8")           # strong light-on-dark → black ink
+        img = Image.fromarray(out)
+        return img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
 
     @staticmethod
     def _without_borders(im):
@@ -326,7 +321,7 @@ class Eyes:
                     if abs(v["x"] - w["x"]) < max(8, v["w"] // 2) and abs(v["y"] - w["y"]) < max(6, v["h"] // 2):
                         return True
                 return False
-            words += [w for w in self._ocr_pass(self._light_on_colour(im), 1) if not overlaps(w)]     # white labels on colour
+            words += [w for w in self._ocr_pass(self._light_on_colour(im), 1, scale=2) if not overlaps(w)]     # white labels on colour
             words += [w for w in self._ocr_pass(self._without_borders(im), 2) if not overlaps(w)]     # labels inside boxes
             self._ocr_cache_key, self._ocr_cache = key, words
             return words
@@ -342,9 +337,22 @@ class Eyes:
         out = []
         for key in sorted(groups, key=lambda k: (groups[k][0]["y"], groups[k][0]["x"])):
             ws = sorted(groups[key], key=lambda w: w["x"])
-            x0, y0 = min(w["x"] for w in ws), min(w["y"] for w in ws)
-            x1, y1 = max(w["x"] + w["w"] for w in ws), max(w["y"] + w["h"] for w in ws)
-            out.append({"text": " ".join(w["text"] for w in ws), "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0})
+            ws = [w for w in ws if w["conf"] >= 40 and (w["h"] >= 6 or w["text"].isalnum())]     # drop noise specks like ':' '=' 'ee'
+            if not ws:
+                continue
+            # split a tesseract line at wide gaps (menus: "Home   Shop   Cart (2)   Account" → 4 targets)
+            chunks, cur = [], [ws[0]]
+            for prev, w in zip(ws, ws[1:]):
+                gap = w["x"] - (prev["x"] + prev["w"])
+                if gap > max(12, int(0.9 * max(prev["h"], w["h"]))):
+                    chunks.append(cur)
+                    cur = []
+                cur.append(w)
+            chunks.append(cur)
+            for ch in chunks:
+                x0, y0 = min(w["x"] for w in ch), min(w["y"] for w in ch)
+                x1, y1 = max(w["x"] + w["w"] for w in ch), max(w["y"] + w["h"] for w in ch)
+                out.append({"text": " ".join(w["text"] for w in ch), "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0, "view": key[0]})
         out.sort(key=lambda l: (l["y"] // 12, l["x"]))
         return out
 
@@ -365,6 +373,8 @@ class Eyes:
             # score: all wanted words present in order (best) / most present / substring
             if " ".join(want) in have:
                 score = 3
+                if set(hv) == set(want) or (len(hv) <= len(want) + 1 and hv[:len(want)] == want):
+                    score = 4                                                 # whole-line exact match beats a substring inside a longer label
             else:
                 score = sum(1 for w in want if w in hv) / len(want)
                 if score < 0.6:
@@ -376,6 +386,7 @@ class Eyes:
                     frac0 = pos / max(1, len(have))
                     frac1 = min(1.0, (pos + len(" ".join(want))) / max(1, len(have)))
                     cx = int(l["x"] + l["w"] * (frac0 + frac1) / 2)
-            hits.append((score, cx, cy, l["text"]))
-        hits.sort(key=lambda h: -h[0])
+            button_like = l.get("view", 0) == 1 or len(hv) <= len(want) + 1
+            hits.append((score + (0.5 if button_like else 0) + (0.2 if l.get("view", 0) == 1 else 0), cx, cy, l["text"]))
+        hits.sort(key=lambda h: (-h[0], -h[2]))                             # best score, then lower on the screen (buttons sit below titles)
         return [(cx, cy, t) for _, cx, cy, t in hits]

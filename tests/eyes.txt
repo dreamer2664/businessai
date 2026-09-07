@@ -1,0 +1,19 @@
+# Eyes score set: image<TAB>check<TAB>expectation
+# checks: find <text> → expected pixel centre "x,y" (±25 px) | kind → page|login|captcha | look <question> → required words (a|b alternatives)
+# Scorer: engine/scripts/score_eyes.py (draws the test screens itself; ~2 min with the vision model)
+shop	find Add to cart	642,337
+shop	find Buy now	859,337
+shop	find Account	955,32
+shop	find Notify me	925,448
+shop	kind	page
+shop	look What is the price shown?	12,90|12.90
+shop	look What product is this page about?	toothbrush
+shop	look Is the item in stock? Answer yes or no.	yes
+login	kind	login
+login	find Sign in	400,340
+login	look Is this a login page? Answer yes or no.	yes
+captcha	kind	captcha
+error	kind	error
+error	look What does the error message say?	not found|404
+desktop	find Pay now	311,260
+desktop	find Add to cart	108,256
