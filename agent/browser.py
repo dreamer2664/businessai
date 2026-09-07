@@ -264,20 +264,20 @@ class Browser:
     # ---- reading -------------------------------------------------------
     _JS_COOKIE = r"""
 () => {
-  const words = /(cookie|consent|privacy|gdpr|tracking)/i;
-  const rejectRe = /^(reject( all)?|decline( all)?|refuse( all)?|deny( all)?|only (essential|necessary|required)|(essential|necessary|required)( cookies)? only|use (essential|necessary) only|continue without (accepting|agreeing)|no,? thanks|rifiuta( tutto)?|solo (essenziali|necessari)|ablehnen|nur notwendige|tout refuser|rechazar( todo)?)$/i;
-  const okRe = /^(ok|okay|got it|i understand|understood|close|dismiss|accept|accept all|allow all|agree|i agree|accept cookies|accetta( tutto)?|ho capito|alle akzeptieren|akzeptieren|tout accepter|aceptar( todo)?)$/i;
+  const words = /(cookie|consent|privacy|gdpr|tracking|personal information)/i;
+  const rejectRe = /^(reject( all)?( cookies)?|decline( all)?|refuse( all)?|deny( all)?|only (essential|necessary|required)( cookies)?|(essential|necessary|required)( cookies)? only|use (essential|necessary)( cookies)? only|continue without (accepting|agreeing)|no,? thanks|do not (sell|share)( or share)?( my)?( personal)?( information| data)?|opt out|rifiuta( tutto)?|solo (essenziali|necessari)|ablehnen|alle ablehnen|nur notwendige|tout refuser|rechazar( todo)?)$/i;
+  const okRe = /^(ok|okay|got it|i understand|understood|close|closer|dismiss|x|✕|×|accept|accept all|allow all|agree|i agree|accept( all)? cookies|yes,? i agree|accetta( tutto)?|ho capito|chiudi|alle akzeptieren|akzeptieren|schließen|tout accepter|fermer|aceptar( todo)?|cerrar)$/i;
   const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
   const cands = Array.from(document.querySelectorAll('div, section, aside, dialog, footer, form, [role=dialog], [role=alertdialog]'))
     .filter(el => vis(el) && el.querySelector('button, a, input[type=button], [role=button]'))
     .filter(el => { const s = getComputedStyle(el); const r = el.getBoundingClientRect();
-      const floating = s.position === 'fixed' || s.position === 'sticky' || el.getAttribute('role') === 'dialog' || el.tagName === 'DIALOG';
-      return floating && r.height < window.innerHeight * 0.95 && words.test((el.innerText || '').slice(0, 1500)); });
+      const floating = s.position === 'fixed' || s.position === 'sticky' || el.getAttribute('role') === 'dialog' || el.tagName === 'DIALOG' || (window.self !== window.top);
+      return floating && words.test((el.innerText || '').slice(0, 1500)); });
   if (!cands.length) return null;
   const box = cands.sort((a, b) => a.innerText.length - b.innerText.length)[0];
   const btns = Array.from(box.querySelectorAll('button, a, input[type=button], input[type=submit], [role=button]')).filter(vis);
-  const txt = (b) => ((b.innerText || b.value || b.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' '));
+  const txt = (b) => ((b.innerText || b.value || b.getAttribute('aria-label') || b.getAttribute('title') || '').trim().replace(/\s+/g, ' '));
   let pick = btns.find(b => rejectRe.test(txt(b))) || btns.find(b => okRe.test(txt(b)));
   if (!pick) return {found: true, clicked: null, text: (box.innerText || '').slice(0, 120)};
   const label = txt(pick); pick.click();
@@ -287,18 +287,26 @@ class Browser:
 
     def dismiss_banner(self):
         """Close a cookie / consent banner if one covers the page: prefers 'reject' / 'necessary only', else 'ok'/'accept'.
-        Returns the label clicked, or '' when there was nothing to do."""
+        Looks in the page and in consent iframes (Sourcepoint, OneTrust, Didomi …). Returns the label clicked, or ''."""
+        frames = [self.page.main_frame] + [f for f in self.page.frames if f is not self.page.main_frame and
+                                             re.search(r"consent|privacy|cookie|cmp|sp_message|onetrust|didomi|quantcast|trustarc", (f.name or "") + " " + (f.url or "") + " " + self._frame_title(f), re.I)]
+        for fr in frames[:6]:
+            try:
+                r = fr.evaluate(self._JS_COOKIE)
+            except Exception:
+                continue
+            if r and r.get("clicked"):
+                time.sleep(0.8)
+                self.log("browser_banner", clicked=r["clicked"], text=r.get("text", "")[:80], frame=("main" if fr is self.page.main_frame else "iframe"))
+                return r["clicked"]
+        return ""
+
+    def _frame_title(self, fr):
         try:
-            r = self.page.evaluate(self._JS_COOKIE)
+            el = fr.frame_element()
+            return el.get_attribute("title") or ""
         except Exception:
             return ""
-        if not r:
-            return ""
-        if r.get("clicked"):
-            time.sleep(0.6)
-            self.log("browser_banner", clicked=r["clicked"], text=r.get("text", "")[:80])
-            return r["clicked"]
-        return ""
 
     def snapshot(self, max_items=150):
         self.items = self.page.evaluate(_JS_SNAPSHOT, max_items)
