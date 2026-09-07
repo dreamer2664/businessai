@@ -822,7 +822,32 @@ class Operator:
             return ""
         if re.search(r"\b(how many|how much|price|cost|when|year|date|number of|count)\b", goal.lower()) and not re.search(r"\d", raw):
             return ""                                               # a counting/price/date question needs a figure
-        return raw if self._grounded(raw, screen.lower(), goal) else ""
+        if not self._grounded(raw, screen.lower(), goal):
+            return ""
+        return self._qualify_figure(raw, screen)
+
+    # a figure copied from a sentence that says "maximum / up to / free above / minimum" must keep that qualifier
+    QUALIFIERS = re.compile(r"\b(massim[oa]|minim[oa]|fino a|a partire da|oltre|superiore a|gratuit[ao]? (per|sopra|oltre)|"
+                            r"maximum|minimum|up to|at most|at least|starting (at|from)|from|over|above|free (for|on|above|over)|"
+                            r"maximal|mindestens|höchstens|ab|bis zu|kostenlos ab|maximum|minimum|à partir de|jusqu'à|gratuit[e]? (à partir|dès)|"
+                            r"máximo|mínimo|hasta|a partir de|desde|gratis (a partir|desde))\b", re.I)
+
+    def _qualify_figure(self, answer, screen):
+        """'delivery costs 150 euro' when the page says 'il costo massimo è di 150 euro' → keep the page's own sentence
+        next to the figure, so the owner sees the condition (maximum / from / free above …)."""
+        nums = re.findall(r"\d[\d.,]*", answer)
+        if not nums:
+            return answer
+        low = answer.lower()
+        if self.QUALIFIERS.search(low):
+            return answer                                           # the answer already carries a qualifier
+        for n in nums[:2]:
+            for line in screen.splitlines():
+                if n in line:
+                    sent = next((x for x in re.split(r"(?<=[.!?;])\s+", line) if n in x), line).strip()
+                    if self.QUALIFIERS.search(sent) and len(sent) < 260:
+                        return f"{answer} — the page's exact words: “{sent}”"
+        return answer
 
     def _new_text(self, before, after):
         """Lines that appeared on the screen since `before` (what my last action changed)."""
