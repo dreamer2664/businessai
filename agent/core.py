@@ -24,12 +24,18 @@ from .memory import Memory
 from .learn import Learner
 from .inbox import Inbox
 from .shopfacts import ShopFacts
+from . import store as practice_store
 from .channels import Channels, REAL as REAL_CHANNELS
 from .social import Social
 from .eyes import Eyes
 from .desktop import Desktop
 from .operator import Operator
 from .telegram import Bot, TelegramError
+from .store import money
+
+
+def money_list(orders):
+    return ", ".join(f"#{o['n']} {money(o['total'])}" for o in orders[:5]) + ("…" if len(orders) > 5 else "")
 
 VERSION = "1.4 (/shop reads your help AND product pages; customer questions about delivery, returns, contact and products are answered with the pages' own words)"
 
@@ -46,6 +52,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /channels — your real channels (shop e-mail, Facebook/Instagram messages): what is connected, /channels check tests the connection, /channels now looks for new messages right away. New messages get a drafted reply; nothing is sent until you tap Approve & send
 /post <platform> <what about> — I draft a social post (instagram, facebook, tiktok, x, linkedin, pinterest), you approve/edit, then copy it — I never publish by myself
 /policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
+/store — my practice shop on this machine (fake payments, simulated customers): /store open · /store day — a practice day passes · /store review — I propose ship / reorder / reprice, you tap Apply · /store numbers · /store admin
 /shop <address> — I read your own shop's help, shipping, returns and contact pages and answer customers with their exact words (re-read by itself every week) · /shop — what I know from them · /shop forget
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
 /do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do <page1> <page2> | which is cheaper? (compare several pages) · /do <page> | fill in the form: name = …, email = …, message = … (I type, you send) · /do desktop <goal> — same on my own screen. Any click that costs money, publishes, signs in or deletes waits for your tap.
@@ -76,6 +83,7 @@ class Agent:
                            planner=self.planner, memory=self.memory)
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
         self.shopfacts = ShopFacts(tasks=self.tasks, log=self.log)
+        self.store = practice_store.Store(log=self.log)          # the practice shop (milestone 11); served only when /store open
         self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log, shopfacts=self.shopfacts)
         self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
         self.channels = Channels(inbox=self.inbox, log=self.log)
@@ -319,6 +327,24 @@ class Agent:
                 if m:
                     self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n❌ dropped — nothing published")
             self.log("post_decision", id=pid, action=action)
+        elif data.startswith("s:"):
+            _, action, pid = data.split(":", 2)
+            m = cq.get("message") or {}
+            prop = self.store.proposal(pid)
+            if not prop or prop["status"] != "open":
+                self.bot.answer_callback(cq["id"], "Already handled.")
+                return
+            if action == "ok":
+                out = self.store.apply(pid)
+                self.bot.answer_callback(cq["id"], "Applied")
+                if m:
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + f"\n\n✅ applied: {out}")
+            else:
+                self.store.reject(pid)
+                self.bot.answer_callback(cq["id"], "Left as it is")
+                if m:
+                    self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n❌ not applied")
+            self.log("store_decision", id=pid, action=action)
         elif data.startswith("r:"):
             _, action, mid = data.split(":", 2)
             d = self.drafts.get(mid)
@@ -604,6 +630,8 @@ class Agent:
                 return "Inbox: nothing waiting. (/inbox practice loads sample messages.)"
             threading.Thread(target=self.process_inbox, daemon=True).start()
             return f"{len(new)} message(s) waiting — drafting replies now."
+        if low.startswith("/store"):
+            return self.store_command(text[6:].strip())
         if low.startswith("/shop"):
             arg = text[5:].strip()
             if arg.lower() in ("forget", "clear", "reset"):
@@ -711,6 +739,69 @@ class Agent:
         self.log("out", text=out[:300])
         self.bot.send(self.owner_id, out)
 
+    # ---- practice store (milestone 11) ------------------------------------
+    def store_url(self):
+        return f"http://{self.store.host}:{practice_store.PORT}/"
+
+    def store_command(self, arg):
+        a = arg.lower()
+        st = self.store
+        if a in ("", "status", "numbers"):
+            if not st.server:
+                return ("The practice store is closed. /store open starts it on this machine (nothing real: fake payments, simulated customers).\n"
+                        "Then: /store day — one practice day passes (visits, orders, customer messages) · /store review — I propose what to do "
+                        "(ship, reorder, reprice; you tap) · /store numbers · /store orders · /store admin — the admin login · /store reset")
+            return st.numbers_text() + f"\n\nshop: {self.store_url()} · admin: {self.store_url()}admin (login: /store admin) · open proposals: {len([p for p in st.data['proposals'] if p['status'] == 'open'])}"
+        if a == "open":
+            if st.server:
+                return f"Already open: {self.store_url()}"
+            try:
+                practice_store.start(st, inbox=self.inbox, port=practice_store.PORT)
+            except OSError as e:
+                return f"I couldn't open the store on port {practice_store.PORT}: {e}"
+            if not self.shopfacts.url or "127.0.0.1" in self.shopfacts.url:
+                self.start_shop_read(self.store_url())                       # read my own shop like any other: facts + product pages
+                learn = " I'm reading its pages now so customer replies use them."
+            else:
+                learn = ""
+            return (f"Practice store open: {self.store_url()} (on the machine I run on; admin: {self.store_url()}admin, login with /store admin).{learn}\n"
+                    f"/store day lets a practice day pass; /store review makes me propose actions.")
+        if a == "close":
+            practice_store.stop(st)
+            return "Practice store closed (the ledger is kept)."
+        if a == "admin":
+            return f"Admin panel: {self.store_url()}admin — user admin, password {st.data['token']}"
+        if a == "reset":
+            st.reset()
+            return "Practice store reset to the starting catalogue — no orders, day 0."
+        if a.startswith("day"):
+            n = int(re.search(r"\d+", a).group(0)) if re.search(r"\d+", a) else 1
+            n = max(1, min(n, 7))
+            rep = []
+            for _ in range(n):
+                r = st.simulate_day(inbox=self.inbox)
+                rep.append(f"day {r['day']}: {r['visits']} visits, {len(r['orders'])} order(s)" + (f" ({money_list(r['orders'])})" if r["orders"] else "") + f", {len(r['messages'])} customer message(s)")
+            if any(True for x in self.inbox.items("new")):
+                threading.Thread(target=self.process_inbox, daemon=True).start()
+                rep.append("Drafting the replies to the customer messages now — they come with Approve / Edit / Reject as usual.")
+            return "\n".join(rep) + "\n\n" + st.numbers_text(st.data["day"])
+        if a.startswith("review"):
+            props = st.review()
+            if not props:
+                return "Nothing to propose: all orders shipped, stock fine, prices sane."
+            for p in props:
+                self.bot.send(self.owner_id, f"🏪 Proposal — {p['kind']} {p['target']} → {p['change']}\n{p['why']}",
+                              buttons=[[("✅ Apply", f"s:ok:{p['id']}"), ("❌ Leave it", f"s:no:{p['id']}")]])
+            return f"{len(props)} proposal(s) sent — tap Apply on the ones you agree with. Nothing changes until you tap."
+        if a.startswith("orders"):
+            os_ = st.data["orders"][-15:]
+            if not os_:
+                return "No orders yet. /store day makes customers come."
+            return "\n".join(f"#{o['n']} day {o.get('day')} · {o['customer'].get('name', '')} ({o['country']}) · " + ", ".join(f"{l['name']} ×{l['qty']}" for l in o["lines"]) + f" · {money(o['total'])} · {o['status']}" for o in reversed(os_))
+        if a.startswith("products") or a.startswith("stock"):
+            return "\n".join(f"{p['name']} · {money(p['price'])} (cost {money(p.get('cost', 0))}) · stock {p['stock']}" for p in st.products())
+        return "Store commands: /store [open|close|day [n]|review|numbers|orders|products|admin|reset]"
+
     def start_shop_read(self, url):
         def go():
             self.busy = "reading the shop's pages"
@@ -809,6 +900,7 @@ class Agent:
                 f"{self.planner.describe()} · notes: {len(self.memory.notes(limit=100000))} · {self.memory.list_text().splitlines()[-1]}\n"
                 f"{self.learner.status()}\n"
                 f"{self.inbox.status()} · {self.shopfacts.describe()}\n{self.social.status()}\n"
+                f"practice store: {'open at ' + self.store_url() + ' · day ' + str(self.store.data['day']) + ' · ' + str(len(self.store.data['orders'])) + ' orders' if self.store.server else 'closed (/store open)'}\n"
                 f"channels: {', '.join(c.describe().split(' (')[0] for c in self.channels.active()) or 'none connected (/channels)'}\n"
                 f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "

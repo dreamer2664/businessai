@@ -170,6 +170,9 @@ def extract_facts(text, url):
         topics = [name for name, a, b in TOPIC_RES if a.search(line) and b.search(line)]
         if not topics:
             continue
+        if "returns & refunds" in topics and re.match(r"(?i)\s*(you can return|returns?\b|refunds?\b|resi\b|reso\b|rimbors|retour|rückgabe|widerruf|what is your return)", line):
+            topics.remove("returns & refunds")
+            topics.insert(0, "returns & refunds")                      # a sentence that starts with the return rule is about returns
         facts.append({"topics": topics, "text": line, "url": url})
     return facts
 
