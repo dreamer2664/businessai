@@ -80,8 +80,9 @@ class Tasks:
         else:
             b.park()
 
-    def __init__(self, log=None, notify=None, brain=None, viewer=None, planner=None, memory=None):
+    def __init__(self, log=None, notify=None, brain=None, viewer=None, planner=None, memory=None, eyes=None):
         self.log = log or (lambda kind, **f: None)
+        self.eyes = eyes
         self.notify = notify or (lambda text: None)
         self.brain = brain
         self.viewer = viewer
@@ -327,6 +328,29 @@ class Tasks:
     NEEDS_LOGIN = {"youtube": "YouTube hides its trending/recommendation feeds from visitors without an account or cookies",
                    "tiktok": "TikTok shows nothing to a browser without an account", "reddit": "Reddit blocks automated browsers"}
 
+    def _look_at_page(self, shot, question=None):
+        """Eyes on a screenshot when the page text is useless: OCR lines + one vision answer. '' if the eyes are off."""
+        if not (self.eyes and shot):
+            return ""
+        try:
+            d = self.eyes.describe(shot)
+            if d["kind"] in ("captcha", "login") or any(w in ("captcha", "login wall") for w in d["warnings"]):
+                return f"it shows a {d['kind'] if d['kind'] in ('captcha', 'login') else 'login'} wall — I stopped (I never pass CAPTCHAs or log in)."
+            parts = [f"• {d['summary']}" if d["summary"] else ""]
+            if question:
+                ans = self.eyes.look(shot, question + " Answer only from what is visible; say 'not visible' if it is not on the screen.", max_tokens=140)
+                if ans:
+                    parts.append(f"• {ans}")
+            words = self.eyes.lines(shot) if self.eyes.ocr else []
+            good = [l["text"] for l in words if len(l["text"]) > 12][:10]
+            if good:
+                parts.append("• Text I can read on it: " + " | ".join(good)[:600])
+            parts.append("(seen with my eyes, not read from the page — treat as approximate)")
+            return "\n".join(p for p in parts if p)
+        except Exception as e:
+            self.log("look_failed", error=str(e)[:100])
+            return ""
+
     def visit(self, site, question=""):
         """Go to a site (name or URL), read what is on it, and answer the owner's question from the page — grounded."""
         key = site.lower().strip(" .?")
@@ -346,13 +370,19 @@ class Tasks:
             if len(text) < 300:
                 b.scroll("down", 2)
                 text = clean(b.extract_text())
+            lines = [l.strip(" #•") for l in text.splitlines() if len(l.strip(" #•")) > 2]
+            thin = len(lines) < 8 or bool(re.search(r"try searching to get started|start watching videos|sign in to|log in to see", text, re.I))
+            shot = b.page.screenshot(type="png", timeout=8000) if (thin and self.eyes) else None
         self._release_page()
-        lines = [l.strip(" #•") for l in text.splitlines() if len(l.strip(" #•")) > 2]
         page = "\n".join(lines)[:3500]
         note = self.NEEDS_LOGIN.get(key.split()[0]) if key.split() else None
-        if len(lines) < 8 or re.search(r"try searching to get started|start watching videos|sign in to|log in to see", text, re.I):
-            out = (f"{title} — {final}\n\nThe page shows almost nothing to me" + (f": {note}." if note else " (empty or script-only page).") +
-                   " I won't guess at its contents. Screenshot: /screen")
+        if thin:
+            seen = self._look_at_page(shot, question) if shot else ""
+            if seen:
+                out = f"{title} — {final}\n\nThe page text is empty for me, so I looked at the screen instead:\n{seen}"
+            else:
+                out = (f"{title} — {final}\n\nThe page shows almost nothing to me" + (f": {note}." if note else " (empty or script-only page).") +
+                       " I won't guess at its contents. Screenshot: /screen")
             if self.memory:
                 self.memory.note("visit", f"{site}: {question}"[:120], out, [final])
             return out

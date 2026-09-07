@@ -65,12 +65,12 @@ class Agent:
         self.watch = False
         self.planner = Planner(log=self.log)
         self.memory = Memory()
-        self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer,
+        self.eyes = Eyes(log=self.log, planner=self.planner)
+        self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer, eyes=self.eyes,
                            planner=self.planner, memory=self.memory)
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
         self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log)
         self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
-        self.eyes = Eyes(log=self.log, planner=self.planner)
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
         self.posts = {}             # post id -> draft dict awaiting the owner's tap
         self.editing_post = None    # post id whose text the owner is typing
