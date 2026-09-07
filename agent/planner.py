@@ -35,7 +35,8 @@ MODEL_FILE = LLM_DIR / "model.gguf"
 PORT = int(os.environ.get("BAI_LLM_PORT", "8091"))
 REMOTE_URL = os.environ.get("BAI_LLM_URL", "")
 IDLE_STOP = int(os.environ.get("BAI_LLM_IDLE", "600"))
-THREADS = os.environ.get("BAI_LLM_THREADS") or str(max(1, (os.cpu_count() or 2) - 1))
+_CPUS = os.cpu_count() or 2
+THREADS = os.environ.get("BAI_LLM_THREADS") or str(_CPUS if _CPUS <= 2 else _CPUS - 1)   # tiny machines need both cores (2× faster reading)
 
 
 def _mem_available_mb():
