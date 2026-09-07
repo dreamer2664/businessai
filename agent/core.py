@@ -30,7 +30,7 @@ from .desktop import Desktop
 from .operator import Operator
 from .telegram import Bot, TelegramError
 
-VERSION = "1.1 (milestone 10: real customer channels — e-mail, Facebook, Instagram, every reply approved by you)"
+VERSION = "1.2 (real shops: bot-walls and error pages reported honestly, cookie banners in 5 languages, Italian/German/French links understood, 5× faster)"
 
 HELP = """Just talk to me. I work out whether you're asking a question, want something looked up on the web, want a page summarized, or want suppliers compared.
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.

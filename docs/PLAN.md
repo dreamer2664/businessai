@@ -121,4 +121,4 @@ messages and social media, reports to the owner and asks questions via phone.
   matching (returns → resi/recesso, shipping → spedizione/consegna …); an English answer read from an Italian page is accepted
   when its figures are on the page; a figure taken from a "maximum / from / free above" sentence is reported with the page's
   exact words. Small machines: lean Chromium (one renderer, no images/fonts) and both cores for the thinking model.
-  Operator test set still 15/15.
+  Operator test set still 15/15 (now 170 s instead of 321 s); new live set tests/live.txt 10/10.
