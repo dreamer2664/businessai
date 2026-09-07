@@ -9,8 +9,9 @@ Every decision is remembered (state/inbox_decisions.jsonl) and the score set tes
 
 Store policy lives in state/policy.json — the owner sets it once (/policy) and every draft obeys it.
 
-Channels come later (email/IMAP, Shopify Inbox, Instagram/Facebook via official APIs); today's adapters:
-   "practice" — sample messages loaded with /inbox practice, replies go to state/outbox.jsonl only.
+Channels: "practice" (sample messages loaded with /inbox practice, replies go to state/outbox.jsonl only), "owner" (a message the owner
+pasted or forwarded — the approved text is handed back to paste), and since milestone 10 the real ones in agent/channels.py:
+"email" (IMAP/SMTP), "facebook" and "instagram" (Meta Graph API) — approved replies are actually sent there.
 """
 import datetime as _dt
 import json
@@ -189,7 +190,7 @@ class Inbox:
         return "\n".join(out)
 
     # ---- messages ------------------------------------------------------------
-    def add(self, channel, sender, text, subject="", ref=None):
+    def add(self, channel, sender, text, subject="", ref=None, extra=None):
         existing = {r["id"] for r in _load(INBOX)}
         base = int(_dt.datetime.now().timestamp() * 1000) % 10 ** 8
         mid = ref or str(base)
@@ -198,6 +199,8 @@ class Inbox:
             mid = str(base)
         rec = {"id": mid, "t": now(), "channel": channel,
                "from": sender, "subject": subject, "text": text.strip(), "status": "new"}
+        if extra:                                   # channel details needed to reply (address, message-id, conversation) — never shown to the model
+            rec.update({k: v for k, v in extra.items() if k not in rec})
         _append(INBOX, rec)
         return rec
 

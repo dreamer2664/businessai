@@ -13,7 +13,7 @@ STATE_DIR = pathlib.Path(os.environ.get("BAI_STATE", ROOT / "state"))
 LOG_DIR = STATE_DIR / "logs"
 
 _SECRET_KEYS = ("GITHUB_TOKEN", "GH_TOKEN", "TELEGRAM_BOT_TOKEN", "OPENAI_API_KEY",
-                "GROQ_API_KEY", "GOOGLE_API_KEY", "SHOPIFY_TOKEN")
+                "GROQ_API_KEY", "GOOGLE_API_KEY", "SHOPIFY_TOKEN", "MAIL_PASSWORD", "META_PAGE_TOKEN", "BAI_LLM_KEY")
 
 
 def load_env(path=SECRETS_FILE):

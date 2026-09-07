@@ -23,6 +23,7 @@ from .planner import Planner
 from .memory import Memory
 from .learn import Learner
 from .inbox import Inbox
+from .channels import Channels, REAL as REAL_CHANNELS
 from .social import Social
 from .eyes import Eyes
 from .desktop import Desktop
@@ -41,6 +42,7 @@ Commands (optional):
 /goals · /goal drop <n> · /notes [topic] — my notes · /learned — facts I've folded into my own knowledge pack · /report — today's summary
 Forward me any customer message (or write /customer <their text>) → I draft the answer, you tap Approve / Edit / Reject, and I hand you the final text to paste back. Nothing is ever sent by itself.
 /inbox — customer messages waiting; /inbox practice loads 12 sample messages so you can see how I'd answer them
+/channels — your real channels (shop e-mail, Facebook/Instagram messages): what is connected, /channels check tests the connection, /channels now looks for new messages right away. New messages get a drafted reply; nothing is sent until you tap Approve & send
 /post <platform> <what about> — I draft a social post (instagram, facebook, tiktok, x, linkedin, pinterest), you approve/edit, then copy it — I never publish by myself
 /policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
@@ -73,6 +75,7 @@ class Agent:
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
         self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log)
         self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
+        self.channels = Channels(inbox=self.inbox, log=self.log)
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
         self.operator = Operator(self.planner, eyes=self.eyes, tasks=self.tasks, desktop=self.desktop, log=self.log,
                                  notify=self.notify, ask_owner=lambda q, opts: self.ask(q, opts, timeout=900), viewer=self.viewer)
@@ -214,7 +217,7 @@ class Agent:
             learned = f" I noticed you sign as “{dec['signoff_learned']}” — I'll end every reply that way from now on (change it with /policy set sign_off …)." if dec.get("signoff_learned") else ""
             self.bot.send(chat_id, "Saved your version. I learn your style from edits (greeting, length, how you sign) — never the details, those stay with this customer." + learned)
             self.log("inbox_edited", id=mid)
-            self.deliver(mid, text)
+            self.deliver(mid, text)                 # for a real channel this sends the owner's own text
             return
         # a pending free-text question takes the next message as its answer
         for qid, p in list(self.pending.items()):
@@ -423,12 +426,34 @@ class Agent:
 
     # ---- customer messages ---------------------------------------------
     def deliver(self, mid, final_text):
-        """Hand an approved reply to its channel. practice: log only; owner (pasted/forwarded): give back copyable text."""
+        """Hand an approved reply to its channel. practice: log only; owner (pasted/forwarded): give back copyable text;
+        email / facebook / instagram: really send it (this is the only place a customer message ever leaves)."""
         rec = self.inbox.get(mid) or {}
         ch = rec.get("channel", "practice")
         if ch == "owner":
             self.bot.send(self.owner_id, f"📋 Reply for {rec.get('from', 'the customer')} — long-press to copy, then paste it where they wrote you:\n\n{final_text}")
+        elif ch in REAL_CHANNELS:
+            ok, info = self.channels.send(rec, final_text)
+            if ok:
+                self.bot.send(self.owner_id, f"📤 Sent to {rec.get('from', 'the customer')} by {ch}.")
+            else:
+                self.bot.send(self.owner_id, f"⚠️ Could not send the reply to {rec.get('from', 'the customer')} by {ch}: {info}\n"
+                                             f"Here it is to send by hand:\n\n{final_text}")
         self.log("inbox_delivered", id=mid, channel=ch)
+
+    def poll_channels(self, announce=False):
+        """Fetch new customer messages from the real channels and draft replies for them (nothing is sent)."""
+        try:
+            new = self.channels.poll()
+        except Exception as e:
+            self.log("channel_error", error=str(e)[:200])
+            new = []
+        if new:
+            self.notify(f"📥 {len(new)} new customer message{'s' if len(new) > 1 else ''} — drafting replies, you'll get them with Approve & send / Edit / Reject.")
+            self.process_inbox()
+        elif announce:
+            self.notify("📥 Checked: no new customer messages.")
+        return len(new)
 
     def process_inbox(self):
         """Draft a reply for every new message and put each in front of the owner with buttons."""
@@ -449,7 +474,8 @@ class Agent:
                 flags = ("\n⚠️ " + "; ".join(d["checks"])) if d["checks"] else ""
                 note = f"\nℹ️ {d['note']}" if d.get("note") else ""
                 body = f"{head}\n\n“{rec['text'][:600]}”\n\n— my draft —\n{d['text']}{flags}{note}"
-                ok_label = "⚠️ Approve anyway" if d["checks"] else "✅ Approve"
+                real = rec.get("channel") in REAL_CHANNELS
+                ok_label = ("⚠️ Send anyway" if real else "⚠️ Approve anyway") if d["checks"] else ("✅ Approve & send" if real else "✅ Approve")
                 self.bot.send(self.owner_id, body, buttons=[[(ok_label, f"r:ok:{rec['id']}"), ("✏️ Edit", f"r:edit:{rec['id']}"), ("❌ Reject", f"r:no:{rec['id']}")]])
                 self.log("inbox_draft", id=rec["id"], mtype=d["kind"], flags=d["checks"])
         except Exception as e:
@@ -547,6 +573,16 @@ class Agent:
                 return f"What should the {plat} post be about?"
             threading.Thread(target=self.draft_post, args=(plat, topic), daemon=True).start()
             return f"Drafting a {plat} post about “{topic}” — you'll get it with Approve / Edit / Reject buttons. Nothing gets published by itself."
+        if low.startswith("/channels"):
+            arg = low[9:].strip()
+            if arg == "check":
+                return "🔌 " + self.channels.check()
+            if arg == "now":
+                if not self.channels.configured():
+                    return self.channels.status()
+                threading.Thread(target=self.poll_channels, kwargs={"announce": True}, daemon=True).start()
+                return "Checking the channels now…"
+            return "🔌 " + self.channels.status()
         if low.startswith("/inbox"):
             arg = low[6:].strip()
             if arg.startswith("practice"):
@@ -683,6 +719,9 @@ class Agent:
         if self.busy or now - self.last_idle_check < 60:
             return
         self.last_idle_check = now
+        if self.channels.due():
+            threading.Thread(target=self.poll_channels, daemon=True).start()
+            return
         hour = _dt.datetime.now().hour
         today = _dt.date.today().isoformat()
         if hour >= 20 and self.report_sent != today and self.owner_id:
@@ -733,6 +772,7 @@ class Agent:
                 f"{self.planner.describe()} · notes: {len(self.memory.notes(limit=100000))} · {self.memory.list_text().splitlines()[-1]}\n"
                 f"{self.learner.status()}\n"
                 f"{self.inbox.status()}\n{self.social.status()}\n"
+                f"channels: {', '.join(c.describe().split(' (')[0] for c in self.channels.active()) or 'none connected (/channels)'}\n"
                 f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
