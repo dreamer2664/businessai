@@ -56,8 +56,8 @@ try:
         r = S.simulate_day(inbox=I); tot_orders += len(r["orders"]); tot_msgs += len(r["messages"])
     n = S.numbers()
     check("4 practice days: visits, orders and customer messages happened", n["visits"] > 100 and tot_orders >= 3 and tot_msgs >= 4, f"visits {n['visits']}, orders {tot_orders}, messages {tot_msgs}")
-    calc = round(n["revenue"] - n["cogs"] - n["shipping_cost"] - n["fees"], 2)
-    check("profit = revenue − goods − shipping − fees", abs(calc - n["profit"]) < 0.02, f"{n['profit']}")
+    calc = round(n["revenue"] - n["cogs"] - n["shipping_cost"] - n["fees"] - n["losses"], 2)
+    check("profit = revenue − goods − shipping − fees − refund losses", abs(calc - n["profit"]) < 0.02, f"{n['profit']}")
     check("every paid order's total = lines + shipping", all(abs(sum(l["qty"] * l["price"] for l in o["lines"]) + o["shipping"] - o["total"]) < 0.01 for o in S.data["orders"]))
     check("store customer messages landed in the inbox as channel 'store'", all(m["channel"] == "store" for m in I.items("new")) and len(I.items("new")) == tot_msgs)
     # 3. the AI's review proposes the right things, and nothing changes without a tap
@@ -103,6 +103,10 @@ try:
     check("unknown address, no number → asks for the number, guesses nothing", "cannot find any order" in d["text"] and "warehouse" not in d["text"] and not d["checks"])
     d = I3.draft({"id": "t", "from": "x@example.com", "channel": "store", "text": "I want to cancel order 51002, I ordered the wrong model."})
     check("'cancel — I ordered the wrong model' is a cancellation, not a damage report", d["kind"] == "cancel_or_change" and "photo" not in d["text"])
+    p0 = S.numbers()["profit"]; S.set_status(shipped["n"], "refunded"); n2 = S.numbers()
+    fee = 0.029 * shipped["total"] + 0.30; post = 2.9 + 0.35 * sum(l["qty"] for l in shipped["lines"]); goods = sum(l["qty"] * l["cost"] for l in shipped["lines"])
+    margin_before = shipped["total"] - goods - post - fee                       # what this order contributed while it counted as sold
+    check("refunding a shipped order: its margin disappears AND the fee, postage and goods are lost", n2["refunded"] == 1 and abs((p0 - n2["profit"]) - (margin_before + fee + post + goods)) < 0.05, f"profit {p0} → {n2['profit']}, losses {n2['losses']}")
     a, b = S.propose("stock", "x", 1, "t"), S.propose("stock", "y", 1, "t")
     check("two proposals in the same millisecond get different ids", a["id"] != b["id"]); S.reject(a["id"]); S.reject(b["id"])
     # 4. the AI reads its own store like any shop

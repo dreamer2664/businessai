@@ -382,10 +382,14 @@ class Store:
         for o in paid:
             for l in o["lines"]:
                 units[l["name"]] = units.get(l["name"], 0) + l["qty"]
+        # refunds and cancellations are not free: the gateway keeps its fee; a parcel that already left also cost the goods and the postage
+        cancelled = [o for o in os_ if o["status"] == "cancelled"]
+        losses = sum(0.029 * o["total"] + 0.30 for o in refunded + cancelled)
+        losses += sum(2.9 + 0.35 * sum(l["qty"] for l in o["lines"]) + sum(l["qty"] * l.get("cost", 0) for l in o["lines"]) for o in refunded if o.get("tracking"))
         visits = sum(v for d, v in self.data["visits"].items() if day is None or int(d) == day)
         low = [p for p in self.products() if p["stock"] <= 3]
-        return {"orders": len(paid), "refunded": len(refunded), "revenue": round(rev, 2), "cogs": round(cogs, 2), "shipping_cost": round(ship_cost, 2),
-                "fees": round(fees, 2), "profit": round(rev - cogs - ship_cost - fees, 2), "units": units, "visits": visits,
+        return {"orders": len(paid), "refunded": len(refunded), "cancelled": len(cancelled), "losses": round(losses, 2), "revenue": round(rev, 2), "cogs": round(cogs, 2), "shipping_cost": round(ship_cost, 2),
+                "fees": round(fees, 2), "profit": round(rev - cogs - ship_cost - fees - losses, 2), "units": units, "visits": visits,
                 "conversion": (len(paid) / visits * 100) if visits else 0.0, "low_stock": [(p["name"], p["stock"]) for p in low],
                 "open": [o for o in self.data["orders"] if o["status"] == "paid"]}
 
@@ -394,8 +398,9 @@ class Store:
         head = f"Practice store — {'day ' + str(day) if day is not None else 'all days'}"
         best = sorted(n["units"].items(), key=lambda x: -x[1])[:3]
         lines = [head,
-                 f"visits {n['visits']} · orders {n['orders']} ({n['conversion']:.1f} % conversion) · refunded {n['refunded']}",
-                 f"revenue {money(n['revenue'])} − goods {money(n['cogs'])} − shipping {money(n['shipping_cost'])} − fees {money(n['fees'])} = profit {money(n['profit'])}"
+                 f"visits {n['visits']} · orders {n['orders']} ({n['conversion']:.1f} % conversion) · refunded {n['refunded']} · cancelled {n['cancelled']}",
+                 f"revenue {money(n['revenue'])} − goods {money(n['cogs'])} − shipping {money(n['shipping_cost'])} − fees {money(n['fees'])}"
+                 + (f" − refunds/cancellations {money(n['losses'])}" if n["losses"] else "") + f" = profit {money(n['profit'])}"
                  + (f" ({n['profit'] / n['revenue'] * 100:.0f} % margin)" if n['revenue'] else "")]
         if best:
             lines.append("best sellers: " + ", ".join(f"{k} ×{v}" for k, v in best))
@@ -472,15 +477,24 @@ class Store:
             for o in self.data["orders"]:
                 if o["status"] == "paid" and str(o["n"]) not in open_ids:
                     props.append(self.propose("ship", str(o["n"]), "shipped", f"order #{o['n']} is paid and waiting ({', '.join(l['name'] + ' ×' + str(l['qty']) for l in o['lines'])}) — mark it shipped once the parcel is handed to GLS"))
+            sold = {}                                                          # units sold per product in the last 7 practice days → reorder by demand
+            for o in self.data["orders"]:
+                if o["status"] in ("paid", "shipped", "delivered") and o.get("day", 0) > self.data["day"] - 7:
+                    for l in o["lines"]:
+                        sold[l["id"]] = sold.get(l["id"], 0) + l["qty"]
+            rejected = {(p["kind"], p["target"]) for p in self.data["proposals"] if p["status"] == "rejected"}
             for p in self.products():
                 if p["id"] in open_ids:
                     continue
+                weekly = sold.get(p["id"], 0)
                 if p["stock"] == 0:
-                    props.append(self.propose("stock", p["id"], 25, f"{p['name']} is sold out and still listed — reorder from the supplier (suggested 25 units) or hide it; until then customers see 'out of stock'"))
-                elif p["stock"] <= 3:
-                    props.append(self.propose("stock", p["id"], p["stock"] + 20, f"{p['name']} has only {p['stock']} left — reorder now (suggested +20) so it is not out of stock this week"))
+                    qty = max(25, 3 * weekly)
+                    props.append(self.propose("stock", p["id"], qty, f"{p['name']} is sold out and still listed — reorder from the supplier (suggested {qty} units" + (f" = 3 weeks at {weekly}/week" if weekly else "") + ") or hide it; until then customers see 'out of stock'"))
+                elif p["stock"] <= max(3, weekly):
+                    qty = p["stock"] + max(20, 3 * weekly)
+                    props.append(self.propose("stock", p["id"], qty, f"{p['name']} has only {p['stock']} left" + (f" and sold {weekly} last week" if weekly else "") + f" — reorder now (suggested +{qty - p['stock']}) so it is not out of stock this week"))
                 margin = (p["price"] - p.get("cost", 0)) / p["price"] if p["price"] else 0
-                if margin < 0.55 and p.get("cost"):
+                if margin < 0.55 and p.get("cost") and ("price", p["id"]) not in rejected:   # the owner said 'leave it' once → do not nag
                     new = round(p["cost"] / 0.4 + 0.0, 1) - 0.1
                     props.append(self.propose("price", p["id"], new, f"{p['name']} sells at {money(p['price'])} with a landed cost of {money(p['cost'])} — {margin*100:.0f} % gross margin is thin once shipping (~€ 3,25) and fees (2,9 % + € 0,30) are paid; {money(new)} keeps ~60 %"))
         return props

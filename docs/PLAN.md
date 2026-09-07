@@ -174,5 +174,13 @@ messages and social media, reports to the owner and asks questions via phone.
     back"); "in stock" claims about sold-out items are flagged.
   * Bug: two proposals created in the same millisecond shared one id, so the owner's second tap said "no longer open".
   * False flag: a compliment ("Love the case") was flagged for the word "love" not being on the product page.
-  Score: `score_store.py` 35 model-free checks + 8 model replies (**36/36** with `--model`, 331 s).
+  * Week 2–3 findings: a customer writing without an order number is matched by e-mail address (one live order → answered
+    for it; several → "which one?"; none → "send me the number, it starts with 51"); a mistyped number → "cannot find
+    it"; "change the colour / address before it ships" is a change (possible while unshipped, owner does it), not a
+    cancellation; "cancel — I ordered the wrong model" is a cancellation, not a damage report; "one piece is missing" is
+    a damage report; the model's second-person echo of the question ("Can you still return…?") is stripped; refunds and
+    cancellations now cost real money in the numbers (fee kept by the gateway; a refunded parcel also loses goods + postage);
+    reorder quantities follow last week's sales; a price proposal the owner rejected is not repeated; approved replies are
+    filed on the order. Practice week score: 10/10 replies judged good (`state/week3.log`).
+  Score: `score_store.py` 40 model-free checks + 8 model replies (**41/41** with `--model`, ~6.5 min).
 
