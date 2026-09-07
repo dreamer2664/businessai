@@ -253,6 +253,8 @@ class Store:
         st = o["status"]
         if st == "paid":
             lines.append(f"Status: PAID, NOT YET SHIPPED — it is still in the warehouse; it can still be cancelled and refunded in full; no tracking number exists yet.")
+            if days_ago >= 2:
+                lines.append(f"It was placed {days_ago} days ago — LATER than the promised 1 business day: apologise, say the owner has been asked to ship it today, and offer a full cancellation and refund instead if the customer prefers.")
         elif st == "shipped":
             lines.append(f"Status: SHIPPED with GLS, tracking number {o.get('tracking', '')}. It can no longer be cancelled; the customer can return it within 30 days of delivery.")
         elif st == "delivered":
@@ -261,12 +263,15 @@ class Store:
             lines.append("Status: CANCELLED and refunded.")
         elif st == "refunded":
             lines.append("Status: REFUNDED.")
-        return {"n": o["n"], "status": st, "lines": lines, "tracking": o.get("tracking", ""), "days_ago": days_ago, "order": o}
+        return {"n": o["n"], "status": st, "lines": lines, "tracking": o.get("tracking", ""), "days_ago": days_ago, "late": st == "paid" and days_ago >= 2, "order": o}
 
     # ---- proposals (the AI suggests, the owner applies) ----------------------------
     def propose(self, kind, target, change, why):
         with self.lock:
             pid = str(int(time.time() * 1000) % 10 ** 8)
+            taken = {p["id"] for p in self.data["proposals"]}
+            while pid in taken:                                   # never two proposals with one id (same-millisecond bug)
+                pid = str(int(pid) + 1)
             prop = {"id": pid, "t": _now(), "kind": kind, "target": target, "change": change, "why": why, "status": "open"}
             self.data["proposals"].append(prop)
             self.save()
@@ -335,6 +340,8 @@ class Store:
         if not o:
             return None
         open_ = {(p["kind"], p["target"]) for p in self.data["proposals"] if p["status"] == "open"}
+        if kind == "where_is_my_order" and o["status"] == "paid" and ("ship", str(o["n"])) not in open_:
+            return self.propose("ship", str(o["n"]), "shipped", f"the customer is asking where order #{o['n']} is ({', '.join(l['name'] for l in o['lines'])}, {money(o['total'])}) and it has NOT shipped yet — hand it to GLS today and mark it shipped")
         if kind == "cancel_or_change" and o["status"] == "paid" and ("cancel", str(o["n"])) not in open_:
             return self.propose("cancel", str(o["n"]), "cancelled", f"the customer asked to cancel order #{o['n']} ({', '.join(l['name'] for l in o['lines'])}, {money(o['total'])}) and it has not shipped — cancel and refund in full")
         if kind == "damaged_or_wrong" and o["status"] in ("shipped", "delivered") and ("refund", str(o["n"])) not in open_:

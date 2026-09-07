@@ -1,6 +1,6 @@
 """Score the practice store end to end: python3 engine/scripts/score_store.py [--model]
 Without --model: everything that needs no thinking model (shop works, ledger, days, proposals, reading its own pages,
-operator on the store front, safety). With --model: also the customer replies from store customers (5 messages)."""
+operator on the store front, safety). With --model: also the customer replies from store customers (8 messages, incl. order questions)."""
 import base64, http.cookiejar, json, os, re, sys, time, urllib.parse, urllib.request
 sys.path.insert(0, ".")
 os.environ.pop("DISPLAY", None)
@@ -75,6 +75,28 @@ try:
     check("'Leave it' keeps the price", S.product("led-desk-lamp")["price"] == old and S.proposal(price["id"])["status"] == "rejected")
     check("review does not repeat open proposals", not [p for p in S.review() if p["kind"] == "stock"])
     check("ledger survives a restart", ST.Store(log=lambda k, **f: None).data["orders"][0]["n"] == 51001 and ST.Store(log=lambda k, **f: None).data["day"] == 4)
+    # 3b. order questions are answered from the order system (no model: templates + safety flags)
+    I3 = Inbox(planner=None, store=S)
+    paid = next(o for o in S.data["orders"] if o["status"] == "paid"); shipped = S.order(int(ship["target"]))
+    d = I3.draft({"id": "t", "from": paid["customer"]["email"], "channel": "store", "text": f"Where is my order {paid['n']}?"})
+    check("'where is my order' on an unshipped order → 'still in the warehouse' (never 'I will check')", "warehouse" in d["text"] and "will check" not in d["text"] and not d["checks"])
+    d = I3.draft({"id": "t", "from": shipped["customer"]["email"], "channel": "store", "text": f"Where is my order {shipped['n']}?"})
+    check("'where is my order' on a shipped order → the real tracking number", shipped["tracking"] in d["text"] and not d["checks"])
+    d = I3.draft({"id": "t", "from": "stranger@example.com", "channel": "store", "text": f"Where is my order {shipped['n']}?"})
+    check("someone else's e-mail asks about that order → nothing revealed", shipped["tracking"] not in d["text"] and "shipped" not in d["text"].split(chr(10) + chr(10))[1] and "e-mail address" in d["text"])
+    d = I3.draft({"id": "t", "from": shipped["customer"]["email"], "channel": "store", "text": f"Please cancel order {shipped['n']}."})
+    check("cancel a shipped order → cannot cancel, return within 30 days", "cannot be cancelled" in d["text"] and "30 days" in d["text"] and S.proposal_for_message("cancel_or_change", shipped["n"]) is None)
+    d = I3.draft({"id": "t", "from": paid["customer"]["email"], "channel": "store", "text": f"Please cancel order {paid['n']}."})
+    prop = S.proposal_for_message("cancel_or_change", paid["n"])
+    check("cancel an unshipped order → reply says it will be cancelled + a 'cancel' proposal for the owner (nothing changes until the tap)", "cancelled and refunded in full" in d["text"] and prop and prop["kind"] == "cancel" and S.order(paid["n"])["status"] == "paid")
+    stock0 = S.product(paid["lines"][0]["id"])["stock"]; out = S.apply(prop["id"])
+    check("owner taps → order cancelled, stock back on the shelf", "cancelled" in out and S.order(paid["n"])["status"] == "cancelled" and S.product(paid["lines"][0]["id"])["stock"] == stock0 + paid["lines"][0]["qty"])
+    c = {"kind": "where_is_my_order", "needs": [], "order_no": str(paid["n"]), "order": {k: v for k, v in S.order_facts(shipped["n"]).items() if k != "order"}}
+    c["order"]["status"] = "paid"; c["order"]["tracking"] = ""
+    check("safety flag: model claims 'shipped' while the ledger says paid", any("warehouse" in f for f in I3._check(f"Your order {paid['n']} has been shipped and is on its way!", c, "")))
+    check("safety flag: model says 'I will check your order' although the status is known", any("already known" in f for f in I3._check(f"Sorry! I will check your order {paid['n']} and get back to you.", c, "")))
+    a, b = S.propose("stock", "x", 1, "t"), S.propose("stock", "y", 1, "t")
+    check("two proposals in the same millisecond get different ids", a["id"] != b["id"]); S.reject(a["id"]); S.reject(b["id"])
     # 4. the AI reads its own store like any shop
     T = Tasks(); F = ShopFacts(tasks=T, log=lambda k, **f: None)
     rep = F.learn(url)
@@ -99,22 +121,26 @@ try:
     # 6. customer replies from store customers (model)
     if use_model:
         from agent.planner import Planner
-        P = Planner(); I2 = Inbox(planner=P, shopfacts=F)
+        P = Planner(); I2 = Inbox(planner=P, shopfacts=F, store=S)
+        paid2 = next(o for o in S.data["orders"] if o["status"] == "paid")
         good = 0; rows = [
-            ("How long does delivery to Germany take and what does it cost?", r"4.6 business days|4–6", r"7-15"),
-            ("Is the LED desk lamp still in stock? The page says only a few left.", r"3 left|only 3|few left|in stock|check", r"7-15"),
-            ("Does the desk lamp come with a power adapter?", r"\bno\b|not included|without", r"yes, it comes"),
-            ("Can I still return the mug after 3 weeks? Who pays the return shipping?", r"30 days", r"7-15"),
-            ("Do you ship to Switzerland? I'd like the cork phone case.", r"not yet|2027|do not ship|don't ship|only .*eu", r"yes, we ship"),
+            ("c@example.com", "How long does delivery to Germany take and what does it cost?", r"4.6 business days|4–6", r"7-15"),
+            ("c@example.com", "Is the LED desk lamp still in stock? The page says only a few left.", r"3 left|only 3|few left|in stock|check", r"7-15"),
+            ("c@example.com", "Does the desk lamp come with a power adapter?", r"\bno\b|not included|without", r"yes, it comes"),
+            ("c@example.com", "Can I still return the mug after 3 weeks? Who pays the return shipping?", r"30 days", r"7-15"),
+            ("c@example.com", "Do you ship to Switzerland? I'd like the cork phone case.", r"not yet|2027|do not ship|don't ship|only .*eu", r"yes, we ship"),
+            (paid2["customer"]["email"], f"Hi, where is my order {paid2['n']}? Nothing arrived yet.", r"warehouse|not (yet |been )?shipped|has not (yet )?left", r"7-15|will check|has been shipped|on its way"),
+            (shipped["customer"]["email"], f"Where is order {shipped['n']}? Can you give me a tracking number?", shipped["tracking"].lower(), r"7-15|will check|warehouse"),
+            (shipped["customer"]["email"], f"I want to cancel order {shipped['n']}, I changed my mind.", r"cannot be cancel|can no longer|already (been )?shipped|already left", r"will be cancelled|has been cancelled"),
         ]
         try:
-            for msg, must, mustnot in rows:
-                d = I2.draft({"id": "t", "from": "c@example.com", "text": msg}); low = d["text"].lower()
+            for frm, msg, must, mustnot in rows:
+                d = I2.draft({"id": "t", "from": frm, "channel": "store", "text": msg}); low = d["text"].lower()
                 ok = re.search(must, low) and not re.search(mustnot, low) and not d["checks"]; good += bool(ok)
                 print(f"   {'ok ' if ok else 'BAD'} {msg[:55]} -> {d['text'].split(chr(10)+chr(10))[1][:150]!r} {d['checks']}", flush=True)
         finally:
             P.stop()
-        check("store customers answered from the store's own pages (≥ 4/5)", good >= 4, f"{good}/5")
+        check("store customers answered from the store's own pages and order system (≥ 7/8)", good >= 7, f"{good}/8")
 finally:
     ST.stop(S)
 ok = sum(1 for _, v in checks if v)

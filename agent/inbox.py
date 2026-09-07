@@ -297,13 +297,15 @@ class Inbox:
             if order:
                 c["order"] = {k: v for k, v in order.items() if k != "order"}
                 c["needs"] = [n for n in c["needs"] if "order" not in n.lower()]
+                if order.get("late") and c["kind"] == "where_is_my_order":
+                    self.store.proposal_for_message("where_is_my_order", c["order_no"])   # the owner gets a 'ship it today' proposal
         shop = self.shopfacts.prompt_block(rec["text"]) if self.shopfacts else ""
         prod = self.shopfacts.product_block(rec["text"]) if (self.shopfacts and c["kind"] in ("product_question", "other", "compliment")) else ""
         if prod:
             c["product"] = self.shopfacts.match_products(rec["text"])[0]["name"]
             c["needs"] = [n for n in c["needs"] if not re.search(r"product|item|model|which", n.lower())]
             c["contradiction"] = self.shopfacts.contradiction(rec["text"], self.shopfacts.match_products(rec["text"])[0])
-            c["unmentioned"] = self.shopfacts.unmentioned(rec["text"], self.shopfacts.match_products(rec["text"])[0])
+            c["unmentioned"] = self.shopfacts.unmentioned(rec["text"], self.shopfacts.match_products(rec["text"])[0]) if c["kind"] != "compliment" else []
         if c["kind"] == "product_question":
             about_shipping = bool(re.search(r"\b(ship|deliver|delivery|shipping)\b", rec["text"].lower()))
             have = (self.policy.get("ships_to") if about_shipping else self.policy.get("products")) or ""
@@ -407,9 +409,15 @@ class Inbox:
         if od and not od.get("mismatch") and c["kind"] in ("where_is_my_order", "cancel_or_change", "return_or_refund", "damaged_or_wrong"):
             st, trk = od.get("status"), od.get("tracking") or ""
             if c["kind"] == "where_is_my_order":
+                if st == "paid" and od.get("late"):
+                    return (f"I am sorry — your order{o} has not left our warehouse yet, which is later than the 1 business day we promise. The owner has been asked to ship it today; "
+                            "you will receive the GLS tracking number by e-mail the moment it leaves. If you would rather not wait, tell me and it will be cancelled and refunded in full.")
                 if st == "paid":
                     return f"Thank you for your message. Your order{o} is still in our warehouse and leaves within 1 business day; you will receive the GLS tracking number by e-mail the moment it ships."
-                if st in ("shipped", "delivered"):
+                if st == "delivered":
+                    return (f"Thank you for your message. According to GLS, order{o} has been delivered (tracking number {trk}). If it has not reached you, please check with neighbours or your building's reception, "
+                            "and write back — I will open an enquiry with the carrier straight away.")
+                if st == "shipped":
                     return f"Thank you for your message. Your order{o} was shipped with GLS — tracking number {trk}. If the tracking does not move for more than 3 business days, write to me again and I will open an enquiry with the carrier."
                 if st in ("cancelled", "refunded"):
                     return f"Order{o} was {st} and the amount refunded; if you do not see the refund on your statement within 5 business days, please tell me."
@@ -486,7 +494,7 @@ class Inbox:
             flags.append(f"contains a number the customer never gave: {', '.join(foreign)}")
         if re.search(r"\b(i've|i have|we've|we have|i|we) (already |just )?(checked|contacted|spoken|called|looked into|escalated|forwarded|asked)\b", low):
             flags.append("claims to have already done something — nothing has been done yet")
-        if re.search(r"\b(full refund|refund(ed)?|replacement)\b", low) and c["kind"] not in ("damaged_or_wrong", "return_or_refund", "cancel_or_change"):
+        if re.search(r"\b(full refund|refund(ed)?|replacement)\b", low) and c["kind"] not in ("damaged_or_wrong", "return_or_refund", "cancel_or_change") and not (c.get("order") or {}).get("late"):
             flags.append("promises a refund/replacement outside the return/damage cases")
         if re.search(r"\b\d{1,2}%\s*(off|discount)|\b(code|coupon)\s+[A-Z0-9]{4,}\b", text) and "newsletter" not in low:
             flags.append("offers a discount not in the policy")
@@ -565,6 +573,14 @@ class Inbox:
                 flags.append("does not give the tracking number that the order system has")
             if re.search(r"\b(arrive|delivered|be there|with you) (on|by) (monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|\d)", low):
                 flags.append("invents a delivery date")
+            if re.search(r"\b(i|we) (will|'ll) (check|look into|verify|investigate)( on| the status of| whether| if)? (your |the )?order\b", low):
+                flags.append("says it will check the order — its status is already known from the order system")
+            if c["kind"] == "where_is_my_order" and st == "paid" and not re.search(r"warehouse|not (yet |been )?shipped|hasn't shipped|has not (yet )?(shipped|left)|not left|being prepared|leaves within|will (ship|leave)", low):
+                flags.append("does not tell the customer the order is still in the warehouse")
+            if c["kind"] == "cancel_or_change" and st == "paid" and not re.search(r"\b(will be|is being|has been|is now) cancel+ed\b|\bcancel+ed and refunded\b|\bcan (still )?be cancel+ed\b", low):
+                flags.append("does not confirm the cancellation — the order system says it has not shipped, so it can be cancelled and refunded in full")
+            if c["kind"] == "cancel_or_change" and st in ("shipped", "delivered") and not re.search(r"cannot be cancel|can no longer|can't be cancel|already (been )?(shipped|left|dispatched)|has (already )?left|return", low):
+                flags.append(f"does not explain that the order is already {st} (no cancellation, only a return)")
         else:
             if re.search(r"\b(has (been )?shipped|is on its way|will arrive (on|by)|arrives? (tomorrow|on)|track it here|has been dispatched|we're working on your order)\b", low):
                 flags.append("claims to know the order status — it doesn't")

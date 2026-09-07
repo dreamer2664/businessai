@@ -83,8 +83,8 @@ try:
             good += not why
             body = d["text"].split("\n\n")[1] if "\n\n" in d["text"] else d["text"]
             print(f"  {'ok ' if not why else 'BAD'} [{time.time()-t1:.0f}s] {d['kind']:17s} {rec['from'][:18]:18s} “{rec['text'][:70]}”\n        → {body[:260]!r}" + (f"\n        ✗ {'; '.join(why)}" if why else "") + (f"\n        (model draft rejected: {d['rejected']['checks']})" if d.get("rejected") else ""), flush=True)
-            if rec.get("channel") == "store" and d.get("order_no") and d["kind"] in ("cancel_or_change", "damaged_or_wrong"):
-                prop = S.proposal_for_message(d["kind"], d["order_no"])
+            if rec.get("channel") == "store" and d.get("order_no") and d["kind"] in ("cancel_or_change", "damaged_or_wrong", "where_is_my_order"):
+                prop = S.proposal_for_message(d["kind"], d["order_no"]) or next((p for p in reversed(S.data["proposals"]) if p["status"] == "open" and p["target"] == str(d["order_no"])), None)
                 if prop:
                     print(f"        🏪 proposal: {prop['kind']} #{prop['target']} — applied by the owner: {S.apply(prop['id'])}", flush=True)
         props = S.review()

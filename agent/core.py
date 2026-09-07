@@ -514,8 +514,10 @@ class Agent:
                 ok_label = ("⚠️ Send anyway" if real else "⚠️ Approve anyway") if d["checks"] else ("✅ Approve & send" if real else "✅ Approve")
                 self.bot.send(self.owner_id, body, buttons=[[(ok_label, f"r:ok:{rec['id']}"), ("✏️ Edit", f"r:edit:{rec['id']}"), ("❌ Reject", f"r:no:{rec['id']}")]])
                 self.log("inbox_draft", id=rec["id"], mtype=d["kind"], flags=d["checks"])
-                if rec.get("channel") == "store" and d.get("order_no") and d["kind"] in ("cancel_or_change", "damaged_or_wrong"):
+                if rec.get("channel") == "store" and d.get("order_no") and d["kind"] in ("cancel_or_change", "damaged_or_wrong", "where_is_my_order"):
                     prop = self.store.proposal_for_message(d["kind"], d["order_no"])
+                    if prop is None and d["kind"] == "where_is_my_order":       # the draft step may have opened it already
+                        prop = next((p for p in reversed(self.store.data["proposals"]) if p["status"] == "open" and p["kind"] == "ship" and p["target"] == str(d["order_no"]) and "asking where" in p["why"]), None)
                     if prop:
                         self.bot.send(self.owner_id, f"🏪 Proposal — {prop['kind']} order {prop['target']}\n{prop['why']}",
                                       buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
