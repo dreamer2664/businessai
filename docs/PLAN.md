@@ -131,3 +131,14 @@ messages and social media, reports to the owner and asks questions via phone.
   figures, time spans and destinations that stand on those pages (a reply may say "4–6 business days to Germany" when the
   shipping table says so) and still flag everything else. New score set tests/shopfacts.txt (8 questions only the shop's
   pages can answer; run `python3 engine/scripts/score_shopfacts.py`, `--nofacts` shows the baseline without the pages).
+- 2026-09-07 **Product questions from the product pages** (same `/shop` read). From the start page and its "Shop / all
+  products" listing the browser opens up to 12 product pages and keeps, per product: name, price, availability, the option
+  lists (colours, models), and the detail/spec lines word for word (tables become "Battery: 2000 mAh, up to 8 hours…").
+  A customer message is matched to a product by its name words ("the lamp", "cork phone case"; "phone number" is not the
+  phone case). The reply writer gets that product page; the rules then check every figure and measurement against the page,
+  catch a "yes" where the page says no ("no iPhone 15 Pro Max version", "no power adapter included"), and catch any claim
+  about a thing the page never mentions (oven-safe?) — only "I will check with the owner" passes. When the model's draft
+  fails, the safe template quotes the page's own line(s). Shop facts also take precedence over the generic policy defaults
+  (no more "7-15 business days" when the shipping table exists), and "yes we ship to the UK" is caught when the shop says
+  not yet. tests/shopfacts.txt grew to 16 (8 product questions incl. two traps); practice pages catalogue.html,
+  product_mug.html, product_lamp.html, product_case.html.

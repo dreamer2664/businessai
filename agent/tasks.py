@@ -78,7 +78,7 @@ class Tasks:
         if self.low_mem:
             self.close_browser()
         else:
-            b.park()
+            self.on_hands(b.park, timeout=15)
 
     def __init__(self, log=None, notify=None, brain=None, viewer=None, planner=None, memory=None, eyes=None):
         self.log = log or (lambda kind, **f: None)
@@ -119,11 +119,17 @@ class Tasks:
         return self._browser
 
     def close_browser(self):
-        if self._browser is not None:
+        if self._browser is None:
+            return
+        if not threading.current_thread().name.startswith("hands"):    # Playwright objects live on the hands thread
             try:
-                self._browser.close()
-            finally:
-                self._browser = None
+                return self._hands.submit(self.close_browser).result(timeout=30)
+            except Exception:
+                pass
+        try:
+            self._browser.close()
+        finally:
+            self._browser = None
 
     def tick(self):
         """Call periodically: closes the browser after IDLE_CLOSE seconds without a task."""

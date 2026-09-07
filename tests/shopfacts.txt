@@ -10,3 +10,13 @@ Is there a phone number I can call you on?	help@greennest.example|chat	7-15|call
 Ciao, quanto ci mette la consegna in Italia?	2-3|2–3|2 to 3	7-15|4-7
 How much is shipping to Spain and how long does it take?	6,90|6.90;4-6|4–6	8,90|7-15
 Do you offer free shipping?	39	7-15
+
+## Product questions — answered from the product pages (catalogue.html → product_*.html); a trap where the page says nothing
+Is the coffee mug dishwasher safe, and what is it made of?	dishwasher;stoneware	owner will|check with the owner|7-15
+How long does the battery of the LED desk lamp last and is the light adjustable?	8 hours|8 hours;adjustable|3 brightness	7-15|check with the owner
+Is the phone case compatible with the iPhone 15 Pro Max?	no|not|isn't|without	yes, it is compatible|7-15
+Does the desk lamp come with a power adapter?	no|not included|no power adapter|without	yes, it comes with|adapter is included|7-15
+What colours does the mug come in?	sage|sand|charcoal	7-15|check with the owner
+How much does the cork phone case weigh and does it work with wireless charging?	28;wireless	7-15
+Is the coffee mug oven safe?	owner|check|confirm	\b(yes|no)\b[^.]{0,40}\boven|\b(is|are|it's|its) not oven|oven[^.]{0,15}\b(yes|no)\b|not suitable|7-15
+How many toothbrushes are in the bamboo set and what does it cost?	4;12,90|12.90	7-15

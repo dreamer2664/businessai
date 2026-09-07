@@ -177,18 +177,28 @@ class Inbox:
         g = re.sub(r"\s*\{name\}", "", g)                                # "Ciao {name}!" → "Ciao!"
         return g if re.search(r"[,!.:]$", g) else g + ","
 
-    def policy_text(self):
+    def policy_text(self, product=False):
+        """The store policy as the reply writer sees it. Where the shop's own pages cover a topic (shipping, returns,
+        where we ship) they take precedence over the generic defaults, so the writer is not given two different figures."""
         out = []
+        sf = self.shopfacts
         for k, v in self.policy.items():
             if k in ("sign_off", "greeting"):
                 continue
             if k == "ships_to" and not v:
-                if self.shopfacts and self.shopfacts.covers("where we ship"):
+                if sf and sf.covers("where we ship"):
                     out.append("ships_to: only what the FACTS FROM THE SHOP'S OWN WEBSITE below say")
                 else:
                     out.append("ships_to: UNKNOWN — never state which countries we ship to; say the owner will confirm")
             elif k == "products" and not v:
-                out.append("products: NO PRODUCT FACTS AVAILABLE — never state specifications, materials, sizes or battery life")
+                if product:
+                    out.append("products: only what THE PRODUCT PAGE below says — nothing else")
+                else:
+                    out.append("products: NO PRODUCT FACTS AVAILABLE — never state specifications, materials, sizes or battery life")
+            elif k == "shipping" and v == DEFAULT_POLICY["shipping"] and sf and (sf.covers("delivery time") or sf.covers("shipping cost")):
+                out.append("shipping: exactly as the FACTS FROM THE SHOP'S OWN WEBSITE below say (times and costs per destination); tracking number sent by email when the parcel ships")
+            elif k == "returns" and v == DEFAULT_POLICY["returns"] and sf and sf.covers("returns & refunds"):
+                out.append("returns: exactly as the FACTS FROM THE SHOP'S OWN WEBSITE below say")
             else:
                 out.append(f"{k}: {v}")
         return "\n".join(out)
@@ -273,6 +283,7 @@ class Inbox:
     def draft(self, rec):
         """Draft a reply for one inbox record → dict(kind, urgency, escalate, needs, text, checks)."""
         c = self.classify(rec["text"])
+        c["text"] = rec["text"]
         if c["kind"] == "spam_or_scam":
             return {**c, "text": "", "checks": [], "note": "no reply (spam)"}
         if c["escalate"] or c["kind"] == "partnership_or_press":
@@ -280,11 +291,19 @@ class Inbox:
             return {**c, "text": hold, "checks": [], "note": "holding reply only — owner must handle this one"}
         facts = ""
         shop = self.shopfacts.prompt_block(rec["text"]) if self.shopfacts else ""
+        prod = self.shopfacts.product_block(rec["text"]) if (self.shopfacts and c["kind"] in ("product_question", "other", "compliment")) else ""
+        if prod:
+            c["product"] = self.shopfacts.match_products(rec["text"])[0]["name"]
+            c["needs"] = [n for n in c["needs"] if not re.search(r"product|item|model|which", n.lower())]
+            c["contradiction"] = self.shopfacts.contradiction(rec["text"], self.shopfacts.match_products(rec["text"])[0])
+            c["unmentioned"] = self.shopfacts.unmentioned(rec["text"], self.shopfacts.match_products(rec["text"])[0])
         if c["kind"] == "product_question":
             about_shipping = bool(re.search(r"\b(ship|deliver|delivery|shipping)\b", rec["text"].lower()))
             have = (self.policy.get("ships_to") if about_shipping else self.policy.get("products")) or ""
             if not have.strip() and about_shipping and shop:               # the shop's own shipping page answers it
                 have = "see the facts from the shop's website below"
+            if not have.strip() and prod:                                  # the product's own page answers it
+                have = "see the product page from the shop's website below"
             if not have.strip():                                            # nothing to answer from → defer, never guess
                 text = self._sanitize(self._template(c), rec)
                 c["note"] = ("no product/shipping facts in the policy — deferring to the owner (set them with /policy" +
@@ -298,49 +317,76 @@ class Inbox:
         needs = ("\nMISSING FACTS you must ask the customer for: " + ", ".join(c["needs"])) if c["needs"] else ""
         if c["kind"] == "discount_request":
             needs += "\nTHIS IS A DISCOUNT REQUEST: state the discount policy plainly (no codes in chat; newsletter subscribers get 10% on the first order). Do not ask for an order number. Do not say 'sure' or 'I can help with that'."
-        if c["kind"] == "return_or_refund" and re.search(r"\bafter \d+ days|\d+ days ago|too late\b", rec["text"].lower()):
-            needs += "\nTHE CUSTOMER ASKS ABOUT THE RETURN WINDOW: state the window from the returns policy explicitly (30 days from delivery) and do not say 'of course'."
+        if c["kind"] == "return_or_refund" and re.search(r"\bafter \d+ (days?|weeks?|months?)|\d+ (days?|weeks?) ago|too late|still return|ancora (restituire|rendere)\b", rec["text"].lower()):
+            needs += ("\nTHE CUSTOMER ASKS ABOUT THE RETURN WINDOW: first state the window explicitly, with the number of days from the returns policy / shop facts "
+                      "(and who pays the return shipping if asked), then what happens next. Do not say 'of course' and do not repeat the customer's question.")
         if shop and "?" in rec["text"]:
             needs += "\nTHE CUSTOMER ASKS A QUESTION THAT THE SHOP FACTS BELOW ANSWER: answer it first, plainly, with the exact figures (cost, days, who pays, where); only after that ask for anything else."
-        extra = (f"\nBACKGROUND FACTS you may use (do not quote sources): \n{facts}" if facts else "") + shop
+        if prod and c["kind"] != "product_question":
+            needs += f"\nThe product is known: {c['product']} (its page is below). Never ask which product the customer means."
+        if prod and "?" in rec["text"]:
+            needs += ("\nTHE CUSTOMER ASKS ABOUT A PRODUCT WHOSE PAGE IS BELOW: answer each part of the question from the page, with its exact words and figures. "
+                      "If the page lists what is included, not included, or which models/options exist, state that plainly (a 'no' is a fine answer). "
+                      "If the page does not mention the thing asked, say that you will check it with the owner.")
+            needs += f"\nThe product is known: {c['product']}. Never ask which product the customer means."
+            if c.get("contradiction"):
+                needs += f"\nTHE PAGE SAYS NO to part of this question — its exact words: \"{c['contradiction']}\". The answer to that part is no; say so and do not offer it."
+            if c.get("unmentioned"):
+                needs += (f"\nTHE PAGE DOES NOT MENTION: {', '.join(c['unmentioned'][:4])}. Do not say yes or no about " +
+                          ("that" if len(c["unmentioned"]) == 1 else "those") + " — write that you will check it with the owner and answer within one business day.")
+        extra = (f"\nBACKGROUND FACTS you may use (do not quote sources): \n{facts}" if facts else "") + shop + prod
         if self.style.get("sentences"):
             extra += f"\nLENGTH: the owner prefers about {self.style['sentences']} sentence(s)."
         text = None
         if self.planner and self.planner.installed():
             try:
                 text = self.planner.chat("You are the customer-care writer of a small online store.",
-                                         DRAFT_PROMPT % (self.policy_text() + needs + extra, c["kind"].replace("_", " "), rec.get("from", "customer"), rec["text"][:1500]),
+                                         DRAFT_PROMPT % (self.policy_text(product=bool(prod)) + needs + extra, c["kind"].replace("_", " "), rec.get("from", "customer"), rec["text"][:1500]),
                                          max_tokens=260, temperature=0.2, timeout=240)
             except Exception as e:
                 self.log("draft_failed", error=str(e)[:100])
         if not text:
             text = self._template(c)
         text = self._sanitize(text, rec)
+        if not self._is_reply(text, rec):                                  # chatter, an echo of the question, or nothing → template
+            text = self._sanitize(self._template(c), rec)
         checks = self._check(text, c, rec["text"])
         if checks and self.planner and self.planner.installed():
             try:                                                           # one repair round with the problems spelled out
                 fixed = self.planner.chat("You are the customer-care writer of a small online store.",
-                                          DRAFT_PROMPT % (self.policy_text() + needs + extra, c["kind"].replace("_", " "), rec.get("from", "customer"), rec["text"][:1500])
+                                          DRAFT_PROMPT % (self.policy_text(product=bool(prod)) + needs + extra, c["kind"].replace("_", " "), rec.get("from", "customer"), rec["text"][:1500])
                                           + f"\n\nYour previous draft was rejected because it: {'; '.join(checks)}. Write a corrected reply.",
                                           max_tokens=260, temperature=0.2, timeout=240)
                 fixed = self._sanitize(fixed, rec)
-                if len(self._check(fixed, c, rec["text"])) < len(checks):
+                if self._is_reply(fixed, rec) and len(self._check(fixed, c, rec["text"])) < len(checks):
                     text, checks = fixed, self._check(fixed, c, rec["text"])
             except Exception:
                 pass
         if checks:                                                          # still unsafe → the plain template (always policy-true)
             tmpl = self._sanitize(self._template(c), rec)
             if not self._check(tmpl, c, rec["text"]):
+                c["rejected"] = {"text": text, "checks": checks}
                 text, checks = tmpl, []
                 c["note"] = "model draft failed the checks; using the safe template"
         return {**c, "text": text, "checks": checks}
 
     def _template(self, c):
         p = self.policy
+        if c["kind"] in ("product_question", "other") and c.get("product") and self.shopfacts:
+            prods = [x for x in self.shopfacts.products if x["name"] == c["product"]]
+            line = c.get("contradiction") or (self.shopfacts.best_detail(c.get("text", ""), prods[0]) if prods else "")
+            if line and not c.get("unmentioned"):
+                return (f"Thank you for your question about the {c['product']}. Our product page says: \"{line}\". "
+                        "I hope this helps — just write back if you need anything else.")
+            if line:
+                return (f"Thank you for your question about the {c['product']}. Our product page says: \"{line}\" but does not mention "
+                        f"{' or '.join(c['unmentioned'][:2])}, so I will check that with the owner and come back to you within one business day.")
+            return (f"Thank you for your question about the {c['product']}. Our product page does not mention "
+                    f"{' or '.join(c['unmentioned'][:2]) if c.get('unmentioned') else 'that'}, so I will check it with the owner and come back to you within one business day.")
         o = f" {c['order_no']}" if c.get("order_no") else ""
         body = {
             "where_is_my_order": f"Thank you for reaching out, and sorry for the wait. Standard delivery takes {p['shipping'].split(';')[0].replace('standard delivery ', '')}. I will check your order{o} and send you the tracking details within one business day" + ("." if not c["needs"] else " — could you send me your order number first?"),
-            "return_or_refund": f"Thank you for your message. Our returns policy: {p['returns']}. {p['refunds'].split(';')[0].capitalize()}. " + (f"I will start the return for order{o} and send you the instructions within one business day." if o else "Please send me your order number and I will start the return for you."),
+            "return_or_refund": f"Thank you for your message. Our returns policy: {(self.shopfacts.best_sentence('return refund') if self.shopfacts and self.shopfacts.covers('returns & refunds') else p['returns']).rstrip('.')}. {p['refunds'].split(';')[0].capitalize()}. " + (f"I will start the return for order{o} and send you the instructions within one business day." if o else "Please send me your order number and I will start the return for you."),
             "damaged_or_wrong": f"I am sorry your order{o} did not arrive as it should. " + ("Please send me " + " and ".join(("your " + n) if n == "order number" else "a " + n for n in c["needs"]) + ", and I will sort out a replacement or refund straight away." if c["needs"] else "I will sort out a replacement or refund straight away and confirm the details within one business day."),
             "cancel_or_change": f"Thank you for letting me know. I will check whether your order{o} has already left the warehouse: if not, it will be cancelled and refunded; if it has, I will send you the return options. You will hear from me within one business day" + ("." if not c["needs"] else " — please send me your order number first."),
             "discount_request": f"Thank you for asking. {p['discounts'].split(';')[-1].strip().capitalize()}.",
@@ -350,6 +396,18 @@ class Inbox:
         }.get(c["kind"], "Thank you for your message. I will check this with the owner and come back to you within one business day.")
         return body
 
+    def _is_reply(self, text, rec):
+        """False when the 'reply' is meta-chatter ("here's the corrected reply"), the customer's own words, or empty."""
+        body = text.split("\n\n", 1)[1] if "\n\n" in text else text
+        body = body.replace(self.policy["sign_off"], "").strip()
+        if len(re.sub(r"\s+", " ", body)) < 25 or re.search(r"\b(here's|here is) (the|a|my) (corrected|revised|new|updated) (reply|draft|version)|as an ai\b|i cannot (write|help)\b", body, re.I):
+            return False
+        q = re.sub(r"\W+", " ", (rec.get("text") or "").lower()).strip() if rec else ""
+        b = re.sub(r"\W+", " ", body.lower()).strip()
+        if q and (b == q or (len(b) < len(q) + 30 and q in b)):
+            return False
+        return True
+
     def _sanitize(self, text, rec=None):
         text = re.sub(r"\[[^\]]{1,40}\]", "", text)                       # placeholders like [tracking link]
         text = re.sub(r"!{2,}", "!", text)
@@ -357,6 +415,14 @@ class Inbox:
         m = GREET_RE.match(text)
         if m and m.group(4) != "":                                         # drop the model's own greeting line
             text = text[m.end():].strip()
+        text = re.sub(r"^\s*(sure|certainly|of course|okay|ok)?[,!.]?\s*(here'?s|here is) (the|a|my|your) (corrected|revised|new|updated|improved)? ?(reply|draft|version|response)[^\n]*\n+", "", text, flags=re.I)
+        if rec and rec.get("text"):                                        # drop the customer's question echoed back at them
+            for sent in re.split(r"(?<=[.!?])\s+", rec["text"].strip()):
+                sent = sent.strip()
+                if len(sent) >= 12 and text.lower().startswith(sent.lower()):
+                    text = text[len(sent):].lstrip(" \n-—:,")
+            if len(text) < 10:
+                text = "Thank you for your message. I will check this with the owner and come back to you within one business day."
         lines = [l.rstrip() for l in text.splitlines()]
         first = self.policy["sign_off"].splitlines()[0].strip(" ,").lower()
         cut = len(lines)
@@ -405,8 +471,47 @@ class Inbox:
         if not (self.policy.get("ships_to") or "").strip() and re.search(r"\b(we|i) (do|don't|do not|can|cannot|can't)?\s*(ship|deliver) to\b", low) \
                 and not (self.shopfacts and self.shopfacts.covers("where we ship")):
             flags.append("states a shipping destination that is not in the policy")
-        if not (self.policy.get("products") or "").strip() and re.search(r"\b(battery|hours|watt|waterproof|adjustable|made of|material|dimensions|cm\b|kg\b|grams?)\b", low):
+        if not (self.policy.get("products") or "").strip() and not c.get("product") and \
+                re.search(r"\b(battery|hours|watt|waterproof|adjustable|made of|material|dimensions|cm\b|kg\b|grams?)\b", low) \
+                and not re.search(r"\b(within|in) \d+ hours\b|\bopening hours\b|\bworking hours\b|\bbusiness hours\b|\b(answer|reply|respond)\w* (within|in) ", low):
             flags.append("invents product details")
+        if self.shopfacts and self.shopfacts.facts:
+            if re.search(r"\b(yes|certainly|absolutely|of course)\b[^.]{0,40}\b(we|i) (do )?(ship|deliver)\b|\bwe (do )?ship to (the )?(uk|united kingdom|switzerland|usa?|united states|canada|australia|norway|outside)", low) \
+                    and re.search(r"\b(not yet|do not ship|don't ship|only (within|inside|to) (the )?(eu|europe|italy|italia)|non spediamo|solo in italia|nur innerhalb)\b", " ".join(f["text"] for f in self.shopfacts.facts).lower()) \
+                    and re.search(r"\b(uk|united kingdom|england|london|scotland|switzerland|svizzera|usa?|united states|america|canada|australia|norway|outside the eu|non-eu)\b", (source or "").lower()):
+                flags.append("says we ship to a country outside the shop's stated area — the shop page says not yet")
+            shipping_days = re.findall(r"\b(\d+)\s*[-–]\s*(\d+) (business |working )?days\b", low)
+            known = (" ".join(f["text"] for f in self.shopfacts.facts) + " " + self.policy_text()).lower()
+            for a, b, _ in shipping_days:
+                if not re.search(re.escape(a) + r"\s*[-–]\s*" + re.escape(b), known):
+                    flags.append(f"states a delivery time that is on no shop page: {a}-{b} days")
+                    break
+            if re.search(r"\b7-15 business days\b", low) and "7-15" not in known.replace("–", "-").split("shipping: exactly")[0] and (self.shopfacts.covers("delivery time")):
+                flags.append("uses the generic 7-15 days instead of the shop's own delivery times")
+        if c.get("product"):
+            prods = [x for x in self.shopfacts.products if x["name"] == c["product"]] if self.shopfacts else []
+            page = " ".join([prods[0].get("text", "")] + prods[0]["details"] + [prods[0]["price"], prods[0].get("availability", "")] +
+                            [v for vs in prods[0].get("variants", []) for v in vs]).lower() if prods else ""
+            page_nums = set(re.findall(r"\d+(?:[.,]\d+)?", page)) | set(re.findall(r"\d+(?:[.,]\d+)?", source or "")) | set(re.findall(r"\d+(?:[.,]\d+)?", self.policy_text()))
+            page_nums |= self.shopfacts.numbers() if self.shopfacts else set()
+            bad = [n for n in re.findall(r"\d+(?:[.,]\d+)?", text) if n not in page_nums and n.replace(",", ".") not in {x.replace(",", ".") for x in page_nums}]
+            if bad:
+                flags.append(f"states a figure that is not on the product page: {', '.join(sorted(set(bad)))}")
+            unit = lambda u: {"grams": "g", "gram": "g", "hours": "h", "hour": "h", "watts": "w", "watt": "w", "pieces": "pcs", "piece": "pcs", "pz": "pcs", "litre": "l", "liter": "l"}.get(u, u)
+            measures = re.findall(r"(\d+(?:[.,]\d+)?)\s*(grams?|g|kg|cm|mm|ml|l|hours?|h|mah|watts?|w|k|pcs|pieces?|pz|litres?|liters?)\b", low)
+            known = page + " " + (" ".join(f["text"] for f in self.shopfacts.facts).lower() if self.shopfacts else "") + " " + self.policy_text().lower()
+            page_measures = {(n.replace(",", "."), unit(u)) for n, u in re.findall(r"(\d+(?:[.,]\d+)?)\s*(grams?|g|kg|cm|mm|ml|l|hours?|h|mah|watts?|w|k|pcs|pieces?|pz|litres?|liters?)\b", known)}
+            badm = [f"{n} {u}" for n, u in measures if (n.replace(",", "."), unit(u)) not in page_measures]
+            if badm:
+                flags.append(f"states a measurement that is not on the product page: {', '.join(badm)}")
+            if c.get("contradiction") and re.search(r"\b(yes|certainly|absolutely|of course|it is compatible|is compatible|comes with|is included|does come)\b", low) \
+                    and not re.search(r"\b(no|not|isn't|doesn't|does not|is not|without|unfortunately)\b", low):
+                flags.append(f"says yes although the page says: {c['contradiction'][:80]}")
+            if c.get("unmentioned") and not re.search(r"\b(owner|check|confirm|does not say|doesn't say|not mentioned|no information)\b", low):
+                for w in c["unmentioned"]:
+                    if re.search(r"\b" + re.escape(w[:5]), low):
+                        flags.append(f"makes a claim about '{w}' which the product page never mentions — only 'I will check with the owner' is safe")
+                        break
         if re.search(r"\b(has (been )?shipped|is on its way|will arrive (on|by)|arrives? (tomorrow|on)|track it here|has been dispatched|we're working on your order)\b", low):
             flags.append("claims to know the order status — it doesn't")
         if re.search(r"\b(i'll|i will|we'll|we will|have) cancel+ed|(i'll|i will|we will) cancel\b|is (now )?cancel+ed\b", low):
@@ -423,6 +528,8 @@ class Inbox:
                 flags.append(f"does not ask for: {n}")
         if re.search(r"^\s*(\d+\.|-|•)\s", text, re.M):
             flags.append("uses a list — should be plain sentences")
+        if c.get("product") and re.search(r"\b(which|what) (product|item|set|model|one)\b.{0,40}\b(mean|refer|talking|asking)|clarify which\b", low):
+            flags.append(f"asks which product although it is known ({c['product']})")
         return flags
 
     # ---- decisions --------------------------------------------------------------

@@ -26,6 +26,14 @@ PAGE_WORDS = [
     ("about", r"(about|chi siamo|über uns|uber uns|à propos|a propos|our story|la nostra storia)"),
     ("terms", r"(terms|condizioni|termini|agb\b|cgv\b|policy|policies)"),
 ]
+# links to product listings (collections / catalogue / shop-all) and words that mark a product page
+LISTING_WORDS = re.compile(r"(shop all|all products|tutti i prodotti|catalog|catalogue|collection|collezion|products?$|prodotti|"
+                           r"/shop/?$|/store/?$|/collections?/|/categor|/negozio|/boutique|/produkte|/produits|/producten|new arrivals|"
+                           r"bestsellers?|best sellers|\bshop\b|negozio)", re.I)
+PRODUCT_URL = re.compile(r"(/products?/|/prodott[oi]/|/produkt|/produit|/product_|/p/|/item/|/dp/|product_[a-z0-9_-]+\.html?$)", re.I)
+PRICE_RE = re.compile(r"(?:€|eur|\$|£|chf|usd|gbp)\s?\d{1,5}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{1,5}(?:[.,]\d{3})*(?:[.,]\d{1,2})?\s?(?:€|eur\b|\$|£|chf\b|usd\b|gbp\b)", re.I)
+MAX_PRODUCTS = 40
+MAX_PRODUCT_PAGES = 12
 SKIP_LINK = re.compile(r"(login|log-in|signin|sign-in|account|cart|carrello|checkout|privacy|cookie|wishlist|register|"
                        r"\.pdf$|\.jpg$|\.png$|mailto:|tel:|javascript:|whatsapp|facebook\.com|instagram\.com|twitter\.com|"
                        r"tiktok\.com|youtube\.com|linkedin\.com|pinterest\.com)", re.I)
@@ -83,14 +91,21 @@ _JS_FACT_TEXT = r"""
     const tag = n.tagName;
     if (/^H[1-6]$/.test(tag)) { heading = txt(n); out.push('\n' + heading + '\n'); return; }
     if (tag === 'TABLE') {
-      const rows = [...n.querySelectorAll('tr')].map(tr => [...tr.children].map(c => txt(c)));
+      const trs = [...n.querySelectorAll('tr')];
+      const rows = trs.map(tr => [...tr.children].map(c => txt(c)));
       let hdr = null;
-      if (rows.length > 1 && n.querySelector('th')) hdr = rows.shift();
+      const first = trs[0];
+      if (rows.length > 1 && first && [...first.children].length > 1 && [...first.children].every(c => c.tagName === 'TH')) hdr = rows.shift();
       const cap = (n.caption && txt(n.caption)) || heading;
-      for (const r of rows) {
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
         if (!r.filter(Boolean).length) continue;
-        const cells = hdr ? r.map((c, i) => (hdr[i] && c ? hdr[i] + ': ' : '') + c) : r;
-        out.push('\n' + (cap ? cap + ' — ' : '') + cells.filter(Boolean).join(' · ') + '\n');
+        const tr = trs[hdr ? i + 1 : i];
+        const rowHead = tr && tr.children[0] && tr.children[0].tagName === 'TH' && r.length === 2;
+        let cells;
+        if (rowHead) cells = [r[0] + ': ' + r[1]];                       // spec table: "Battery: 2000 mAh …"
+        else cells = hdr ? r.map((c, k) => (hdr[k] && c ? hdr[k] + ': ' : '') + c) : r;
+        out.push('\n' + (cap && !rowHead ? cap + ' — ' : '') + cells.filter(Boolean).join(' · ') + '\n');
       }
       return;
     }
@@ -104,6 +119,9 @@ _JS_FACT_TEXT = r"""
 }
 """
 
+STOP = {"the", "and", "for", "with", "this", "that", "your", "you", "are", "does", "can", "how", "what", "have", "has", "set", "from",
+        "about", "one", "two", "per", "con", "per", "della", "del", "che", "una", "uno", "les", "des", "und", "der", "die", "das", "mit",
+        "green", "nest", "store", "shop", "eco", "home", "product", "item", "buy", "order", "please", "hello", "hi", "thanks", "there"}
 SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-ZÀ-Þ0-9€])|\s+[·|]\s+")
 # the usual addresses of help pages, tried when the start page links to none of them
 GUESS_PATHS = ["faq", "help", "shipping", "returns", "contact", "delivery", "shipping-policy", "refund-policy", "return-policy",
@@ -156,6 +174,68 @@ def extract_facts(text, url):
     return facts
 
 
+DETAIL_JUNK = re.compile(r"^(add to (cart|bag|basket)|buy now|aggiungi|acquista|in den warenkorb|ajouter|quantity|quantità|share|condividi|"
+                         r"related|you may also like|potrebbero piacerti|customer reviews|recensioni|free returns|reso gratuito|"
+                         r"home|shop|cart|help|account|login|sign in|wishlist|write a review|description$|details$|dettagli$|specifications?$|"
+                         r"specifiche|care$|cura$|©)", re.I)
+AVAIL_RE = re.compile(r"(in stock|out of stock|sold out|only \d+ left|\d+ left|available|not available|disponibile|esaurito|non disponibile|"
+                      r"solo \d+ rimast|pre-?order|back in stock|ships in|spedito in|auf lager|ausverkauft|en stock|épuisé|rupture|op voorraad|uitverkocht)", re.I)
+
+
+def parse_product(text, url, title="", variants=None, shop_name=""):
+    """One product page → {name, price, availability, variants, details[], url} or None when it is not a product page."""
+    lines = [l.strip(" •·-–#") for l in text.splitlines()]
+    lines = [l for l in lines if l and l != shop_name]
+    if not lines:
+        return None
+    name = ""
+    for l in lines[:12]:                                                # the first short heading-like line that is not the shop name
+        if 4 <= len(l) <= 90 and not PRICE_RE.search(l) and not DETAIL_JUNK.search(l) and not AVAIL_RE.search(l) and not l.endswith(("?", ":")):
+            if title and l.lower() in title.lower():
+                name = l
+                break
+            if not name:
+                name = l
+    if title and (not name or name.lower() not in title.lower()):
+        t = re.split(r"\s+[|–—-]\s+", title)[0].strip()
+        if 4 <= len(t) <= 90 and not (shop_name and (t.lower() in shop_name.lower() or shop_name.lower() in t.lower())) \
+                and not re.search(r"(shop|store|negozio|boutique|home$|welcome|benvenut)", t, re.I):
+            name = t
+    price = ""
+    for l in lines[:40]:
+        m = PRICE_RE.search(l)
+        if m and not re.search(r"(free (over|above|from)|gratis (oltre|sopra|da)|shipping|spedizion|return|reso|discount|save|risparmi|was |instead of|invece di)", l, re.I):
+            price = m.group(0).strip()
+            break
+    if not price:
+        return None                                                     # a product page always shows a price
+    avail = ""
+    for l in lines[:60]:
+        if AVAIL_RE.search(l) and len(l) <= 120:
+            avail = l
+            break
+    details, seen = [], set()
+    for l in lines:
+        short_spec = 5 <= len(l) < 12 and re.search(r"\d", l) and re.search(r"[a-z]", l, re.I)      # "Weight 28 g", "2 years"
+        if not (12 <= len(l) <= 260 or short_spec) or DETAIL_JUNK.search(l) or l == name or l == avail:
+            continue
+        if PRICE_RE.search(l) and len(l) < 40:
+            continue
+        if JUNK.search(l) or re.search(r"(free returns within|customer reviews)", l, re.I):
+            continue
+        key = re.sub(r"\W+", " ", l.lower()).strip()[:100]
+        if key in seen:
+            continue
+        seen.add(key)
+        details.append(l)
+        if len(details) >= 18:
+            break
+    if not name:
+        return None
+    return {"name": name, "price": price, "availability": avail, "variants": [v for v in (variants or []) if v][:4], "details": details, "url": url,
+            "text": " ".join(lines)[:3000]}
+
+
 class ShopFacts:
     def __init__(self, tasks=None, log=None):
         self.tasks = tasks
@@ -185,8 +265,146 @@ class ShopFacts:
         return self.sheet.get("facts", [])
 
     @property
+    def products(self):
+        return self.sheet.get("products", [])
+
+    @property
     def url(self):
         return self.sheet.get("url", "")
+
+    # ---- products -----------------------------------------------------------
+    @staticmethod
+    def _words(text):
+        return set(w for w in re.findall(r"[a-zà-ÿ0-9]{3,}", text.lower()) if w not in STOP)
+
+    @staticmethod
+    def _stems(words):
+        return set(w[:-2] if w.endswith("es") and len(w) > 5 else (w[:-1] if w.endswith("s") and len(w) > 4 else w) for w in words)
+
+    def match_products(self, message, limit=2):
+        """Products the customer is talking about, best first: name words (and their singular forms) found in the message;
+        a single shared word is enough when it points at only one product ('the lamp', 'the mug')."""
+        if not self.products:
+            return []
+        mw = self._stems(self._words(message))
+        scored = []
+        for p in self.products:
+            nw = self._stems(self._words(p["name"] + " " + " ".join(p["details"][:1])))
+            hit = len(mw & nw)
+            if hit:
+                scored.append((hit, p))
+        if not scored:
+            return []
+        scored.sort(key=lambda x: -x[0])
+        best = scored[0][0]
+        top = [p for h, p in scored if h == best]
+        if best == 1 and len(top) > 1:                                   # one common word shared by several products → unsure
+            return []
+        if best == 1:                                                    # a single shared word must be the product itself, not a stray
+            hit = next(iter(mw & self._stems(self._words(top[0]["name"] + " " + " ".join(top[0]["details"][:1])))), "")
+            low = message.lower()
+            if re.search(r"\b" + re.escape(hit) + r"\w*\s+(number|call|line|support|shop|store|order|delivery|shipping|page|website|site)\b", low) \
+                    or re.search(r"\b(your|by|via|on the|over the)\s+" + re.escape(hit) + r"\w*\b", low):
+                return []                                                # "phone number", "your phone", "by phone" — not the phone case
+            if not re.search(r"\b(the|this|that|my|a|an|your|il|la|lo|le|questo|questa|der|die|das|le|la|un|une)\s+(\w+\s+){0,2}" + re.escape(hit) + r"\w*\b", low):
+                return []                                                # a product is talked about as "the mug", "this lamp", "my case"
+        return top[:limit] if best > 1 else top[:1]
+
+    def product_block(self, message):
+        """The product page(s) the message is about, as text for the reply writer ('' when none)."""
+        hits = self.match_products(message)
+        if not hits:
+            return ""
+        out = []
+        for p in hits:
+            lines = [f"PRODUCT: {p['name']} — price {p['price']}" + (f" — {p['availability']}" if p.get("availability") else "")]
+            if p.get("variants"):
+                lines += [f"options: {', '.join(v)}" for v in p["variants"]]
+            lines += [f"- {d}" for d in p["details"][:14]]
+            out.append("\n".join(lines))
+        return ("\nTHE PRODUCT PAGE(S) ON THE SHOP'S WEBSITE (copy specifications, materials, sizes, options and figures exactly; "
+                "if the page does not mention what the customer asks, say you will check with the owner — never guess):\n" + "\n".join(out))
+
+    GENERIC = {"come", "comes", "coming", "work", "works", "working", "does", "with", "what", "which", "have", "much", "many", "long",
+               "safe", "also", "really", "there", "please", "thanks", "thank", "hello", "would", "could", "should", "want", "need", "know",
+               "tell", "about", "this", "that", "your", "from", "into", "still", "order", "ordered", "bought", "item", "product", "price",
+               "cost", "costs", "when", "where", "will", "them", "they", "just", "like", "make", "made", "same", "good", "well", "size",
+               "sizes", "colour", "colours", "color", "colors", "option", "options", "available", "possible", "exactly", "kind", "type",
+               "last", "lasts", "hold", "holds", "take", "takes", "fits", "keep", "keeps", "look", "looks", "feel", "feels", "give",
+               "gives", "using", "used", "sure", "might", "maybe", "anyone", "someone", "question", "asking", "wondering", "interested",
+               "before", "after", "buying", "purchase", "purchasing", "actually", "real", "heavy", "light", "small", "large", "tall",
+               "wide", "high", "short", "included", "include", "includes", "supplied", "delivered", "arrive", "arrives", "quality",
+               "recommend", "suitable", "enough", "properly", "easily", "quickly", "normal", "regular", "standard", "different"}
+
+    def unmentioned(self, message, product):
+        """Content words of the question that the product page never mentions (a 'yes' about them would be invented)."""
+        page = (product.get("text", "") + " " + product["name"] + " " + " ".join(product["details"]) +
+                " " + " ".join(x for v in product.get("variants", []) for x in v)).lower()
+        facts = " ".join(f["text"] for f in self.facts).lower()
+        name_words = self._stems(self._words(product["name"]))
+        out = []
+        for w in re.findall(r"[a-zà-ÿ]{4,}", message.lower()):
+            if w in STOP or w in self.GENERIC or w in name_words or w[:-1] in name_words:
+                continue
+            stem = w[:5]
+            if stem in page or stem in facts:
+                continue
+            out.append(w)
+        return list(dict.fromkeys(out))
+
+    def contradiction(self, message, product):
+        """A product-page line that negates something the question asks about ('no iPhone 15 Pro Max version',
+        'no power adapter included') → that line, else ''."""
+        qwords = [w for w in re.findall(r"[a-z0-9à-ÿ]{3,}", message.lower()) if w not in STOP and w not in self.GENERIC]
+        for line in product["details"] + [product.get("text", "")]:
+            for m in re.finditer(r"\b(no|not|without|non|senza|kein|keine|pas de|sans|niet|geen)\b([^.;()]{0,60})", line, re.I):
+                span = m.group(2).lower()
+                hits = [w for w in qwords if len(w) >= 3 and w in span]
+                if len(hits) >= 2 or (hits and len(hits[0]) >= 6):
+                    start = max(0, line.rfind(".", 0, m.start()) + 1)
+                    seg = line[start:m.end()].strip(" ;,")
+                    if seg.count("(") > seg.count(")"):
+                        seg += ")"
+                    return seg
+        return ""
+
+    def best_detail(self, message, product, limit=2):
+        """The product-page line(s) that share most words with the question (for the safe template): up to `limit` lines,
+        one per part of the question, joined for quoting. Word matching is by 5-letter prefix (weigh ~ weight)."""
+        name_w = {w[:5] for w in self._words(product["name"])}
+        qw = {w[:5] for w in self._words(message) if w not in self.GENERIC} - name_w        # the product's own name words say nothing
+        if re.search(r"\b(price|cost|costs|how much (is|does it cost)|quanto costa|prezzo|preis|prix)\b", message.lower()):
+            qw.add("price")
+        cands = list(product["details"]) + ([f"{product['name']} price: {product['price']}"] if product.get("price") else [])
+        for v in product.get("variants", []):
+            cands.append("Options: " + ", ".join(v))
+        if re.search(r"\b(colou?rs?|colori|farben|couleurs?|kleuren|options?|models?|sizes?|versions?|variants?|which .* (come|available))\b", message.lower()):
+            qw.add("optio")
+        if re.search(r"\b(weigh|weight|heavy|light|grams?|peso|pesa|gewicht|poids)\b", message.lower()):
+            qw.add("weigh")
+        scored = []
+        for line in cands:
+            lw = {w[:5] for w in self._words(line)}
+            sc = len(qw & lw)
+            if sc:
+                scored.append((sc, line))
+        scored.sort(key=lambda x: -x[0])
+        picked, covered = [], set()
+        for sc, line in scored:
+            lw = {w[:5] for w in self._words(line)} & qw
+            if lw - covered:                                              # adds a part of the question not yet answered
+                picked.append(line)
+                covered |= lw
+            if len(picked) >= limit:
+                break
+        return '" and "'.join(picked)
+
+    def product_numbers(self):
+        out = set()
+        for p in self.products:
+            for t in [p["name"], p["price"], p.get("availability", "")] + p["details"] + [x for v in p.get("variants", []) for x in v]:
+                out.update(re.findall(r"\d+(?:[.,]\d+)?", t))
+        return out
 
     def stale(self):
         return bool(self.url) and time.time() - self.sheet.get("learned_at", 0) > REFRESH_DAYS * 86400
@@ -201,6 +419,11 @@ class ShopFacts:
         t0 = time.time()
         try:
             pages, walls = self.tasks.on_hands(lambda: self._crawl(self.tasks.browser(), url), timeout=420)
+            products = []
+            try:
+                products = self.tasks.on_hands(lambda: self._crawl_products(self.tasks.browser(), url), timeout=600)
+            except Exception as e:
+                self.log("shopfacts_products_failed", url=url, error=str(e)[:160])
         except Exception as e:
             self.log("shopfacts_failed", url=url, error=str(e)[:160])
             return f"I couldn't read {url}: {str(e)[:120]}"
@@ -209,7 +432,7 @@ class ShopFacts:
                 self.tasks._release_page()
             except Exception:
                 pass
-        if not pages:
+        if not pages and not products:
             return (f"I opened {url} but could not read anything useful" + (f" ({walls[0]} wall)." if walls else " (empty page).") +
                     " If your shop has a help or FAQ page, give me its address directly: /shop <address>")
         facts, seen = [], set()
@@ -222,16 +445,22 @@ class ShopFacts:
                 facts.append(f)
         facts = facts[:MAX_FACTS]
         old = {f["text"] for f in self.facts}
-        self.sheet = {"url": url, "learned_at": time.time(), "facts": facts,
+        old_products = {p["name"] for p in self.products}
+        self.sheet = {"url": url, "learned_at": time.time(), "facts": facts, "products": products[:MAX_PRODUCTS],
                       "pages": [{"url": p["url"], "title": p["title"], "chars": len(p["text"])} for p in pages]}
         self._save()
-        self.log("shopfacts_learned", url=url, pages=len(pages), facts=len(facts), seconds=int(time.time() - t0))
+        self.log("shopfacts_learned", url=url, pages=len(pages), facts=len(facts), products=len(products), seconds=int(time.time() - t0))
         changed = len([f for f in facts if f["text"] not in old])
         by_topic = {}
         for f in facts:
             by_topic.setdefault(f["topics"][0], 0)
             by_topic[f["topics"][0]] += 1
         rep = [f"I read {len(pages)} page(s) of {urllib.parse.urlparse(url).netloc or url}: " + "; ".join((p["title"] or p["url"])[:40] for p in pages) + "."]
+        if products:
+            newp = len([p for p in products if p["name"] not in old_products])
+            rep.append(f"{len(products)} product page(s) read: " + "; ".join(f"{p['name'][:40]} ({p['price']})" for p in products[:6]) +
+                       ("…" if len(products) > 6 else "") + (f" — {newp} new." if old_products else ".") +
+                       " Product questions (material, size, battery, compatibility, stock) will be answered from these pages.")
         if facts:
             rep.append(f"{len(facts)} facts kept (" + ", ".join(f"{k}: {v}" for k, v in by_topic.items()) + ")" +
                        (f" — {changed} new or changed since last time." if old else ".") + " Customer replies will use these exact words. A few examples:")
@@ -244,8 +473,10 @@ class ShopFacts:
         return "\n".join(rep)
 
     def _crawl(self, b, url):
-        """On the hands thread: open the start page, follow the help-like links, return [(url, title, text)], walls."""
+        """On the hands thread: open the start page, follow the help-like links, return [(url, title, text)], walls.
+        Product links seen on the way (listing pages, product-looking addresses) are remembered for _crawl_products."""
         pages, walls, todo, done = [], [], [(0, url)], set()
+        self._product_links, self._listing_links, self._shop_name = [], [], ""
         guessed = False
         while (todo or not guessed) and len(pages) < MAX_PAGES:
             if not todo:                                                  # no help links found → try the usual addresses
@@ -296,6 +527,10 @@ class ShopFacts:
             done.add(final)
             if len(text) > 40:
                 pages.append({"url": final, "title": title, "text": text[:15000]})
+                if len(pages) == 1:                                        # the start page's first line is usually the shop's name
+                    first = next((l.strip(" •·-–#") for l in text.splitlines() if l.strip(" •·-–#")), "")
+                    if 2 <= len(first) <= 60:
+                        self._shop_name = first
             if len(pages) >= MAX_PAGES:
                 break
             # follow help-like links from the first two pages (start page + first help page) and from any guessed page
@@ -309,11 +544,61 @@ class ShopFacts:
                     if not href or href in done or SKIP_LINK.search(href) or not _same_site(href, url):
                         continue
                     label = (l.get("text") or "")[:80]
+                    if PRODUCT_URL.search(href) and href not in self._product_links:
+                        self._product_links.append(href)
+                    elif (LISTING_WORDS.search(label) or LISTING_WORDS.search(href)) and href not in self._listing_links and href != url:
+                        self._listing_links.append(href)
                     for rank, (_, rx) in enumerate(PAGE_WORDS):
                         if re.search(rx, label, re.I) or re.search(rx, urllib.parse.unquote(href.rsplit("/", 1)[-1] or href), re.I):
                             todo.append((rank, href))
                             break
         return pages, walls
+
+    def _crawl_products(self, b, url):
+        """On the hands thread, after _crawl: open the listing pages, then each product page; return product dicts."""
+        products, seen_urls = [], set()
+        listing = list(dict.fromkeys(self._listing_links))[:3]
+        cand = list(dict.fromkeys(self._product_links))
+        for lu in listing:
+            try:
+                b.open(lu)
+                b.dismiss_banner()
+                if b.status() != "ok":
+                    continue
+                for l in b.links(limit=600):
+                    href = (l.get("href") or "").split("#")[0].strip()
+                    label = (l.get("text") or "").strip()
+                    if not href or href in cand or SKIP_LINK.search(href) or not _same_site(href, url) or href == lu:
+                        continue
+                    if PRODUCT_URL.search(href) or (PRICE_RE.search(label) and len(label) > 8):
+                        cand.append(href)
+                    elif len(label) >= 8 and not l.get("nav") and re.search(r"[a-z]", label, re.I) and not LISTING_WORDS.search(label) \
+                            and not re.search(r"(home|help|faq|contact|cart|account|login|about|blog|shipping|returns|continue shopping)", label, re.I):
+                        cand.append(href)
+            except Exception as e:
+                self.log("shopfacts_listing_failed", url=lu, error=str(e)[:100])
+        if not cand and not listing:                                      # single-page shop: the start page may itself be a product
+            cand = [url]
+        for pu in cand[:MAX_PRODUCT_PAGES]:
+            if pu in seen_urls:
+                continue
+            seen_urls.add(pu)
+            try:
+                b.open(pu)
+                b.dismiss_banner()
+                if b.status() != "ok":
+                    continue
+                text = b.page.evaluate(_JS_FACT_TEXT) or ""
+                variants = b.page.evaluate("""() => [...document.querySelectorAll('select')].map(s => [...s.options].map(o => o.textContent.trim()).filter(Boolean)).filter(a => a.length > 1 && a.length < 40)""")
+                title = b.page.title()[:100]
+                prod = parse_product(text, b.page.url, title, variants, shop_name=self._shop_name)
+                if prod:
+                    products.append(prod)
+            except Exception as e:
+                self.log("shopfacts_product_failed", url=pu, error=str(e)[:100])
+            if len(products) >= MAX_PRODUCTS:
+                break
+        return products
 
     # ---- use ----------------------------------------------------------------
     def relevant(self, message, limit=8):
@@ -349,20 +634,23 @@ class ShopFacts:
         out = set()
         for f in self.facts:
             out.update(re.findall(r"\d+(?:[.,]\d+)?", f["text"]))
-        return out
+        return out | self.product_numbers()
 
     def covers(self, topic):
         return any(topic in f["topics"] for f in self.facts)
 
     def best_sentence(self, message):
         rel = self.relevant(message, limit=1)
-        return rel[0]["text"] if rel else ""
+        if not rel:
+            return ""
+        return re.sub(r"^[^?]{0,140}\?\s*", "", rel[0]["text"])          # drop a glued FAQ question ("What is your return policy? ")
 
     def describe(self):
         if not self.url:
             return "shop pages: not read yet (/shop <address>)"
         age = int((time.time() - self.sheet.get("learned_at", 0)) / 86400)
-        return f"shop pages: {len(self.facts)} facts from {urllib.parse.urlparse(self.url).netloc or self.url} ({'today' if age == 0 else f'{age} d ago'})"
+        return (f"shop pages: {len(self.facts)} facts, {len(self.products)} products from {urllib.parse.urlparse(self.url).netloc or self.url} "
+                f"({'today' if age == 0 else f'{age} d ago'})")
 
     def sheet_text(self):
         if not self.url:
@@ -375,5 +663,8 @@ class ShopFacts:
         for k, v in by.items():
             out.append(f"\n{k.upper()}")
             out += [f"• {t[:200]}" for t in v]
+        if self.products:
+            out.append("\nPRODUCTS")
+            out += [f"• {p['name'][:60]} — {p['price']}" + (f" — {p['availability'][:40]}" if p.get("availability") else "") + f" ({len(p['details'])} details)" for p in self.products]
         out.append("\nRefresh: /shop <address> · forget: /shop forget")
         return "\n".join(out)

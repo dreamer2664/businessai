@@ -214,11 +214,17 @@ class Browser:
             url = "https://" + url
         self._check(url)
         t0 = time.time()
-        try:
-            self.page.goto(url, wait_until="domcontentloaded")
-            self.page.wait_for_load_state("networkidle", timeout=8000)
-        except Exception as e:
-            if "Timeout" not in type(e).__name__ and "timeout" not in str(e).lower():
+        for attempt in (1, 2):
+            try:
+                self.page.goto(url, wait_until="domcontentloaded")
+                self.page.wait_for_load_state("networkidle", timeout=8000)
+                break
+            except Exception as e:
+                if "Timeout" in type(e).__name__ or "timeout" in str(e).lower():
+                    break
+                if attempt == 1 and "interrupted by another navigation" in str(e):   # a dead link just before us left the tab mid-load
+                    time.sleep(0.8)
+                    continue
                 raise BrowserError(f"could not open {url}: {str(e)[:120]}")
         self.history.append(url)
         self.log("browser_open", url=url, ms=int((time.time() - t0) * 1000))
