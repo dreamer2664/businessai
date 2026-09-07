@@ -125,6 +125,10 @@ class Social:
             text = self._template(platform, topic, policy)
             checks = self._check(text, platform, topic, facts)
             note = "the thinking model was not available — this is a plain template"
+        elif checks:
+            tmpl = self._template(platform, topic, policy)
+            if not self._check(tmpl, platform, topic, facts):
+                text, checks, note = tmpl, [], "my own draft failed the checks (" + "; ".join(checks) + ") — this is the plain safe version; tap Try again for another attempt"
         return {"platform": platform, "topic": topic, "text": text, "checks": checks, "note": note, "chars": len(text)}
 
     def _template(self, platform, topic, policy):
@@ -137,6 +141,13 @@ class Social:
         text = re.sub(r"^(post|caption|here('s| is) (the|your) post)\s*:\s*", "", text, flags=re.I).strip()
         text = text.strip('"“” ')
         text = re.sub(r"!{2,}", "!", text)
+        emo = re.compile(r"[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]")
+        if len(emo.findall(text)) > 3:                                    # keep the first three emoji, drop the rest
+            seen = [0]
+            def keep(m):
+                seen[0] += 1
+                return m.group(0) if seen[0] <= 3 else ""
+            text = emo.sub(keep, text)
         limit, max_tags, _ = PLATFORMS[platform]
         tags = []
         for t in re.findall(r"#\w+", text):
