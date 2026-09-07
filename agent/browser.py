@@ -64,7 +64,8 @@ _JS_SNAPSHOT = r"""
     if (!vis(el)) continue; const lab = label(el); if (!lab && role(el) !== 'textbox') continue;
     const key = role(el) + '|' + lab + '|' + (el.getAttribute('href') || ''); if (seen.has(key)) continue; seen.add(key);
     n += 1; el.setAttribute('data-bai', String(n));
-    items.push({n, role: role(el), label: lab, href: el.tagName === 'A' ? el.href : undefined,
+    const nav = !!el.closest('nav, header, footer, aside, [role=navigation], [role=banner], [role=contentinfo], [role=menubar], .nav, .navbar, .menu, .sidebar, .side_categories, .breadcrumb');
+    items.push({n, role: role(el), label: lab, href: el.tagName === 'A' ? el.href : undefined, nav: nav || undefined,
                 value: (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? (el.value || '') : undefined});
     if (n >= maxItems) break;
   }
@@ -403,6 +404,27 @@ class Browser:
                 raise BrowserError(f"no element [{n}] on the current page (call read() again)")
         return loc.first
 
+    def _settle(self, url_before, sig_before, wait=6.0):
+        """After a click/Enter: some single-page shops change the address but never draw the new page (the old title and
+        heading stay on screen). Wait a little for a real change; if the address changed but title/heading did not, load
+        the new address itself — that always draws the page."""
+        t0 = time.time()
+        head = lambda sig: sig.split("|")[:2]                              # title + first heading
+        while time.time() - t0 < wait:
+            if self.page.url == url_before:
+                return False
+            if head(self._dom_sig()) != head(sig_before):
+                return False
+            time.sleep(0.7)
+        try:
+            url = self.page.url
+            self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            time.sleep(1.5)
+            self.log("browser_reload_after_stuck_route", url=url[:120])
+            return True
+        except Exception:
+            return False
+
     def _dom_sig(self):
         """Cheap fingerprint of what is on the page (to notice a click that changed nothing): title, first heading,
         number of links, and whether a dialog is open. Rotating banners do not change it; a real navigation or popup does."""
@@ -437,6 +459,8 @@ class Browser:
         except Exception:
             pass
         href = it.get("href") or ""
+        if len(self._ctx.pages) == before and self.page.url != url_before:
+            self._settle(url_before, sig_before)
         if href.startswith("http") and len(self._ctx.pages) == before and self.page.url == url_before \
                 and href.split("#")[0] != url_before.split("#")[0]:
             time.sleep(1.0)                                    # some shops' scripts swallow the click: if nothing changed, open the link's address
@@ -451,6 +475,7 @@ class Browser:
     def type(self, n, text, enter=False):
         it = self._item(n)
         el = self._el(n)
+        url_before, sig_before = self.page.url, self._dom_sig()
         el.click(timeout=8000)
         # Some sites (Wikipedia, many shops) swap the search box for a new widget on focus, so the numbered element
         # goes stale. After the click the keyboard goes to whatever is focused, so type through the page keyboard.
@@ -470,6 +495,8 @@ class Browser:
             except Exception:
                 pass
             time.sleep(0.5)
+            if self.page.url != url_before:
+                self._settle(url_before, sig_before)
         self.log("browser_type", n=int(n), label=it.get("label"), text=text[:80], enter=enter)
         self._show(f"Typed '{text[:40]}' into '{it.get('label')}'")
         return self.read() if enter else f"typed into [{n}] {it.get('label')!r}"

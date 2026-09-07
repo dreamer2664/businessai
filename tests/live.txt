@@ -1,0 +1,17 @@
+# Live-site operator score set: url<TAB>goal<TAB>expected
+# Real shops change and sometimes block robots, so the expectation has two kinds:
+#   words           = the report must contain one of the alternatives ("a|b"), AND no wrong figure is accepted
+#   WALL            = the site is known to block robots or fail for them: the report must be an honest refusal
+#                     (bot-check / error page / could not reach) within 60 s — never an invented answer
+# A row also passes when the site is unreachable from the machine at the time (network), reported as SKIP.
+# Scorer: engine/scripts/score_live.py [filter] (uses the real browser + local thinking model; 10-25 min)
+https://www.mediaworld.it/it/	Does this shop have a page about returns (resi)? What is the return window?	30|14
+https://www.unieuro.it/online/	How much does standard home delivery cost in this shop?	150|massimo|maximum
+https://www.unieuro.it/online/	Search this shop for 'spazzolino elettrico' and tell me the price of the first result	€
+https://www.ikea.com/it/it/search/?q=billy	What is the cheapest BILLY bookcase on this page and its price?	€
+https://www.amazon.it/s?k=spazzolino+bambu	What is the price of the first bamboo toothbrush in the results?	€
+https://books.toscrape.com/	Open the first book on the page and tell me its price and availability	£|In stock
+https://www.mediaworld.it/it/	How can I contact this shop's customer service?	contatt|telefono|chat|e-mail|email|form|modulo
+https://www.ikea.com/it/it/p/billy-libreria-bianco-00263850/	What is the price of this item?	WALL
+https://www.etsy.com/it/search?q=bamboo+toothbrush	What is the price of the first result?	WALL
+https://www.decathlon.it/search?Ntt=spazzolino	What is the price of the first result?	WALL

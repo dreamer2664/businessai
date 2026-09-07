@@ -503,6 +503,7 @@ class Operator:
                     full = b.extract_text()
                 items = [(it.get("n"), (it.get("label") or "")[:80], it.get("role", "")) for it in (b.items or [])]
                 values = {it.get("n"): it.get("value") for it in (b.items or []) if it.get("value") is not None}
+                values["__nav__"] = {it.get("n") for it in (b.items or []) if it.get("nav")}      # items inside menus/header/footer
                 return st, shot, full[:12000], b.page.url, b.page.title(), items, banner, values
             try:
                 st, shot, full, url, title, items, banner, values = self.tasks.on_hands(lambda: grab(self.tasks.browser()), timeout=60)
@@ -618,6 +619,20 @@ class Operator:
                     if n is not None:
                         label = next((lab for k, lab, _ in seen.get("items", []) if k == n), want)
                         return {"step": "click", "target": label}
+            # "open the first/second/last <thing>" → the n-th product-looking link (a title, not a menu entry or a buy button)
+            mo = re.match(r"^\s*(?:open|go to|click|click on|visit|show)\s+(?:the\s+)?(first|second|third|last|1st|2nd|3rd)\s+([a-z][a-z -]{1,40}?)(?:\s+(?:on|in|of)\s+(?:the|this)\s+(?:page|list|results?))?(?:\s+(?:and|then|,)\b|\s*$)", goal, re.I)
+            if mo and not any("opened the " in h for h in self.history):
+                idx = {"first": 0, "1st": 0, "second": 1, "2nd": 1, "third": 2, "3rd": 2, "last": -1}[mo.group(1).lower()]
+                nav_ids = (seen.get("values") or {}).get("__nav__") or set()
+                cands = [lab for n, lab, role in seen.get("items") or []
+                         if role == "link" and lab and len(lab) >= 8 and n not in nav_ids and not DANGER.search(lab)
+                         and not re.match(r"^(home|shop|cart|basket|account|login|sign|register|help|contact|about|menu|search|next|previous|all |view |see |show |more|skip|back|torna|vai|clicca|click|"
+                                          r"hai bisogno|need help|inizia|start|passa a|opzione|option|sono disponibili|available in|compare|confronta)\b", lab.lower())
+                         and not re.search(r"^(https?://|www\.)", lab.lower())
+                         and not re.match(r"^(passa|skip|salta|vai|go|jump|torna|back)\b", lab.lower())]
+                if cands and (len(cands) > abs(idx) or idx == -1):
+                    self.history.append(f"opened the {mo.group(1).lower()} {mo.group(2).strip()}: '{cands[idx][:60]}'")
+                    return {"step": "click", "target": cands[idx]}
             return None
         term = m.group(1).strip()
         if any(("typed into" in h and term.lower() in h.lower()) for h in self.history):
@@ -678,7 +693,9 @@ class Operator:
     ERROR_PAGE = re.compile(r"\b(something went wrong( on our end)?|page not found|404 not found|error 404|this page (isn'?t|is not) available|"
                             r"page (doesn'?t|does not) exist|we couldn'?t find that page|service unavailable|503|access denied|"
                             r"site can'?t be reached|this site can'?t be reached|try refreshing the page|temporarily unavailable|"
-                            r"qualcosa è andato storto|pagina non trovata|seite nicht gefunden|page introuvable)\b", re.I)
+                            r"qualcosa è andato storto|pagina non trovata|seite nicht gefunden|page introuvable|"
+                            r"ci dispiace|si è verificato un errore|es ist ein fehler aufgetreten|une erreur s'est produite|"
+                            r"sorry,? (something|we) |an error (has )?occurred|we're sorry)\b", re.I)
 
     def _error_page(self, seen):
         """A site error page (eBay 'Something went wrong', 404s…): short, with the error words near the top."""
