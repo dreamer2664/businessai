@@ -223,6 +223,8 @@ class Operator:
         """Read the same question off several pages, then answer once across all of them (compare / which is cheapest)."""
         t0 = time.time()
         findings = []
+        per_page = self._per_page_question(goal)
+        self.history.append(f"on each page I look for: {per_page}")
         for i, u in enumerate(urls[:MAX_PAGES], 1):
             r = self._browser_open(u)
             self.history.append(f"opened page {i}: {u} → {r}")
@@ -233,15 +235,17 @@ class Operator:
             if seen.get("wall"):
                 findings.append((u, f"({seen['wall']} — skipped)"))
                 continue
-            fact = self._try_answer(f"{goal} (about THIS page only; give the concrete figures/words)", seen) or \
-                   self._try_answer(re.sub(r"\b(which|what)\b.*?\b(cheapest|best|fastest|lowest|highest|most|least)\b", "what is the price / value asked about", goal, flags=re.I), seen)
+            fact = self._try_answer(per_page, seen, partial=True)
             findings.append((seen.get("title") or u, fact or "(nothing relevant on this page)"))
             self.history.append(f"page {i} ({(seen.get('title') or u)[:40]}): {fact or 'nothing relevant'}"[:200])
         table = "\n".join(f"- {t[:70]}: {f}" for t, f in findings)
+        ranked = self._rank(goal, findings)
+        if ranked:
+            return self._finish(f"{ranked}\n{table}", t0, len(findings))
         try:
             raw = self.planner.chat("You compare findings from several web pages for your owner. Use only the findings given; never add outside knowledge.",
-                                    f"GOAL: {goal}\n\nFINDINGS (one line per page):\n{table}\n\nAnswer the goal in one or two plain sentences, naming the page(s) and the figures. "
-                                    f"If the findings do not settle it, say which page lacks the information.", max_tokens=120, timeout=200)
+                                    f"QUESTION: {goal}\n\nWHAT EACH PAGE SAYS:\n{table}\n\nCompare the pages line by line and answer the question in one or two plain sentences, "
+                                    f"naming the winning page and quoting its figures. If a page says nothing relevant, ignore it.", max_tokens=120, timeout=200)
             summary = raw.strip()
             if not self._grounded(summary, table.lower(), goal):
                 summary = "Here is what each page says (I could not settle the comparison from that):"
@@ -249,6 +253,106 @@ class Operator:
             self.log("operator_compare_failed", error=str(e)[:80])
             summary = "Here is what each page says:"
         return self._finish(f"{summary}\n{table}", t0, len(findings))
+
+    SUPERLATIVES = {"cheapest": -1, "lowest": -1, "smallest": -1, "shortest": -1, "fastest": -1, "quickest": -1, "least": -1, "fewest": -1, "earliest": -1,
+                    "most expensive": 1, "highest": 1, "largest": 1, "biggest": 1, "longest": 1, "slowest": 1, "most": 1, "latest": 1}
+
+    @staticmethod
+    def _numbers(text, facet):
+        """Figures in a finding, chosen by facet: prices → currency-marked numbers; times → numbers with days/weeks; else all numbers."""
+        def val(t):
+            t = t.replace(" ", "")
+            if re.fullmatch(r"\d{1,3}(\.\d{3})+,\d+", t) or re.fullmatch(r"\d+,\d{1,2}", t):
+                t = t.replace(".", "").replace(",", ".")                    # 1.234,56 / 2,10 (European)
+            elif re.fullmatch(r"\d{1,3}(,\d{3})+(\.\d+)?", t):
+                t = t.replace(",", "")                                      # 1,234.56 (English)
+            try:
+                return float(t)
+            except ValueError:
+                return None
+        if re.search(r"\b(price|cost|cheap|expensive|fee|charge|rate)\b|€|\$|£", facet, re.I):
+            found = re.findall(r"(?:€|\$|£|eur|usd|gbp)\s*(\d[\d.,]*\d|\d)|(\d[\d.,]*\d|\d)\s*(?:€|\$|£|eur|usd|gbp)\b", text, re.I)
+            nums = [val(a or b) for a, b in found]
+        elif re.search(r"\b(time|delivery|lead|days?|weeks?|ship|fast|slow|quick)\b", facet, re.I):
+            found = re.findall(r"(\d[\d.,]*\d|\d)\s*(?:[-–]\s*(\d[\d.,]*\d|\d)\s*)?(business\s+)?(day|week|hour|month)s?\b", text, re.I)
+            nums = []
+            for a, b, _, unit in found:
+                v = val(b or a)                                             # a range "2–3 days" is judged by its upper end
+                if v is not None:
+                    nums.append(v * {"day": 1, "week": 7, "hour": 1 / 24, "month": 30}[unit.lower()])
+        else:
+            nums = [val(x) for x in re.findall(r"\d[\d.,]*\d|\d", text)]
+        return [n for n in nums if n is not None]
+
+    def _rank(self, goal, findings):
+        """For 'which is cheapest / lowest / fastest …' goals: compare the figures in code (small models get this wrong)."""
+        g = goal.lower()
+        sup = next((k for k in sorted(self.SUPERLATIVES, key=len, reverse=True) if re.search(r"\b" + k + r"\b", g)), None)
+        if not sup:
+            return ""
+        facet = self._per_page_question(goal)
+        rows = []
+        for title, fact in findings:
+            if fact.startswith("("):
+                continue
+            nums = self._numbers(fact, facet)
+            if nums:
+                rows.append((title, nums[0], fact))
+        if len(rows) < 2:
+            return ""
+        direction = self.SUPERLATIVES[sup]           # -1 = smallest wins, +1 = largest wins
+        rows.sort(key=lambda r: r[1], reverse=(direction > 0))
+        best = rows[0]
+        ties = [r for r in rows if r[1] == best[1]]
+        cur = re.search(r"€|\$|£", " ".join(f for _, _, f in rows))
+        unit = "" if not re.search(r"\b(time|delivery|lead|days?|fast|slow|quick|long|short)\b", facet, re.I) else " days"
+        def show(v):
+            num = f"{v:g}" if v != int(v) else f"{int(v)}"
+            if cur and re.search(r"\b(price|cost|cheap|expensive|fee|charge|rate)\b", facet, re.I):
+                return f"{cur.group(0)} {num}"
+            return num + unit
+        if len(ties) > 1:
+            return f"It's a tie for {sup} ({show(best[1])}): " + " and ".join(r[0][:50] for r in ties) + "."
+        others = ", ".join(f"{r[0][:40]} {show(r[1])}" for r in rows[1:])
+        note = "" if len(rows) == len([f for _, f in findings if not f.startswith("(")]) else " (pages without a clear figure were left out)"
+        return f"{sup.capitalize()}: {best[0][:60]} — {show(best[1])} (others: {others}){note}."
+
+    def _per_page_question(self, goal):
+        """'Which supplier is cheapest per pack and what is its lead time?' → 'What is the price per pack and the lead time?'
+        (a fact question each page can answer on its own; the comparison happens afterwards)."""
+        g = goal.strip().rstrip("?.! ")
+        m = re.match(r"^(?:which|what|who)\b.*?\b(?:is|are|has|have|offers?|gives?)\s+(?:the\s+)?(cheapest|lowest|best|fastest|quickest|shortest|highest|most expensive|largest|biggest|smallest|closest|nearest|longest|slowest)\b\s*(.*)$", g, re.I)
+        if m:
+            sup, rest = m.group(1).lower(), m.group(2).strip()
+            rest = re.sub(r",?\s*and\s+(?:what|which|how)\b.*?\b(?:its|their|the)\s+", " and the ", rest, flags=re.I)
+            noun_first = re.match(r"^([a-z][a-z -]{2,30}?)(?:\s+(?:to|for|per|in|on|at|of|from)\b.*)?$", rest, re.I)      # "fastest delivery to Germany", "lowest minimum order"
+            if sup in ("cheapest", "lowest", "most expensive", "highest") and not noun_first:
+                facet = "price"
+            elif noun_first:
+                facet = noun_first.group(1).strip()                                    # the thing being compared is named right after the superlative
+                rest = rest[len(noun_first.group(1)):].strip()
+                if sup in ("cheapest", "most expensive") and facet not in ("price", "cost"):
+                    facet = "price " + facet
+            else:
+                facet = {"fastest": "delivery / lead time", "quickest": "delivery / lead time", "shortest": "lead time", "longest": "lead time", "slowest": "lead time",
+                         "largest": "size", "biggest": "size", "smallest": "size", "closest": "location", "nearest": "location", "best": "offer"}.get(sup, "value")
+            q = f"What is the {facet}{(' ' + rest) if rest else ''}"
+            return re.sub(r"\s+", " ", q).strip() + "?"
+        m = re.match(r"^(?:which|who)\s+(\w[\w ]*?)\s+(ships?|delivers?|offers?|has|have|sells?|accepts?|provides?|takes?|gives?|charges?|requires?)\b\s*(.*)$", g, re.I)
+        if m:
+            noun, verb, rest = m.group(1), m.group(2), m.group(3)
+            facet = {"ship": "shipping origin / where it ships from", "deliver": "delivery", "charge": "charges", "require": "requirements"}.get(verb.rstrip("s"), None)
+            verb_base = re.sub(r"(?<!s)s$", "", verb)                                 # "ships" → "ship"
+            return (f"Does this {noun} {verb_base} {rest}? Quote the exact words about {facet}." if facet else f"Does this {noun} {verb_base} {rest}? Quote the exact words.")
+        try:
+            raw = self.planner.chat("You rewrite questions.", f"Rewrite this comparison question as a simple fact question that ONE web page can answer about itself, "
+                                    f"keeping every detail (quantities, units): \"{goal}\"\nReply with the question only.", max_tokens=40, timeout=120)
+            q = raw.strip().splitlines()[0].strip().strip('"')
+            if 8 < len(q) < 160:
+                return q
+        except Exception:
+            pass
+        return goal
 
     # ---- forms --------------------------------------------------------------------------------
     @staticmethod
@@ -509,8 +613,9 @@ class Operator:
         g = goal.strip().lower()
         return bool(re.match(r"^(what|which|when|where|who|how|why|is|are|does|do|can|find out|find|tell me|check|look up|read|list|show me|summari[sz]e|count)\b", g)) or g.endswith("?")
 
-    def _try_answer(self, goal, seen):
-        """Question goals: answer from the screen text only; '' when it is not there."""
+    def _try_answer(self, goal, seen, partial=False):
+        """Question goals: answer from the screen text only; '' when it is not there.
+        partial=True (compare mode): answer the parts that are there, 'not stated' for the rest."""
         full = seen.get("fulltext") or ""
         screen = self._relevant(goal, full) if len(full) > 3000 else self._screen_text(seen)
         screen = re.sub(r"[ \t]{2,}", " ", re.sub(r"\[\s*\d+\s*\]\s*", "", screen))     # drop [n] element numbers: they confuse the reader
@@ -528,14 +633,18 @@ class Operator:
         if len(screen) < 40:
             return ""
         try:
+            tail = ("Answer every part you can in one short sentence, quoting the exact words and figures from the text; a general value that applies "
+                    "(e.g. one price for any quantity) counts. For a part the text really lacks, write 'not stated'.") if partial else \
+                   "Answer in one short sentence, quoting the exact words and figures from the text."
             raw = self.planner.chat("You are a careful reader. Use only the given text. Never add outside knowledge.",
-                                    f"TEXT:\n{screen[:3000]}\n\nUsing only the TEXT above: {goal}\nAnswer in one short sentence, quoting the exact words and figures from the text.",
-                                    max_tokens=70, timeout=200)
+                                    f"TEXT:\n{screen[:3000]}\n\nUsing only the TEXT above: {goal}\n{tail}",
+                                    max_tokens=80, timeout=200)
         except Exception as e:
             self.log("operator_read_failed", error=str(e)[:80])
             return ""
         raw = raw.strip().splitlines()[0].strip().strip('"') if raw.strip() else ""
-        if not raw or re.search(r"\b(not on screen|does not|doesn't|do not|no information|not mention|not provide|not specif|not state|not say|cannot be determined|unknown|unclear)\b", raw, re.I):
+        negative = re.search(r"\b(not on screen|does not|doesn't|do not|no information|not mention|not provide|not specif|not state|not say|cannot be determined|unknown|unclear)\b", raw, re.I)
+        if not raw or (negative and not (partial and re.search(r"\d", raw))):
             return ""
         if re.search(r"\b(how many|how much|price|cost|when|year|date|number of|count)\b", goal.lower()) and not re.search(r"\d", raw):
             return ""                                               # a counting/price/date question needs a figure
@@ -625,7 +734,8 @@ class Operator:
         def norm(t):                                   # "12.90" == "12,90" == "12 90"; "1,000" == "1000"
             return re.sub(r"[.,\s]", "", t)
         screen_nums = {norm(n) for n in re.findall(r"\d[\d.,\s]*\d|\d", screen)}
-        nums = [norm(n) for n in re.findall(r"\d[\d.,]*\d|\d", answer)]
+        goal_nums = {norm(n) for n in re.findall(r"\d[\d.,]*\d|\d", goal)}
+        nums = [norm(n) for n in re.findall(r"\d[\d.,]*\d|\d", answer) if norm(n) not in goal_nums]
         if nums and not all(n in screen_nums or n in norm(screen) for n in nums):
             return False
         stop = ("found", "there", "which", "about", "their", "these", "those", "answer", "shows", "screen", "contains", "costs", "pieces", "piece",
