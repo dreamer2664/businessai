@@ -98,7 +98,12 @@ class BrowserError(Exception):
 
 
 class Browser:
-    def __init__(self, headless=None, allow_actions=False, log=None, state_dir=None, viewer=None):
+    # one renderer for all tabs, no site-isolation processes, no background chatter: ~150-250 MB less on heavy shop pages
+    LEAN_ARGS = ["--renderer-process-limit=1", "--process-per-site", "--disable-features=BackForwardCache,IsolateOrigins,site-per-process,Translate,OptimizationHints",
+                 "--disable-background-networking", "--disable-component-update", "--disable-extensions", "--mute-audio", "--no-first-run",
+                 "--disable-dev-shm-usage"]
+
+    def __init__(self, headless=None, allow_actions=False, log=None, state_dir=None, viewer=None, lean=False):
         """headless=None → visible window when a display exists (or BAI_HEADED=1), else invisible.
         viewer: agent.viewer.Viewer — receives a screenshot + a plain-words line after every step."""
         from playwright.sync_api import sync_playwright
@@ -108,7 +113,7 @@ class Browser:
             want_headed = os.environ.get("BAI_HEADED", "").lower() in ("1", "true", "yes") or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
             headless = not want_headed
         self._pw = sync_playwright().start()
-        launch = dict(args=["--disable-gpu", "--no-sandbox"])
+        launch = dict(args=["--disable-gpu", "--no-sandbox"] + self.LEAN_ARGS + (["--in-process-gpu"] if headless else []))
         try:
             self._browser = self._pw.chromium.launch(headless=headless, slow_mo=0 if headless else 250, **launch)
         except Exception as e:
@@ -122,6 +127,9 @@ class Browser:
                                               user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                                                           "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"))
         self._ctx.set_default_timeout(20000)
+        self.lean = lean
+        if lean:                                   # small machines: no pictures, videos or web fonts — the text is what I read anyway
+            self._ctx.route("**/*", lambda route: route.abort() if route.request.resource_type in ("image", "media", "font") else route.continue_())
         self.allow_actions = allow_actions
         self.state_dir = state_dir or (config.STATE_DIR / "browser")
         self.state_dir.mkdir(parents=True, exist_ok=True)

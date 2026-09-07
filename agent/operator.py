@@ -483,7 +483,7 @@ class Operator:
         if where == "browser":
             def grab(b):
                 banner = b.dismiss_banner() if hasattr(b, "dismiss_banner") else ""
-                b.snapshot()
+                b.snapshot(max_items=400)          # footers matter: returns / contact / shipping links sit past item 150 on big shops
                 st = b.status()
                 shot = b.page.screenshot(type="png", timeout=8000)
                 try:
@@ -699,8 +699,8 @@ class Operator:
                 "has", "shop", "window", "long", "much"}
 
     SYNONYMS = {
-        "returns": ("return", "resi", "reso", "rückgabe", "retour", "retours", "devoluciones", "refund", "rimborso"),
-        "return": ("returns", "resi", "reso", "rückgabe", "retour", "devolución"),
+        "returns": ("return", "resi", "reso", "recesso", "restituzione", "restituzioni", "rückgabe", "widerruf", "retour", "retours", "devoluciones", "refund", "rimborso"),
+        "return": ("returns", "resi", "reso", "recesso", "restituzione", "rückgabe", "widerruf", "retour", "devolución"),
         "refund": ("refunds", "rimborso", "rimborsi", "erstattung", "remboursement", "reembolso"),
         "shipping": ("delivery", "spedizione", "spedizioni", "consegna", "versand", "lieferung", "livraison", "envío", "envíos"),
         "delivery": ("shipping", "consegna", "spedizione", "lieferung", "livraison", "entrega"),
@@ -724,16 +724,16 @@ class Operator:
         gw = {w for w in re.findall(r"[a-z]{3,}", goal.lower()) if w not in self.NAV_STOP}
         for w in list(gw):                                                   # the page may be in another language
             gw |= set(self.SYNONYMS.get(w, ()))
-        stems = {w[:5] for w in gw}
+        stems = {w[:5] for w in gw if len(w) >= 6}                           # short words ("about", "resi") match whole only
         best, best_sc = None, 0
         for n, label, role in seen.get("items") or []:
             lab = (label or "").strip()
             low = lab.lower()
             if not lab or role not in ("link", "button") or ("click", low) in done_sigs or DANGER.search(lab):
                 continue
-            lw = re.findall(r"[a-z]{3,}", low)
-            sc = sum(2 for w in lw if w in gw) + sum(1 for w in lw if w[:5] in stems)
-            if sc > best_sc:
+            lw = re.findall(r"[a-zà-ü]{3,}", low)
+            sc = sum(2 for w in lw if w in gw) + sum(1 for w in lw if w not in gw and w[:5] in stems)
+            if sc > best_sc or (sc == best_sc and best and sc and len(lab) < len(best)):   # ties → the shorter, plainer label
                 best, best_sc = lab, sc
         if best:
             return best

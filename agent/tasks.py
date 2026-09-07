@@ -115,7 +115,7 @@ class Tasks:
     # ---- one browser, reused (so the owner can watch one window instead of a flicker of new ones) ----
     def browser(self):
         if self._browser is None or not self._browser.alive():
-            self._browser = Browser(log=self.log, viewer=self.viewer)
+            self._browser = Browser(log=self.log, viewer=self.viewer, lean=self.low_mem)
         return self._browser
 
     def close_browser(self):
