@@ -336,8 +336,12 @@ class Operator:
             else:
                 facet = {"fastest": "delivery / lead time", "quickest": "delivery / lead time", "shortest": "lead time", "longest": "lead time", "slowest": "lead time",
                          "largest": "size", "biggest": "size", "smallest": "size", "closest": "location", "nearest": "location", "best": "offer"}.get(sup, "value")
+            ctx = re.search(r"\b(?:for|at|with|of)\s+(\d[\d.,]*\s*(?:\w+)?)", rest)
+            if ctx:                                                                    # "for 200 packs" → context, not part of the fact asked for
+                rest = (rest[:ctx.start()] + rest[ctx.end():]).strip(" ,")
             q = f"What is the {facet}{(' ' + rest) if rest else ''}"
-            return re.sub(r"\s+", " ", q).strip() + "?"
+            q = re.sub(r"\s+", " ", q).strip() + "?"
+            return q + (f" (we would order {ctx.group(1).strip()}; if there are price tiers, copy the one that fits)" if ctx else "")
         m = re.match(r"^(?:which|who)\s+(\w[\w ]*?)\s+(ships?|delivers?|offers?|has|have|sells?|accepts?|provides?|takes?|gives?|charges?|requires?)\b\s*(.*)$", g, re.I)
         if m:
             noun, verb, rest = m.group(1), m.group(2), m.group(3)
@@ -633,8 +637,9 @@ class Operator:
         if len(screen) < 40:
             return ""
         try:
-            tail = ("Answer every part you can in one short sentence, quoting the exact words and figures from the text; a general value that applies "
-                    "(e.g. one price for any quantity) counts. For a part the text really lacks, write 'not stated'.") if partial else \
+            tail = ("Copy the relevant figures exactly as written in the text (do not calculate, convert or multiply anything). "
+                    "If the text gives several tiers, copy the tier that fits. Answer every part you can in one short sentence; for a part the text "
+                    "really lacks, write 'not stated'.") if partial else \
                    "Answer in one short sentence, quoting the exact words and figures from the text."
             raw = self.planner.chat("You are a careful reader. Use only the given text. Never add outside knowledge.",
                                     f"TEXT:\n{screen[:3000]}\n\nUsing only the TEXT above: {goal}\n{tail}",

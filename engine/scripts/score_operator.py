@@ -26,8 +26,9 @@ for page, goal, expect in rows:
     want_ask = next((p[4:] for p in parts if p.startswith("ASK:")), None)
     allow_click = want_ask is not None and not any(p == "STOP" for p in parts)
     t0 = time.time()
+    start = [f"file://{PAGES}/{pg}" for pg in page.split()]
     try:
-        out = O.run(goal, where="browser", start_url=f"file://{PAGES}/{page}")
+        out = O.run(goal, where="browser", start_url=start if len(start) > 1 else start[0])
     except Exception as e:
         out = f"ERROR {e}"
     report = out.split("\nWhat I did")[0]
@@ -40,7 +41,7 @@ for page, goal, expect in rows:
         else:
             ok &= any(alt.lower() in report.lower() for alt in p.split("|"))
     score += ok
-    line = f"{'OK ' if ok else 'BAD'} {int(time.time() - t0):4d}s  {page:12s} {goal[:58]:58s} → {report[:90]!r}"
+    line = f"{'OK ' if ok else 'BAD'} {int(time.time() - t0):4d}s  {page[:12]:12s} {goal[:58]:58s} → {report[:90]!r}"
     print(line, flush=True); lines.append(line)
 T.close_browser(); P.stop()
 print(f"\nOPERATOR SCORE: {score}/{len(rows)}  ({int(time.time() - t_all)} s)")
