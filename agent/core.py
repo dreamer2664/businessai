@@ -617,6 +617,8 @@ class Agent:
             arg = re.sub(r"^(desktop|screen)\b[:\s]*", "", arg, flags=re.I).strip()
             if not self.desktop.available():
                 return "I have no desktop hands here yet — run: sh scripts/install_desktop.sh (then /eyes to check)."
+        if len(arg) < 4:
+            return "And the goal? e.g. /do desktop what is written on my screen right now?" if where == "desktop" else "And the goal? e.g. /do en.wikipedia.org/wiki/Etsy | in which year was Etsy founded?"
         start_url, goal = None, arg
         if where == "browser":
             m = re.match(r"^((?:https?|file)://\S+|[a-z0-9.-]+\.[a-z]{2,}\S*)\s*[|—-]?\s*(.*)$", arg, re.I | re.S)
