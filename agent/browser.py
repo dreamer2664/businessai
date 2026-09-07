@@ -275,8 +275,8 @@ class Browser:
     _JS_COOKIE = r"""
 () => {
   const words = /(cookie|consent|privacy|gdpr|tracking|personal information)/i;
-  const rejectRe = /^(reject( all)?( cookies)?|decline( all)?|refuse( all)?|deny( all)?|only (essential|necessary|required)( cookies)?|(essential|necessary|required)( cookies)? only|use (essential|necessary)( cookies)? only|continue without (accepting|agreeing)|no,? thanks|do not (sell|share)( or share)?( my)?( personal)?( information| data)?|opt out|rifiuta( tutto)?|solo (essenziali|necessari)|ablehnen|alle ablehnen|nur notwendige|tout refuser|rechazar( todo)?)$/i;
-  const okRe = /^(ok|okay|got it|i understand|understood|close|closer|dismiss|x|✕|×|accept|accept all|allow all|agree|i agree|accept( all)? cookies|yes,? i agree|accetta( tutto)?|ho capito|chiudi|alle akzeptieren|akzeptieren|schließen|tout accepter|fermer|aceptar( todo)?|cerrar)$/i;
+  const rejectRe = /^(reject( all)?( cookies)?|decline( all)?|refuse( all)?|deny( all)?|only (essential|necessary|required)( cookies)?|(essential|necessary|required)( cookies)? only|use (essential|necessary)( cookies)? only|continue without (accepting|agreeing)|no,? thanks|do not (sell|share)( or share)?( my)?( personal)?( information| data)?|opt out|rifiuta( tutto| tutti)?( i cookie)?|rifiuto|non accetto|continua senza accettare|solo (i )?(cookie )?(essenziali|necessari|tecnici)|ablehnen|alle ablehnen|nur notwendige( cookies)?|nur erforderliche|tout refuser|refuser( tout)?|continuer sans accepter|rechazar( todo| todas)?|solo (las )?necesarias|alles weigeren|weigeren|alleen noodzakelijk)$/i;
+  const okRe = /^(ok|okay|got it|i understand|understood|close|closer|dismiss|x|✕|×|accept|accept all|allow all|agree|i agree|accept( all)? cookies|yes,? i agree|accetta( tutto| tutti)?( i cookie)?|accetto|ho capito|chiudi|va bene|alle akzeptieren|akzeptieren|zustimmen|einverstanden|schließen|tout accepter|accepter( tout)?|j'accepte|fermer|aceptar( todo| todas)?|cerrar|alles accepteren|accepteren|akkoord|sluiten)$/i;
   const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
   const cands = Array.from(document.querySelectorAll('div, section, aside, dialog, footer, form, [role=dialog], [role=alertdialog]'))
@@ -323,7 +323,8 @@ class Browser:
         return self.items
 
     BOT_WALL_MARKERS = re.compile(r"(datadome|captcha-delivery\.com|geo\.captcha-delivery|cf-chl|challenge-platform|/cdn-cgi/challenge|"
-                                  r"px-captcha|perimeterx|_Incapsula_Resource|akamai.*bot|hcaptcha\.com|recaptcha/api|arkoselabs|awswaf)", re.I)
+                                  r"px-captcha|perimeterx|_Incapsula_Resource|akamai.*bot|arkoselabs|awswaf|"
+                                  r"g-recaptcha[^>]{0,200}data-size=.invisible.{0,400}(checking|verif))", re.I)
 
     def status(self):
         """Detect walls the agent must not try to pass. A bot-check (DataDome, Cloudflare challenge, PerimeterX, hCaptcha…) is
@@ -335,6 +336,12 @@ class Browser:
         title = self.page.title()
         if CAPTCHA_HINTS.search(title) or CAPTCHA_HINTS.search(body):
             return "captcha"
+        if len(body.strip()) < 600:
+            try:
+                self.page.wait_for_load_state("load", timeout=4000)     # a half-loaded page looks empty; give it a moment
+                body = self.page.inner_text("body", timeout=3000)[:4000]
+            except Exception:
+                pass
         if len(body.strip()) < 600:
             try:
                 html = self.page.content()[:40000]
@@ -396,6 +403,15 @@ class Browser:
                 raise BrowserError(f"no element [{n}] on the current page (call read() again)")
         return loc.first
 
+    def _dom_sig(self):
+        """Cheap fingerprint of what is on the page (to notice a click that changed nothing): title, first heading,
+        number of links, and whether a dialog is open. Rotating banners do not change it; a real navigation or popup does."""
+        try:
+            return self.page.evaluate("() => [document.title, (document.querySelector('h1') || {}).innerText || '', document.links.length, "
+                                      "!!document.querySelector('[role=dialog], dialog[open], [aria-modal=true]')].join('|')")
+        except Exception:
+            return ""
+
     def _item(self, n):
         for it in self.items:
             if it["n"] == int(n):
@@ -409,6 +425,7 @@ class Browser:
             raise BrowserError(f"refusing to click '{it.get('label')}' — actions that buy/pay/post/submit need owner approval")
         el = self._el(n)
         before = len(self._ctx.pages)
+        url_before, sig_before = self.page.url, self._dom_sig()
         try:
             with self._ctx.expect_page(timeout=1500) as newp:
                 el.click()
@@ -419,6 +436,14 @@ class Browser:
             self.page.wait_for_load_state("domcontentloaded", timeout=8000)
         except Exception:
             pass
+        href = it.get("href") or ""
+        if href.startswith("http") and len(self._ctx.pages) == before and self.page.url == url_before \
+                and href.split("#")[0] != url_before.split("#")[0]:
+            time.sleep(1.0)                                    # some shops' scripts swallow the click: if nothing changed, open the link's address
+            if self.page.url == url_before and self._dom_sig() == sig_before:
+                self._check(href)
+                self.page.goto(href, wait_until="domcontentloaded", timeout=30000)
+                self.log("browser_click_fallback", n=int(n), href=href[:120])
         self.log("browser_click", n=int(n), label=it.get("label"), role=it.get("role"), new_tab=len(self._ctx.pages) > before)
         self._show(f"Clicked '{it.get('label')}'")
         return self.read()

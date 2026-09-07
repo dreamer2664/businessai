@@ -111,6 +111,7 @@ class Operator:
         asks = 0
         done_sigs = set()
         before, last_action = None, ""
+        by_goal = False                     # last click was a link named for the goal (never a "wrong turn")
         while steps < MAX_STEPS:
             if time.time() - t0 > MAX_SECONDS:
                 return self._finish("I stopped: this is taking too long. Tell me a more precise goal (or a page to start from) and I'll try again.", t0, steps)
@@ -143,19 +144,29 @@ class Operator:
                 ev = self._verify(goal, last_action, before, seen)
                 if ev:
                     return self._finish(f"Done — the screen now shows: {ev[:160]}", t0, steps)
-            if acted and where == "browser" and self._lost(goal, before, seen) and steps < MAX_STEPS:
+            if acted and where == "browser" and not by_goal and self._lost(goal, before, seen) and steps < MAX_STEPS:
                 self.history.append("that page has nothing to do with the goal — going back")
                 self._act_back(where)
                 acted = False
                 prev_sig = ("back", "")
                 continue
-            decision = self._think(goal, seen)
+            decision = None
+            by_goal = False
+            if question and where == "browser" and not self._obvious_step(goal, seen):
+                nav = self._best_link(goal, seen, done_sigs, min_score=2)      # the page names what I am asked about → go there (no model call)
+                if nav and (len(nav.split()) > 5 or re.search(r"\d|€|\$|£", nav)):
+                    nav = None                                                  # product listings are not navigation ("Bamboo buds (200 pcs) — € 3,50")
+                if nav and ("click", nav.lower()) not in done_sigs:
+                    self.history.append(f"the page has a link named for the goal — trying '{nav}'")
+                    decision, by_goal = {"step": "click", "target": nav}, True
+            if decision is None:
+                decision = self._think(goal, seen)
             step = decision.get("step", "stop")
             if step == "stop" and where == "browser" and "could not decide" in str(decision.get("reason", "")):
                 nav = self._best_link(goal, seen, done_sigs)                  # slow/undecided thinker: a goal-related link is a sane next step
                 if nav:
                     self.history.append(f"could not decide — trying the link '{nav}'")
-                    decision, step = {"step": "click", "target": nav}, "click"
+                    decision, step, by_goal = {"step": "click", "target": nav}, "click", True
             if step == "type":
                 tgt, txt = str(decision.get("target") or ""), str(decision.get("text") or "")
                 if where == "browser":
@@ -718,9 +729,9 @@ class Operator:
         "offers": ("offerte", "promozioni", "angebote", "promotions", "ofertas", "sale", "deals"),
     }
 
-    def _best_link(self, goal, seen, done_sigs=()):
+    def _best_link(self, goal, seen, done_sigs=(), min_score=1):
         """The link/button most related to the goal's words that we have not clicked yet (e.g. 'About us' for a founding-year question).
-        Falls back to generic 'about / contact' links for who/when/where questions."""
+        Falls back to generic 'about / contact' links for who/when/where questions. min_score=2 → only whole-word matches."""
         gw = {w for w in re.findall(r"[a-z]{3,}", goal.lower()) if w not in self.NAV_STOP}
         for w in list(gw):                                                   # the page may be in another language
             gw |= set(self.SYNONYMS.get(w, ()))
@@ -733,8 +744,12 @@ class Operator:
                 continue
             lw = re.findall(r"[a-zà-ü]{3,}", low)
             sc = sum(2 for w in lw if w in gw) + sum(1 for w in lw if w not in gw and w[:5] in stems)
+            if sc and role == "link":
+                sc += 0.5                                                    # a real link beats a same-named menu/accordion button
             if sc > best_sc or (sc == best_sc and best and sc and len(lab) < len(best)):   # ties → the shorter, plainer label
                 best, best_sc = lab, sc
+        if best and best_sc < min_score:
+            return None
         if best:
             return best
         if re.search(r"\b(founded|found|who|when|where|history|company|team|people|employees|based|located|address|contact|owner|about)\b", goal.lower()) \
@@ -754,10 +769,13 @@ class Operator:
                 "are", "was", "were", "has", "have", "who", "where", "why", "much", "there", "about", "into", "page", "site", "open", "click",
                 "put", "one", "its", "then", "please", "add", "cart", "buy", "now", "search", "first", "sentence", "article", "product", "price", "cost"}
         keys = {w for w in re.findall(r"[a-z]{4,}", goal.lower()) if w not in stop}
+        for w in list(keys):                                            # the page may be in another language than the goal
+            keys |= {x for x in Operator.SYNONYMS.get(w, ()) if len(x) >= 4}
         if not keys:
             return False
         txt_b = (before.get("fulltext") or before.get("elements") or "").lower() + " ".join((l or "").lower() for _, l, _ in before.get("items", []))
         txt_a = (after.get("fulltext") or after.get("elements") or "").lower() + " ".join((l or "").lower() for _, l, _ in after.get("items", []))
+        txt_a += " " + (after.get("title") or "").lower() + " " + (after.get("url") or "").lower()
         hits_b = sum(1 for k in keys if k in txt_b)
         hits_a = sum(1 for k in keys if k in txt_a)
         return hits_b >= 1 and hits_a == 0
@@ -853,6 +871,10 @@ class Operator:
         stop = {"the", "and", "for", "what", "which", "when", "does", "how", "many", "find", "out", "tell", "with", "from", "this",
                 "that", "are", "was", "were", "has", "have", "who", "where", "why", "much", "there", "about", "into", "page", "site"}
         keys = {w for w in re.findall(r"[a-z0-9]{3,}", goal.lower()) if w not in stop}
+        for w in list(keys):                                            # the page may be in another language than the goal
+            keys |= set(Operator.SYNONYMS.get(w, ()))
+        if re.search(r"\b(window|period|deadline|within|how long|how many days|days)\b", goal.lower()):
+            keys |= {"days", "giorni", "tage", "jours", "días", "dagen", "entro", "within", "innerhalb"}
         lows = [l.lower() for l in lines]
         df = {k: sum(1 for low in lows if k in low) for k in keys}      # rare goal words weigh more ("founded" ≫ "etsy")
         scored = []
@@ -867,7 +889,7 @@ class Operator:
             if len(l) > 60 or i < 3:
                 keep.add(i)
                 size += len(l) + 1
-        wants_figure = bool(re.search(r"\b(price|cost|costs|cheap|expensive|how much|how many|number|year|when|date|weight|size|tall|height|width|length|rating|stars|review|delivery|days|time)\b", goal.lower()))
+        wants_figure = bool(re.search(r"\b(price|cost|costs|cheap|expensive|how much|how many|number|year|when|date|weight|size|tall|height|width|length|rating|stars|review|delivery|days|time|window|period|deadline|within)\b", goal.lower()))
         figure = re.compile(r"\d|€|\$|£")
         for sc, i in sorted(scored, key=lambda x: (-x[0], x[1])):
             if sc <= 0:
