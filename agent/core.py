@@ -26,9 +26,10 @@ from .inbox import Inbox
 from .social import Social
 from .eyes import Eyes
 from .desktop import Desktop
+from .operator import Operator
 from .telegram import Bot, TelegramError
 
-VERSION = "0.8 (milestone 6: eyes — vision model + OCR; desktop screen)"
+VERSION = "0.9 (milestone 8: works a screen by itself — /do)"
 
 HELP = """Just talk to me. I work out whether you're asking a question, want something looked up on the web, want a page summarized, or want suppliers compared.
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.
@@ -43,6 +44,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /post <platform> <what about> — I draft a social post (instagram, facebook, tiktok, x, linkedin, pinterest), you approve/edit, then copy it — I never publish by myself
 /policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
+/do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do desktop <goal> — same on my own screen (whatever window is open there). Any click that costs money, publishes, signs in or deletes waits for your tap.
 /screen · /watch on|off — see my browser · /status · /selftest
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
@@ -72,6 +74,8 @@ class Agent:
         self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log)
         self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
+        self.operator = Operator(self.planner, eyes=self.eyes, tasks=self.tasks, desktop=self.desktop, log=self.log,
+                                 notify=self.notify, ask_owner=lambda q, opts: self.ask(q, opts, timeout=900), viewer=self.viewer)
         self.posts = {}             # post id -> draft dict awaiting the owner's tap
         self.editing_post = None    # post id whose text the owner is typing
         self.drafts = {}            # message id -> draft dict awaiting the owner's tap
@@ -532,6 +536,8 @@ class Agent:
             q = text[5:].strip() or None
             threading.Thread(target=self.look_at_screen, args=(q,), daemon=True).start()
             return "Looking at my screen…"
+        if low.startswith("/do"):
+            return self.start_do(text[3:].strip())
         if low.startswith("/post"):
             arg = text[5:].strip()
             if not arg:
@@ -594,6 +600,53 @@ class Agent:
         if not self.brain.ready and not self.planner.installed():
             return "My knowledge brain and thinking model aren't installed here yet — run: sh scripts/get_brain.sh && sh scripts/get_model.sh"
         return self.start_task("research", it["topic"], prefix="I don't know that well enough from my own knowledge — ")
+
+    def start_do(self, arg):
+        """/do [desktop] [<url> |] <goal> — the operator works the screen step by step."""
+        if not arg:
+            return ("Tell me the goal, e.g.\n/do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded?\n"
+                    "/do desktop what is written on my screen right now?\nI look, decide one step, click or type, check, repeat — "
+                    "and ask you before any click that costs money, publishes, signs in or deletes.")
+        if self.busy:
+            return f"I'm still busy with: {self.busy}. Ask me again in a minute."
+        if not self.planner.installed():
+            return "My thinking model isn't installed here yet — run: sh scripts/get_model.sh"
+        where = "browser"
+        if re.match(r"^(desktop|screen)\b", arg, re.I):
+            where = "desktop"
+            arg = re.sub(r"^(desktop|screen)\b[:\s]*", "", arg, flags=re.I).strip()
+            if not self.desktop.available():
+                return "I have no desktop hands here yet — run: sh scripts/install_desktop.sh (then /eyes to check)."
+        start_url, goal = None, arg
+        if where == "browser":
+            m = re.match(r"^((?:https?|file)://\S+|[a-z0-9.-]+\.[a-z]{2,}\S*)\s*[|—-]?\s*(.*)$", arg, re.I | re.S)
+            if m and m.group(2).strip():
+                start_url, goal = m.group(1), m.group(2).strip()          # "/do <address> | <goal>"
+            else:
+                mu = re.search(r"((?:https?|file)://\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:/\S*)?)", arg, re.I)
+                if mu:                                                    # "… on shop.example.com" anywhere in the goal
+                    start_url = mu.group(1).rstrip(".,;:)")
+                    goal = re.sub(r"\s*\(?\b(?:on|at|from|in)\s+" + re.escape(mu.group(1)) + r"[.,;:)]*", "", arg).strip(" (") or arg
+        if where == "browser" and not start_url and not (self.tasks._browser and self.tasks._browser.alive()):
+            return ("Which page should I start on? Write it first: /do <address> | <goal>\n"
+                    "e.g. /do en.wikipedia.org/wiki/Etsy | in which year was Etsy founded?")
+        if where == "desktop" and not self.eyes.ocr:
+            return "For working my own screen I need OCR: sudo apt install -y tesseract-ocr (sh scripts/install_desktop.sh does it)."
+        threading.Thread(target=self.run_do, args=(goal, where, start_url), daemon=True).start()
+        return (f"On it — working {'my own screen' if where == 'desktop' else (start_url or 'the page I have open')} towards: “{goal}”. "
+                f"I'll report when I'm done or stuck (usually 1–5 minutes; each step takes a moment on this machine).")
+
+    def run_do(self, goal, where, start_url):
+        self.busy = f"working the {'desktop' if where == 'desktop' else 'browser'}: {goal[:40]}"
+        try:
+            out = self.operator.run(goal, where=where, start_url=start_url)
+        except Exception as e:
+            self.log("do_error", error=str(e)[:200])
+            out = f"Something broke while I was working on it: {str(e)[:120]}"
+        finally:
+            self.busy = None
+        self.log("out", text=out[:300])
+        self.bot.send(self.owner_id, out)
 
     def start_task(self, kind, arg, prefix=""):
         if self.busy:

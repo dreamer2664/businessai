@@ -108,14 +108,18 @@ class Operator:
                 verify_next = False
                 ev = self._verify(goal, last_action, before, seen)
                 if ev:
-                    return self._finish(f"Done — the screen now shows: {ev}", t0, steps)
+                    return self._finish(f"Done — the screen now shows: {ev[:160]}", t0, steps)
             decision = self._think(goal, seen)
             step = decision.get("step", "stop")
-            if step == "type" and where == "browser":
-                n = self._element_number(seen, str(decision.get("target") or ""))
-                role = next((r for k, _, r in seen.get("items", []) if k == n), "")
-                if n is not None and role not in ("textbox", "searchbox", "combobox", "textarea"):
-                    decision, step = {"step": "click", "target": decision.get("target")}, "click"     # it's a link/button, not a field
+            if step == "type":
+                tgt, txt = str(decision.get("target") or ""), str(decision.get("text") or "")
+                if where == "browser":
+                    n = self._element_number(seen, tgt)
+                    role = next((r for k, _, r in seen.get("items", []) if k == n), "")
+                    if n is not None and role not in ("textbox", "searchbox", "combobox", "textarea"):
+                        decision, step = {"step": "click", "target": tgt}, "click"        # it's a link/button, not a field
+                elif not txt.strip() or txt.strip().lower() == tgt.strip().lower() or DANGER.search(tgt):
+                    decision, step = {"step": "click", "target": tgt}, "click"            # "type 'Add to cart' into 'Add to cart'" = a click
             if question and step in ("click", "type") and DANGER.search(str(decision.get("target", ""))):
                 decision, step = {"step": "scroll", "direction": "down"}, "scroll"      # no buying/submitting to answer a question
             sig = (step, str(decision.get("target") or decision.get("url") or decision.get("direction") or "").lower())
@@ -144,7 +148,7 @@ class Operator:
                 if ans in (None, "Stop"):
                     return self._finish(f"Stopped after asking: {q}", t0, steps)
                 continue
-            if step == "click":
+            if step in ("click", "type"):
                 target = str(decision.get("target") or "")[:80]
                 if not target:
                     self.history.append("wanted to click nothing — rethinking")
@@ -156,9 +160,10 @@ class Operator:
                         self.history.append(f"did NOT click '{target}' (not approved)")
                         return self._finish(f"I stopped before clicking “{target}” because you did not approve it.", t0, steps)
                     allow.add(target.lower())
-                result = self._act_click(where, target, seen, approved=target.lower() in allow)
-            elif step == "type":
-                result = self._act_type(where, str(decision.get("target") or ""), str(decision.get("text") or ""), bool(decision.get("enter")), seen)
+                if step == "click":
+                    result = self._act_click(where, target, seen, approved=target.lower() in allow)
+                else:
+                    result = self._act_type(where, target, str(decision.get("text") or ""), bool(decision.get("enter")), seen, approved=target.lower() in allow)
             elif step == "scroll":
                 result = self._act_scroll(where, str(decision.get("direction") or "down"))
             elif step == "back":
@@ -521,7 +526,7 @@ class Operator:
         finally:
             self.desktop.allow_actions = False
 
-    def _act_type(self, where, target, text, enter, seen):
+    def _act_type(self, where, target, text, enter, seen, approved=False):
         if any(k in text.lower() for k in ("password", "token", "cvv")):
             return "refused: I don't type passwords or card details"
         if where == "browser":
@@ -533,7 +538,11 @@ class Operator:
                 return str(r)[:160] if r else f"typed into '{target}'"
             except Exception as e:
                 return f"typing failed: {str(e)[:80]}"
-        r = self.desktop.click_text(target)
+        self.desktop.allow_actions = approved
+        try:
+            r = self.desktop.click_text(target)
+        finally:
+            self.desktop.allow_actions = False
         if r.startswith("could not") or r.startswith("refused"):
             return r
         return self.desktop.type(text, enter=enter)
