@@ -101,6 +101,8 @@ try:
     check("a number that is not in the system → 'cannot find it, check the confirmation e-mail'", "cannot find" in d["text"] and "59999" in d["text"] and not d["checks"])
     d = I3.draft({"id": "t", "from": "nobody@example.com", "channel": "store", "text": "Where is my order?"})
     check("unknown address, no number → asks for the number, guesses nothing", "cannot find any order" in d["text"] and "warehouse" not in d["text"] and not d["checks"])
+    d = I3.draft({"id": "t", "from": "x@example.com", "channel": "store", "text": "I want to cancel order 51002, I ordered the wrong model."})
+    check("'cancel — I ordered the wrong model' is a cancellation, not a damage report", d["kind"] == "cancel_or_change" and "photo" not in d["text"])
     a, b = S.propose("stock", "x", 1, "t"), S.propose("stock", "y", 1, "t")
     check("two proposals in the same millisecond get different ids", a["id"] != b["id"]); S.reject(a["id"]); S.reject(b["id"])
     # 4. the AI reads its own store like any shop

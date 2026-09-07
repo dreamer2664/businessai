@@ -67,6 +67,10 @@ def judge(rec, d):
         why.append("discount policy missing")
     if re.search(r"\[[^\]]+\]", d["text"]):
         why.append("placeholder")
+    if re.search(r"\bcancel", rec["text"].lower()) and d["kind"] != "cancel_or_change":
+        why.append(f"a cancellation request was treated as {d['kind']}")
+    if re.search(r"\b(photo of the damage)\b", low) and not re.search(r"\b(broken|damaged|crack|chip|dent|scratch|missing|faulty|defective)", rec["text"].lower()):
+        why.append("asks for a damage photo although nothing is damaged")
     return why
 
 

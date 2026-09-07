@@ -258,6 +258,8 @@ class Inbox:
             quick = "product_question"
         elif re.search(r"\b(love|great|amazing|best purchase|thank you so much|thanks!)\b", low) and not re.search(r"\b(but|however|unfortunately|broken|late)\b", low):
             quick = "compliment"
+        if quick == "damaged_or_wrong" and re.search(r"\bcancel", low) and not re.search(r"\b(broken|damaged|crack|chip|dent|scratch|torn|leak|shatter|smash|defective|faulty|missing|doesn't work|does not work|not working|empty|nothing inside)", low):
+            quick = "cancel_or_change"                                    # "cancel it, I ordered the wrong model" is a cancellation, not a damage report
         escalate = bool(re.search(r"\b(lawyer|attorney|legal action|sue|chargeback|dispute with my bank|injur|hurt|burn|fire|allerg|gdpr|delete my data|personal data)\b", low))
         needs = []
         if quick in ("where_is_my_order", "return_or_refund", "damaged_or_wrong", "cancel_or_change") and not re.search(r"#?\b\d{4,}\b", text):
@@ -358,7 +360,8 @@ class Inbox:
                       "for THIS order only. Tell the customer its real status in plain words, with the tracking number if there is one. "
                       "Never invent a delivery date. If it is not shipped yet, say it is still in the warehouse and leaves within 1 business day; "
                       "if the customer wants to cancel and it is not shipped, say it will be cancelled and refunded in full (the owner confirms); "
-                      "if it is shipped, say it cannot be cancelled any more but can be returned within 30 days of delivery.\nORDER FACTS:\n- " + "\n- ".join(order["lines"]))
+                      "if the customer wants to CHANGE something (colour, size, model, address) and it is not shipped, say the change is possible and ask exactly what it should be — do not mention cancelling; "
+                      "if it is shipped, say it cannot be cancelled or changed any more but can be returned within 30 days of delivery.\nORDER FACTS:\n- " + "\n- ".join(order["lines"]))
         elif order and order.get("mismatch"):
             needs += "\nORDER CHECK: " + order["lines"][0] + " Do not reveal anything about the order."
         elif c.get("order_missing"):
@@ -671,6 +674,8 @@ class Inbox:
                 flags.append("does not tell the customer the order is still in the warehouse")
             if c["kind"] == "cancel_or_change" and st == "paid" and re.search(r"\bcancel", (c.get("text") or "").lower()) and not re.search(r"\b(will be|is being|has been|is now) cancel+ed\b|\bcancel+ed and refunded\b|\bcan (still )?be cancel+ed\b", low):
                 flags.append("does not confirm the cancellation — the order system says it has not shipped, so it can be cancelled and refunded in full")
+            if c["kind"] == "cancel_or_change" and st == "paid" and not re.search(r"\bcancel", (c.get("text") or "").lower()) and re.search(r"\bcancel+ed and refunded\b|\bwill be cancel+ed\b", low):
+                flags.append("offers a cancellation the customer did not ask for — they asked for a change")
             if c["kind"] == "cancel_or_change" and st in ("shipped", "delivered") and not re.search(r"cannot be cancel|can no longer|can't be cancel|already (been )?(shipped|left|dispatched)|has (already )?left|return", low):
                 flags.append(f"does not explain that the order is already {st} (no cancellation, only a return)")
         else:
