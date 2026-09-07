@@ -110,3 +110,15 @@ messages and social media, reports to the owner and asks questions via phone.
 ## Feeding log (bulk in → trimmed → kept; the brain must not get "stupider": all earlier scores re-run)
 - 2026-09-07 pack #2 `operations.kdw`: 113 docs, 1.71 M chars in → 1.14 M kept (67 %), 1.7 MB. Customer service, returns &
   chargebacks, shipping & inventory, pricing/payments/metrics, EU seller rules. tests/operations.txt 39/41; business.txt still 52/55.
+
+## Hardening log (abilities, not knowledge — the scores above must not drop)
+- 2026-09-07 `/do` on real shops. What broke and what was changed (all in `agent/operator.py` + `agent/browser.py`):
+  bot-check walls (DataDome, Cloudflare Turnstile) and site error pages are recognised and reported in seconds, never attempted;
+  an expired/redirected product link is reported instead of guessed; the product search box is chosen by meaning (not the
+  store-locator / newsletter box); cookie walls closed in it/de/fr/es/nl (reject-all preferred); a click that changes nothing
+  opens the link's own address; a question's page with a link named for the goal (Returns, Diritto di recesso, About us) is
+  followed without a model call and never counted as a wrong turn; goal words are translated for page excerpts and link
+  matching (returns → resi/recesso, shipping → spedizione/consegna …); an English answer read from an Italian page is accepted
+  when its figures are on the page; a figure taken from a "maximum / from / free above" sentence is reported with the page's
+  exact words. Small machines: lean Chromium (one renderer, no images/fonts) and both cores for the thinking model.
+  Operator test set still 15/15.
