@@ -103,6 +103,9 @@ CUSTOMER_MESSAGES = [
     ("Love the {product}, best purchase this year. Thank you!", "compliment"),
     ("How long does delivery to Germany take and what does it cost?", "product_question"),
     ("Is the {product} in stock? The page says only a few left.", "product_question"),
+    ("Hello, where is my order? I paid {when} and heard nothing since.", "where_is_my_order"),
+    ("My {product} arrived and one piece is missing. Order {order}.", "damaged_or_wrong"),
+    ("Can I change the colour on order {order} before it ships?", "cancel_or_change"),
 ]
 
 
@@ -238,6 +241,11 @@ class Store:
             self.save()
             return True
 
+    def orders_for(self, email):
+        """All orders placed with this e-mail address, newest first."""
+        e = (email or "").strip().lower()
+        return [o for o in reversed(self.data["orders"]) if e and o["customer"].get("email", "").lower() == e]
+
     # ---- what a customer-care reply may know about an order ----------------------------
     def order_facts(self, n, email=None):
         """Plain sentences about one order for the reply writer — only what the ledger really says. None when the order
@@ -342,7 +350,7 @@ class Store:
         open_ = {(p["kind"], p["target"]) for p in self.data["proposals"] if p["status"] == "open"}
         if kind == "where_is_my_order" and o["status"] == "paid" and ("ship", str(o["n"])) not in open_:
             return self.propose("ship", str(o["n"]), "shipped", f"the customer is asking where order #{o['n']} is ({', '.join(l['name'] for l in o['lines'])}, {money(o['total'])}) and it has NOT shipped yet — hand it to GLS today and mark it shipped")
-        if kind == "cancel_or_change" and o["status"] == "paid" and ("cancel", str(o["n"])) not in open_:
+        if kind == "cancel_or_change" and o["status"] == "paid" and ("cancel", str(o["n"])) not in open_ and (not text or re.search(r"\bcancel", text.lower())):
             return self.propose("cancel", str(o["n"]), "cancelled", f"the customer asked to cancel order #{o['n']} ({', '.join(l['name'] for l in o['lines'])}, {money(o['total'])}) and it has not shipped — cancel and refund in full")
         if kind == "damaged_or_wrong" and o["status"] in ("shipped", "delivered") and ("refund", str(o["n"])) not in open_:
             return self.propose("refund", str(o["n"]), "refunded", f"the customer reports order #{o['n']} arrived damaged/wrong ({', '.join(l['name'] for l in o['lines'])}, {money(o['total'])}) — policy: refund or replace at once, no return needed for items under € 10")

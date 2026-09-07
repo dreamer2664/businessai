@@ -95,6 +95,12 @@ try:
     c["order"]["status"] = "paid"; c["order"]["tracking"] = ""
     check("safety flag: model claims 'shipped' while the ledger says paid", any("warehouse" in f for f in I3._check(f"Your order {paid['n']} has been shipped and is on its way!", c, "")))
     check("safety flag: model says 'I will check your order' although the status is known", any("already known" in f for f in I3._check(f"Sorry! I will check your order {paid['n']} and get back to you.", c, "")))
+    d = I3.draft({"id": "t", "from": shipped["customer"]["email"], "channel": "store", "text": "Where is my order? Nothing arrived yet."})
+    check("no order number, but the sender's address has one live order → answered for that order", str(shipped["n"]) in d["text"] and shipped["tracking"] in d["text"] and not d["checks"])
+    d = I3.draft({"id": "t", "from": shipped["customer"]["email"], "channel": "store", "text": "Where is my order 59999?"})
+    check("a number that is not in the system → 'cannot find it, check the confirmation e-mail'", "cannot find" in d["text"] and "59999" in d["text"] and not d["checks"])
+    d = I3.draft({"id": "t", "from": "nobody@example.com", "channel": "store", "text": "Where is my order?"})
+    check("unknown address, no number → asks for the number, guesses nothing", "cannot find any order" in d["text"] and "warehouse" not in d["text"] and not d["checks"])
     a, b = S.propose("stock", "x", 1, "t"), S.propose("stock", "y", 1, "t")
     check("two proposals in the same millisecond get different ids", a["id"] != b["id"]); S.reject(a["id"]); S.reject(b["id"])
     # 4. the AI reads its own store like any shop

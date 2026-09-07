@@ -515,7 +515,7 @@ class Agent:
                 self.bot.send(self.owner_id, body, buttons=[[(ok_label, f"r:ok:{rec['id']}"), ("✏️ Edit", f"r:edit:{rec['id']}"), ("❌ Reject", f"r:no:{rec['id']}")]])
                 self.log("inbox_draft", id=rec["id"], mtype=d["kind"], flags=d["checks"])
                 if rec.get("channel") == "store" and d.get("order_no") and d["kind"] in ("cancel_or_change", "damaged_or_wrong", "where_is_my_order"):
-                    prop = self.store.proposal_for_message(d["kind"], d["order_no"])
+                    prop = self.store.proposal_for_message(d["kind"], d["order_no"], rec.get("text", ""))
                     if prop is None and d["kind"] == "where_is_my_order":       # the draft step may have opened it already
                         prop = next((p for p in reversed(self.store.data["proposals"]) if p["status"] == "open" and p["kind"] == "ship" and p["target"] == str(d["order_no"]) and "asking where" in p["why"]), None)
                     if prop:
