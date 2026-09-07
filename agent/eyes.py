@@ -277,6 +277,37 @@ class Eyes:
                         px_o[x, y] = 0
             return out
 
+    @staticmethod
+    def _without_borders(im):
+        """Third OCR view: erase long thin lines (button borders, input boxes, table rules) — tesseract drops words
+        that sit inside a tight frame ('Pay now' in a bordered button)."""
+        from PIL import Image, ImageFilter
+        g = im.convert("L")
+        try:
+            import numpy as np
+        except ImportError:
+            return g
+        a = np.array(g)
+        dark = a < 200
+        def runs(mask, axis, minlen):
+            out = np.zeros_like(mask)
+            m = mask if axis == 1 else mask.T
+            o = out if axis == 1 else out.T
+            for i in range(m.shape[0]):
+                row = m[i]
+                if row.sum() < minlen:
+                    continue
+                d = np.diff(np.concatenate(([0], row.astype(np.int8), [0])))
+                for s0, e0 in zip(np.where(d == 1)[0], np.where(d == -1)[0]):
+                    if e0 - s0 >= minlen:
+                        o[i, s0:e0] = 1
+            return out
+        lines = runs(dark, 1, 40) | runs(dark, 0, 25)
+        lines = np.array(Image.fromarray((lines * 255).astype("uint8")).filter(ImageFilter.MaxFilter(3))) > 0
+        a = a.copy()
+        a[lines] = 255
+        return Image.fromarray(a)
+
     def read(self, image):
         """Words with pixel boxes: [{text,x,y,w,h,conf}] in the coordinates of the given image.
         Two passes — normal and colour-inverted — so white text on coloured buttons and bars is read too."""
@@ -288,13 +319,13 @@ class Eyes:
         try:
             im = _to_pil(image)
             words = self._ocr_pass(im, 0)
-            inv = self._ocr_pass(self._light_on_colour(im), 1)
             def overlaps(w):
                 for v in words:
                     if abs(v["x"] - w["x"]) < max(8, v["w"] // 2) and abs(v["y"] - w["y"]) < max(6, v["h"] // 2):
                         return True
                 return False
-            words += [w for w in inv if not overlaps(w)]
+            words += [w for w in self._ocr_pass(self._light_on_colour(im), 1) if not overlaps(w)]     # white labels on colour
+            words += [w for w in self._ocr_pass(self._without_borders(im), 2) if not overlaps(w)]     # labels inside boxes
             self._ocr_cache_key, self._ocr_cache = key, words
             return words
         except Exception as e:
