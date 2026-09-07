@@ -240,7 +240,7 @@ class Inbox:
         quick = None
         if re.search(r"\b(where is|where's|track|tracking|hasn't arrived|not arrived|still waiting|when will .* arrive|delivery status)\b", low):
             quick = "where_is_my_order"
-        elif re.search(r"\b(broken|damaged|arrived (broken|damaged)|wrong (item|size|colou?r|product)|missing (part|item)|doesn't work|defective|faulty|came empty|box was open|package (was )?empty|nothing inside)\b", low):
+        elif re.search(r"\b(broken|damaged|crack(ed|s)?|chip(ped|s)?|dent(ed|s)?|scratch(ed|es)?|torn|leak(ing|s)?|shattered|smashed|arrived with a|arrived (broken|damaged)|wrong (item|size|colou?r|product|model)|missing (part|item|piece)|doesn't work|does not work|not working|defective|faulty|came empty|box was open|package (was )?empty|nothing inside)\b", low):
             quick = "damaged_or_wrong"
         elif re.search(r"\b(return|refund|money back|send it back)\b", low):
             quick = "return_or_refund"
@@ -306,7 +306,8 @@ class Inbox:
             c["needs"] = [n for n in c["needs"] if not re.search(r"product|item|model|which", n.lower())]
             c["contradiction"] = self.shopfacts.contradiction(rec["text"], self.shopfacts.match_products(rec["text"])[0])
             c["unmentioned"] = self.shopfacts.unmentioned(rec["text"], self.shopfacts.match_products(rec["text"])[0]) if c["kind"] != "compliment" else []
-            if self.store is not None and rec.get("channel") == "store" and re.search(r"\b(in stock|stock|available|availability|sold out|left|restock|back in)\b", rec["text"].lower()):
+            if self.store is not None and rec.get("channel") == "store" and re.search(r"\b(in stock|stock|availability|sold out|restock|back in|still available|available (again|now|to order)|is it available|are they available)\b", rec["text"].lower()) \
+                    and not re.search(r"\b(available|come|comes) in (other|different|more|which|what|any)\b", rec["text"].lower()):
                 sp = self.store.find_product(c["product"])                 # our own shop: the live stock figure is known
                 if sp and sp["name"] == c["product"]:
                     c["stock"] = int(sp["stock"])
@@ -405,6 +406,19 @@ class Inbox:
                     "and let you know within one business day.")
         if c["kind"] in ("product_question", "other") and c.get("product") and self.shopfacts:
             prods = [x for x in self.shopfacts.products if x["name"] == c["product"]]
+            if prods and re.search(r"\b(other|different|more|which|what) (colou?rs?|sizes?|models?|versions?|options?|variants?)\b|\b(colou?rs?|sizes?|models?) (available|do you have|does it come)", c.get("text", "").lower()):
+                axis = re.search(r"\b(colou?rs?|sizes?|models?|versions?|options?|variants?)\b", c.get("text", "").lower()).group(1)
+                axes = {"colour": "colour|color", "color": "colour|color", "colours": "colour|color", "colors": "colour|color", "size": "size", "sizes": "size", "model": "model|for", "models": "model|for"}.get(axis, "")
+                opts = [", ".join(o.split(": ", 1)[-1] for o in v) for v in prods[0].get("variants", [])]
+                names = [v[0].split(": ", 1)[0].lower() if ": " in v[0] else "options" for v in prods[0].get("variants", [])]
+                if opts:
+                    same = [o for o, n in zip(opts, names) if axes and re.search(axes, n)]
+                    if same:
+                        return f"Thank you for your question. The {c['product']} comes in these options: {same[0]}. Just tell me which one you would like."
+                    return (f"Thank you for your question. The {c['product']} comes in one {axis.rstrip('s') if axis.endswith('s') else axis} only — the choice on the page is "
+                            f"{names[0]}: {opts[0]}. If you would like another {axis.rstrip('s') if axis.endswith('s') else axis}, I will ask the owner whether one is planned.")
+                return (f"Thank you for your question. The {c['product']} is currently offered in one version only (no other {axis} on the page). "
+                        "If you would like another one, I will ask the owner whether it is planned and let you know within one business day.")
             line = c.get("contradiction") or (self.shopfacts.best_detail(c.get("text", ""), prods[0]) if prods else "")
             if line and not c.get("unmentioned"):
                 return (f"Thank you for your question about the {c['product']}. Our product page says: \"{line}\". "
@@ -434,6 +448,15 @@ class Inbox:
                     return f"Thank you for your message. Your order{o} was shipped with GLS — tracking number {trk}. If the tracking does not move for more than 3 business days, write to me again and I will open an enquiry with the carrier."
                 if st in ("cancelled", "refunded"):
                     return f"Order{o} was {st} and the amount refunded; if you do not see the refund on your statement within 5 business days, please tell me."
+            if c["kind"] == "damaged_or_wrong" and st in ("shipped", "delivered"):
+                photo = "photo of the damage" in c["needs"]
+                return (f"I am so sorry — order{o} should not have arrived like that. " +
+                        ("Could you send me a photo of the damage? As soon as I have it, " if photo else "") +
+                        "the owner will confirm a replacement or a full refund for you — there is no need to send the item back until we tell you. "
+                        "You will hear from me within one business day.")
+            if c["kind"] == "return_or_refund" and st in ("shipped", "delivered"):
+                return (f"Thank you for your message. Order{o} can be returned within 30 days of delivery as long as it is unused; return shipping costs € 4,90 "
+                        "unless the item was faulty or wrong, and the refund is issued within 5 business days after it arrives. Tell me and I will send you the return instructions.")
             if c["kind"] == "cancel_or_change":
                 if st == "paid":
                     return f"Thank you for letting me know. Order{o} has not left the warehouse yet, so it can be cancelled and refunded in full — I have passed it to the owner to confirm, and you will receive the confirmation shortly."
@@ -507,7 +530,8 @@ class Inbox:
             flags.append(f"contains a number the customer never gave: {', '.join(foreign)}")
         if re.search(r"\b(i've|i have|we've|we have|i|we) (already |just )?(checked|contacted|spoken|called|looked into|escalated|forwarded|asked)\b", low):
             flags.append("claims to have already done something — nothing has been done yet")
-        if re.search(r"\b(full refund|refund(ed)?|replacement)\b", low) and c["kind"] not in ("damaged_or_wrong", "return_or_refund", "cancel_or_change") and not (c.get("order") or {}).get("late"):
+        if re.search(r"\b(full refund|refund(ed)?|replacement)\b", low) and c["kind"] not in ("damaged_or_wrong", "return_or_refund", "cancel_or_change") \
+                and not (c.get("order") or {}).get("late") and not ((c.get("order") or {}).get("status") == "paid" and "cancel" in low):
             flags.append("promises a refund/replacement outside the return/damage cases")
         if re.search(r"\b\d{1,2}%\s*(off|discount)|\b(code|coupon)\s+[A-Z0-9]{4,}\b", text) and "newsletter" not in low:
             flags.append("offers a discount not in the policy")
@@ -575,6 +599,11 @@ class Inbox:
                     if re.search(r"\b" + re.escape(w[:5]), low):
                         flags.append(f"makes a claim about '{w}' which the product page never mentions — only 'I will check with the owner' is safe")
                         break
+        if c.get("product") and self.shopfacts and re.search(r"\b(other|different|more) (colou?rs?)\b", (c.get("text") or "").lower()):
+            prods = [x for x in self.shopfacts.products if x["name"] == c["product"]]
+            has_colour = bool(prods) and any(re.search(r"colou?r", v[0].lower()) for v in prods[0].get("variants", []))
+            if not has_colour and re.search(r"\b(yes|is available in (other|different|several|various) colou?rs|comes in (other|different|several|various) colou?rs)\b", low):
+                flags.append("says other colours exist — the product page lists no colour options")
         if c.get("stock") is not None:
             if c["stock"] == 0 and re.search(r"\b(is|are|still|currently) (currently |still |now )?(in stock|available)\b|available for purchase", low):
                 flags.append("says it is in stock — the shop's own system says it is sold out")

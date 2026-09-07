@@ -93,7 +93,7 @@ FIRST = ["Anna", "Luca", "Marta", "Giulia", "Paolo", "Sara", "Jonas", "Lena", "C
 LAST = ["Rossi", "Bianchi", "Müller", "Schmidt", "Martin", "Bernard", "García", "Ferrari", "Conti", "Weber", "Moreau", "Russo"]
 COUNTRIES = ["IT", "IT", "IT", "IT", "DE", "DE", "FR", "ES", "AT", "NL"]
 CUSTOMER_MESSAGES = [
-    ("Hi, I ordered {product} (order {order}) five days ago and there is no tracking yet. When does it ship?", "where_is_my_order"),
+    ("Hi, I ordered {product} (order {order}) {when} and there is no tracking yet. When does it ship?", "where_is_my_order"),
     ("Is the {product} available in other colours?", "product_question"),
     ("Do you ship to Switzerland? I'd like the {product}.", "product_question"),
     ("The {product} arrived with a crack. Order {order}. What now?", "damaged_or_wrong"),
@@ -422,9 +422,20 @@ class Store:
                 n_msgs = 1 if rnd.random() < 0.7 else 2
                 for _ in range(n_msgs):
                     tpl, kind = rnd.choice(CUSTOMER_MESSAGES)
-                    ref = rnd.choice(self.data["orders"]) if self.data["orders"] else None
+                    pool = self.data["orders"]
+                    if kind == "where_is_my_order":                       # people chase orders that are not delivered yet, usually older ones
+                        pool = [o for o in pool if o["status"] in ("paid", "shipped")] or pool
+                        older = [o for o in pool if o.get("day", day) <= day - 2]
+                        pool = older or pool
+                    elif kind == "damaged_or_wrong":                      # only something that arrived can be broken
+                        pool = [o for o in pool if o["status"] in ("shipped", "delivered")] or pool
+                    elif kind == "cancel_or_change":
+                        pool = [o for o in pool if o["status"] == "paid"] or pool
+                    ref = rnd.choice(pool) if pool else None
                     prod = (ref["lines"][0]["name"] if ref else rnd.choice(self.products())["name"])
-                    text = tpl.format(product=prod, order=ref["n"] if ref else 51000)
+                    ago = (day - ref.get("day", day)) if ref else 0
+                    when = "today" if ago == 0 else "yesterday" if ago == 1 else f"{ago} days ago"
+                    text = tpl.format(product=prod, order=ref["n"] if ref else 51000, when=when)
                     sender = (ref["customer"]["email"] if ref else f"{rnd.choice(FIRST).lower()}@example.com")
                     rec = inbox.add("store", sender, text, subject=f"Question about {prod}"[:60])
                     msgs.append(rec)
