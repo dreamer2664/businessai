@@ -4,8 +4,10 @@ An AI that (eventually) runs an online store end to end: product and supplier
 research, listings, customer messages, social media — reporting to its owner
 and asking questions through Telegram.
 
-**Status: milestone 8 — it works a screen by itself (`/do <goal>`)**: eyes (vision model + OCR, 16/16), desktop hands, and the
-see → think → act → check loop, 10/10 on the operator score set; earlier: customer-message drafts 22/23, social post drafts, marketing exam 90 %, browse tasks 19/19, knowledge pack 52/55. Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
+**Status: milestone 9 — bigger jobs for the operator (`/do`)**: compares several pages (cheapest / fastest / lowest minimum
+order, figures ranked in code), fills in forms for your approval (never sends), closes cookie banners (also the ones inside
+iframes, "reject" preferred), recovers from wrong clicks; 15/15 on the operator score set in ~5 min. Before that: eyes (vision
+model + OCR, 16/16), desktop hands, the see → think → act → check loop; earlier: customer-message drafts 22/23, social post drafts, marketing exam 90 %, browse tasks 19/19, knowledge pack 52/55. Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
 for the roadmap and the rules (score-driven, frugal, owner-in-the-loop, no
 CAPTCHA-breaking, official platform connections only).
 
@@ -100,14 +102,27 @@ Install the tools with `sh scripts/install_desktop.sh` (tesseract, Xvfb, xdotool
 type, keys, scroll. Same rules as the browser: clicks that spend money, publish, delete or sign in need the owner's tap, passwords are
 never typed, every click is checked by comparing the screen before and after.
 
-## Operator — `/do <goal>` (milestone 8)
+## Operator — `/do <goal>` (milestones 8–9)
 `agent/operator.py` repeats look → decide one step → guard → click/type/scroll → check, up to 12 steps (15 min), in two modes:
 - **browser** (default): `/do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded?` — fast and exact (page elements).
 - **desktop**: `/do desktop put one bamboo toothbrush set in the cart` — works whatever window is open on its screen, from pixels only.
 Questions are answered only from what is on the screen (numbers are checked against it; "I don't guess"); actions are confirmed by what
 newly appeared ("Added to cart: 1 × …", and a *buy* needs an order confirmation). Any click that costs money, publishes, signs in,
 deletes or submits waits for your tap on the phone; login / payment / password goals are refused up front; captcha and login walls stop it
-and hand the screen to you. Score: `python3 engine/scripts/score_operator.py` → 10/10 on `tests/pages/` (see docs/SCORES.md).
+and hand the screen to you. Score: `python3 engine/scripts/score_operator.py` → 15/15 on `tests/pages/` (see docs/SCORES.md).
+
+Bigger jobs (milestone 9):
+- **Compare pages** — give several addresses: `/do <url1> <url2> <url3> | which supplier is cheapest per pack for 200 packs?`
+  It asks each page the same fact question, copies the figures exactly (price tiers included), and for *cheapest / lowest / fastest /
+  most expensive / longest …* ranks them in code, e.g. `Cheapest: BambooDirect — € 1.95 (others: GreenTrade € 2.10, EcoSupply € 2.40)`.
+  Non-numeric comparisons ("which one ships from Italy?") get a short summary that is checked against the findings.
+- **Fill in a form** — `/do <url> | fill in the enquiry form: name = Anna Rossi, email = anna@example.com, message = Do you offer
+  wholesale prices?` types into the matching fields (labels, placeholders, names) and stops: *"ready but NOT sent"* — you press Send.
+- **Cookie banners** are closed before every look (page-level and inside consent iframes such as Sourcepoint/OneTrust; "reject",
+  "necessary only" or "do not sell/share" preferred, otherwise close/accept) — tested on theguardian.com, wired.com and the test pages.
+- **Wrong clicks**: when a page has nothing to do with the goal it goes back; when the thinker names a button that is not on the page,
+  or wants to scroll a short page, it follows the most goal-related link instead (e.g. *About us* for a founding-year question).
+- Fields show their current value to the thinker, so it never re-types what is already there.
 
 ## Phone line (what the agent can do today)
 - Only the owner (Telegram username in `.secrets/env`, pinned to the numeric id at first contact) is served.

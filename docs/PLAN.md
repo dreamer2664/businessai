@@ -68,8 +68,14 @@ messages and social media, reports to the owner and asks questions via phone.
    never repeats a failed click; at most 2 questions to the owner, 12 steps, 15 minutes per goal; refuses login,
    payment and password goals up front; stops at captcha/login walls. Score: tests/operator.txt 10/10 (browser);
    desktop live test 4/4 (price, add to cart with approval, cart count, second product's price).
-9. Bigger tasks on the operator — multi-page goals (compare 3 supplier pages, fill a supplier enquiry form for
-   approval), real sites with cookie banners and pop-ups, recovering from wrong clicks, a score set on live sites.
+9. ✅ Bigger tasks on the operator — multi-page goals (`/do <url1> <url2> … | question`: the same fact question per page,
+   figures copied exactly incl. price tiers, cheapest/lowest/fastest/… ranked in code, other comparisons summarised and
+   checked against the findings), form filling for approval (`fill in the form: name = …, email = …` — typed, never sent),
+   cookie banners closed before every look (page + consent iframes; reject preferred), wrong-click recovery (back when a page
+   is off-goal; follows the most goal-related link when the thinker names something that is not on the page), rule-based
+   first moves (add to cart / buy now / search) so simple goals take 4–17 s. Score: tests/operator.txt 15/15 in 321 s;
+   live banners: theguardian.com ("Do not sell or share…"), wired.com ("Close"). A live-site score set is still to do
+   (sites change; kept for milestone 10 when the real channels arrive).
 10. Real channels through official APIs (shop e-mail, Instagram/Facebook messaging) behind the same approval gate.
 11. Practice store (free test shop) — listings, descriptions, pricing rules; every change approved by the owner.
    (moved to the very end at the owner's request, 2026-09-06)
