@@ -220,8 +220,10 @@ class Eyes:
         words = " ".join(w["text"].lower() for w in self.read(image)) if self.ocr else (summary + " " + kind_raw).lower()
         if re.search(r"\b(captcha|not a robot|verify you are human|unusual traffic|are you human)\b", words):
             out["warnings"].append("captcha"); out["kind"] = "captcha"
-        elif re.search(r"\b(sign in|log in|login|password)\b", words) and re.search(r"\b(password|forgot)\b", words):
+        elif re.search(r"\b(password|forgot (your )?password|(sign|log) in to (continue|see|view|watch)|create an account to)\b", words):
             out["warnings"].append("login wall"); out["kind"] = "login" if out["kind"] in ("page", "other", "dialog") else out["kind"]
+        elif out["kind"] == "login":
+            out["kind"] = "page"                                        # the model saw a 'Sign in' button, not a wall
         if re.search(r"\b(checkout|place order|pay now|card number|cvv|complete purchase)\b", words):
             out["warnings"].append("payment step")
         if re.search(r"\b(error|went wrong|not found|404|503|unavailable)\b", words):

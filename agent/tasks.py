@@ -337,6 +337,10 @@ class Tasks:
             if d["kind"] in ("captcha", "login") or any(w in ("captcha", "login wall") for w in d["warnings"]):
                 return f"it shows a {d['kind'] if d['kind'] in ('captcha', 'login') else 'login'} wall — I stopped (I never pass CAPTCHAs or log in)."
             parts = [f"• {d['summary']}" if d["summary"] else ""]
+            words0 = " ".join(l["text"].lower() for l in self.eyes.lines(shot)) if self.eyes.ocr else ""
+            if re.search(r"try searching to get started|start watching videos", words0):
+                return ("YouTube shows me an empty home page ('Try searching to get started') because I'm not signed in — there is no "
+                        "trending list on it. Ask me to /watch <topic> instead: I search videos directly and read their captions.")
             if question:
                 ans = self.eyes.look(shot, question + " Answer only from what is visible; say 'not visible' if it is not on the screen.", max_tokens=140)
                 if ans:
