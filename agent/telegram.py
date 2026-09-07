@@ -91,6 +91,19 @@ class Bot:
         except TelegramError:
             return None
 
+    def get_file(self, file_id, max_bytes=8_000_000):
+        """Download a file the owner sent (photo/screenshot) → bytes, or b'' on failure."""
+        try:
+            info = self.call("getFile", file_id=file_id)
+            path = (info or {}).get("file_path")
+            if not path:
+                return b""
+            url = self.base.replace("/bot", "/file/bot", 1) + path
+            with urllib.request.urlopen(url, timeout=60) as r:
+                return r.read(max_bytes)
+        except Exception:
+            return b""
+
     def send_photo(self, chat_id, jpeg_bytes, caption=None):
         """Send an in-memory JPEG as a photo (used for the live screen)."""
         return self.send_document(chat_id, None, caption, payload=jpeg_bytes, field="photo", name="screen.jpg")

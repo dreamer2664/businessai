@@ -49,7 +49,12 @@ class Desktop:
     def describe_status(self):
         if not self.have_xdotool or not self.have_shot:
             return "desktop: tools missing (sh scripts/install_desktop.sh) — I can still see through my browser"
-        where = f"the real display {self.display}" if self.display and self.own_x is None else (f"my own virtual screen {VDISPLAY}" if self.own_x else "no screen yet (starts on first use)")
+        if self.own_x is not None or self.display == VDISPLAY:
+            where = f"my own virtual screen {VDISPLAY}"
+        elif self.display:
+            where = f"the real display {self.display}"
+        else:
+            where = "no screen yet (starts on first use)"
         return f"desktop: {where} · {self.actions} actions this session"
 
     def ensure_display(self):

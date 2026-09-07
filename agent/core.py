@@ -9,6 +9,7 @@ Usage:  python3 -m agent.core            # run
 """
 import datetime as _dt
 import json
+import os
 import re
 import sys
 import threading
@@ -23,9 +24,11 @@ from .memory import Memory
 from .learn import Learner
 from .inbox import Inbox
 from .social import Social
+from .eyes import Eyes
+from .desktop import Desktop
 from .telegram import Bot, TelegramError
 
-VERSION = "0.7 (milestone 5: customer replies + social posts, self-repairing thinking model)"
+VERSION = "0.8 (milestone 6: eyes — vision model + OCR; desktop screen)"
 
 HELP = """Just talk to me. I work out whether you're asking a question, want something looked up on the web, want a page summarized, or want suppliers compared.
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.
@@ -39,6 +42,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /inbox — customer messages waiting; /inbox practice loads 12 sample messages so you can see how I'd answer them
 /post <platform> <what about> — I draft a social post (instagram, facebook, tiktok, x, linkedin, pinterest), you approve/edit, then copy it — I never publish by myself
 /policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
+/eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
 /screen · /watch on|off — see my browser · /status · /selftest
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
@@ -66,6 +70,8 @@ class Agent:
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
         self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log)
         self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
+        self.eyes = Eyes(log=self.log, planner=self.planner)
+        self.desktop = Desktop(log=self.log, eyes=self.eyes)
         self.posts = {}             # post id -> draft dict awaiting the owner's tap
         self.editing_post = None    # post id whose text the owner is typing
         self.drafts = {}            # message id -> draft dict awaiting the owner's tap
@@ -175,6 +181,11 @@ class Agent:
         fwd = msg.get("forward_origin") or msg.get("forward_from") or msg.get("forward_sender_name") or msg.get("forward_date")
         if not text:
             text = (msg.get("caption") or "").strip()
+        photo = msg.get("photo") or ([msg["document"]] if (msg.get("document") or {}).get("mime_type", "").startswith("image/") else [])
+        if photo and not fwd:
+            self.log("in", text=f"[photo] {text}")
+            threading.Thread(target=self.look_at_photo, args=(chat_id, photo[-1]["file_id"], text), daemon=True).start()
+            return
         self.log("in", text=text)
         if (fwd or re.match(r"^/customer\b", text, re.I)) and not self.editing:
             body = re.sub(r"^/customer\b[:\s]*", "", text, flags=re.I).strip()
@@ -319,6 +330,69 @@ class Agent:
         else:
             self.bot.answer_callback(cq["id"])
 
+    # ---- eyes -------------------------------------------------------------
+    def install_eyes(self):
+        msg = self.eyes.install(progress=lambda p: self.log("eyes_download", progress=p))
+        self.notify(msg + ("" if self.eyes.ocr else "\nFor exact clicking I also need OCR: sudo apt install -y tesseract-ocr (see scripts/install_desktop.sh)."))
+
+    def look_at_photo(self, chat_id, file_id, question):
+        data = self.bot.get_file(file_id)
+        if not data:
+            self.bot.send(chat_id, "I couldn't download that picture.")
+            return
+        if not self.eyes.installed():
+            txt = self.eyes.text(data) if self.eyes.ocr else ""
+            self.bot.send(chat_id, ("I can read the words but my vision model isn't installed yet (/eyes install).\n\n" + txt[:1500]) if txt
+                          else "My vision model isn't installed yet — send /eyes install (310 MB, once).")
+            return
+        self.busy = "looking at a picture"
+        try:
+            d = self.eyes.describe(data)
+            ans = self.eyes.look(data, question) if question else ""
+            words = self.eyes.text(data, limit=600) if self.eyes.ocr else ""
+            out = f"👁 {d['title'] or 'Picture'} — {d['summary']}"
+            if d["warnings"]:
+                out += "\n⚠️ " + ", ".join(d["warnings"])
+            if ans:
+                out += f"\n\nYour question: {ans}"
+            if words:
+                out += f"\n\nText I can read: {words[:500]}{'…' if len(words) > 500 else ''}"
+            self.bot.send(chat_id, out)
+        finally:
+            self.busy = None
+
+    def look_at_screen(self, question=None):
+        """Screenshot of the agent's own screen (desktop if there is one, else the browser) → eyes → owner."""
+        shot = b""
+        src = ""
+        if self.desktop.available() and (os.environ.get("DISPLAY") or self.desktop.own_x):
+            shot = self.desktop.screenshot("look")
+            src = "my desktop"
+            if shot and self.eyes.ocr and not self.eyes.read(shot):          # blank screen: nothing open on it
+                shot, src = b"", ""
+        if not shot:
+            try:
+                res = self.tasks.screenshot()
+                if res:
+                    shot, src = res[0], "my browser"
+            except Exception:
+                pass
+        if not shot:
+            self.notify("Nothing to look at right now: my desktop is empty and my browser is closed (it opens when a task starts).")
+            return
+        self.busy = "looking at my screen"
+        try:
+            self.bot.send_photo(self.owner_id, shot, caption=src)
+            if self.eyes.installed():
+                d = self.eyes.describe(shot)
+                ans = self.eyes.look(shot, question) if question else ""
+                out = f"👁 I see: {d['title']} — {d['summary']}" + (f"\n⚠️ {', '.join(d['warnings'])}" if d["warnings"] else "") + (f"\n\n{ans}" if ans else "")
+            else:
+                out = "Text on it: " + (self.eyes.text(shot, limit=500) or "(none)") + "\n(vision model not installed — /eyes install)"
+            self.notify(out)
+        finally:
+            self.busy = None
+
     # ---- social posts -----------------------------------------------------
     def draft_post(self, platform, topic):
         if self.busy:
@@ -448,6 +522,16 @@ class Agent:
             return "\n\n".join(f"{n['t'][:16]} · {n['kind']} · {n['topic']}\n{n['text'][:500]}" for n in ns)
         if low.startswith("/report"):
             return self.memory.daily_report() or "Nothing to report yet today."
+        if low.startswith("/eyes"):
+            arg = low[5:].strip()
+            if arg.startswith("install"):
+                threading.Thread(target=self.install_eyes, daemon=True).start()
+                return "Downloading my vision model (about 310 MB, once). I'll tell you when it's ready."
+            return f"{self.eyes.describe_status()}\n{self.desktop.describe_status()}\n\nSend me any screenshot or photo (with a question as the caption if you like) and I'll tell you what I see. /look = look at my own screen now."
+        if low.startswith("/look"):
+            q = text[5:].strip() or None
+            threading.Thread(target=self.look_at_screen, args=(q,), daemon=True).start()
+            return "Looking at my screen…"
         if low.startswith("/post"):
             arg = text[5:].strip()
             if not arg:
@@ -590,6 +674,7 @@ class Agent:
                 f"{self.planner.describe()} · notes: {len(self.memory.notes(limit=100000))} · {self.memory.list_text().splitlines()[-1]}\n"
                 f"{self.learner.status()}\n"
                 f"{self.inbox.status()}\n{self.social.status()}\n"
+                f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")
@@ -615,6 +700,7 @@ class Agent:
                 continue
             self.tasks.tick()
             self.planner.tick()
+            self.eyes.tick()
             self.idle_work()
             for u in updates:
                 self.state["offset"] = u["update_id"] + 1
