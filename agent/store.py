@@ -241,6 +241,18 @@ class Store:
             self.save()
             return True
 
+    def note_reply(self, order_no, email, text):
+        """File an approved customer reply: on the order's event list when the order is known, else in the message log."""
+        with self.lock:
+            o = self.order(order_no) if order_no and str(order_no).isdigit() else None
+            entry = {"t": _now(), "what": f"replied to {email}: {text[:160]}"}
+            if o:
+                o["events"].append(entry)
+            else:
+                self.data.setdefault("replies", []).append({**entry, "to": email})
+            self.save()
+            return bool(o)
+
     def orders_for(self, email):
         """All orders placed with this e-mail address, newest first."""
         e = (email or "").strip().lower()
@@ -725,7 +737,7 @@ class Handler(BaseHTTPRequestHandler):
         if not o:
             return self._send(page("Order", "<p>No such order.</p>", s), 404)
         rows = "".join(f"<tr><td>{html.escape(l['name'])} <span class=muted>{html.escape(l['option'])}</span></td><td>{l['qty']}</td><td>{money(l['price'] * l['qty'])}</td></tr>" for l in o["lines"])
-        ev = "".join(f"<li>{html.escape(e['t'][:16])} — {html.escape(e['what'])}</li>" for e in o["events"])
+        ev = "".join(f"<li>{html.escape(e['t'][:16])} — {html.escape(e['what'])}</li>" for e in o["events"] if not e["what"].startswith("replied to"))
         body = (f"<p>Thank you, {html.escape(o['customer'].get('name', ''))}! Order <b>#{o['n']}</b> — status: <b>{o['status']}</b>" + (f" · tracking {o['tracking']}" if o.get("tracking") else "") + "</p>"
                 f"<table>{rows}<tr><td>Shipping ({o['country']})</td><td></td><td>{money(o['shipping'])}</td></tr><tr><td><b>Total</b></td><td></td><td><b>{money(o['total'])}</b></td></tr></table><ul>{ev}</ul>")
         self._send(page(f"Order #{o['n']}", body, s))

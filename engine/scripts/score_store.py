@@ -145,7 +145,7 @@ try:
             for frm, msg, must, mustnot in rows:
                 d = I2.draft({"id": "t", "from": frm, "channel": "store", "text": msg}); low = d["text"].lower()
                 ok = re.search(must, low) and not re.search(mustnot, low) and not d["checks"]; good += bool(ok)
-                print(f"   {'ok ' if ok else 'BAD'} {msg[:55]} -> {d['text'].split(chr(10)+chr(10))[1][:150]!r} {d['checks']}", flush=True)
+                print(f"   {'ok ' if ok else 'BAD'} {msg[:55]} -> {d['text'].split(chr(10)+chr(10))[1][:150 if ok else 600]!r} {d['checks']}", flush=True)
         finally:
             P.stop()
         check("store customers answered from the store's own pages and order system (≥ 7/8)", good >= 7, f"{good}/8")

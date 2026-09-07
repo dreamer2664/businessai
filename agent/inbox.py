@@ -541,6 +541,13 @@ class Inbox:
                 sent = sent.strip()
                 if len(sent) >= 12 and text.lower().startswith(sent.lower()):
                     text = text[len(sent):].lstrip(" \n-—:,")
+            # ... also when the model turned "Can I still return…?" into "Can you still return…?" (echo in the second person)
+            first_sent = re.split(r"(?<=[.!?])\s+", text.strip(), maxsplit=1)
+            if first_sent and first_sent[0].endswith("?") and len(first_sent) > 1:
+                qa = set(re.findall(r"[a-z]{4,}", first_sent[0].lower())) - {"your", "you", "still", "does", "have", "with", "that", "this", "what", "when", "where", "which"}
+                qb = set(re.findall(r"[a-z]{4,}", rec["text"].lower()))
+                if qa and len(qa & qb) >= max(2, int(0.6 * len(qa))):
+                    text = first_sent[1].lstrip(" \n-—:,")
             if len(text) < 10:
                 text = "Thank you for your message. I will check this with the owner and come back to you within one business day."
         lines = [l.rstrip() for l in text.splitlines()]
@@ -553,6 +560,8 @@ class Inbox:
                 break
         body = "\n".join(lines[:cut]).strip()
         body = re.sub(r"\n{3,}", "\n\n", body)
+        if body[:1].islower():
+            body = body[0].upper() + body[1:]
         closing = self.style.get("closing", "").lower()
         if closing and body.lower().rstrip(" .!").endswith(" " + closing):   # "... latest. Carlo" → strip the copied closing
             body = body[: -len(closing)].rstrip(" .!,-—") + "."
@@ -676,8 +685,10 @@ class Inbox:
                 flags.append("does not confirm the cancellation — the order system says it has not shipped, so it can be cancelled and refunded in full")
             if c["kind"] == "cancel_or_change" and st == "paid" and not re.search(r"\bcancel", (c.get("text") or "").lower()) and re.search(r"\bcancel+ed and refunded\b|\bwill be cancel+ed\b", low):
                 flags.append("offers a cancellation the customer did not ask for — they asked for a change")
-            if c["kind"] == "cancel_or_change" and st in ("shipped", "delivered") and not re.search(r"cannot be cancel|can no longer|can't be cancel|already (been )?(shipped|left|dispatched)|has (already )?left|return", low):
+            if c["kind"] == "cancel_or_change" and st in ("shipped", "delivered") and not re.search(r"cannot be cancel|can no longer|can't be cancel|not possible to cancel|too late to cancel|already (been )?(shipped|left|dispatched)|has (already )?left|is (currently |already )?(shipped|in transit|on its way|with gls)", low):
                 flags.append(f"does not explain that the order is already {st} (no cancellation, only a return)")
+            if c["kind"] == "cancel_or_change" and st in ("shipped", "delivered") and not re.search(r"\breturn", low):
+                flags.append("does not offer the return (30 days of delivery) — the only option for a shipped order")
         else:
             if re.search(r"\b(has (been )?shipped|is on its way|will arrive (on|by)|arrives? (tomorrow|on)|track it here|has been dispatched|we're working on your order)\b", low):
                 flags.append("claims to know the order status — it doesn't")

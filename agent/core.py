@@ -468,6 +468,12 @@ class Agent:
         ch = rec.get("channel", "practice")
         if ch == "owner":
             self.bot.send(self.owner_id, f"📋 Reply for {rec.get('from', 'the customer')} — long-press to copy, then paste it where they wrote you:\n\n{final_text}")
+        elif ch == "store":                                              # practice shop: the reply is filed on the order (visible in /store admin)
+            d = self.drafts.get(mid) or {}
+            try:
+                self.store.note_reply(d.get("order_no"), rec.get("from", ""), final_text)
+            except Exception as e:
+                self.log("store_note_error", error=str(e)[:120])
         elif ch in REAL_CHANNELS:
             ok, info = self.channels.send(rec, final_text)
             if ok:
