@@ -80,7 +80,7 @@ messages and social media, reports to the owner and asks questions via phone.
    (Meta Graph API, polled, no public server) feed the same inbox; drafts arrive with **Approve & send / Edit / Reject**
    and the reply leaves through the channel only after the tap (e-mail threaded with the original quoted). Machine mail
    (newsletters, auto-replies, bounces, no-reply) filtered; ledger of seen ids → nothing drafted twice; secrets redacted.
-   /channels [check|now]. Score: engine/scripts/score_channels.py 40/40 against a local fake mail server + fake Graph API
+   /channels [check|now]. Score: engine/scripts/score_channels.py 36/36 against a local fake mail server + fake Graph API
    (no account needed). Setup guide: docs/CHANNELS.md.
 11. Practice store (free test shop) — listings, descriptions, pricing rules; every change approved by the owner.
    (moved to the very end at the owner's request, 2026-09-06)

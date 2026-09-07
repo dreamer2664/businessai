@@ -6,7 +6,7 @@ and asking questions through Telegram.
 
 **Status: milestone 10 — real customer channels**: your shop e-mail (any provider) and Facebook Page / Instagram messages
 are read every few minutes, every real customer message gets a drafted reply on your phone with **Approve & send / Edit /
-Reject**, and the answer goes out only after your tap (docs/CHANNELS.md; 40/40 on the channel checks). Before that: milestone 9,
+Reject**, and the answer goes out only after your tap (docs/CHANNELS.md; 36/36 on the channel checks). Before that: milestone 9,
 bigger jobs for the operator (`/do` compares several pages, fills in forms, closes cookie banners, 15/15), eyes (vision
 model + OCR, 16/16), desktop hands, the see → think → act → check loop; earlier: customer-message drafts 22/23, social post drafts, marketing exam 90 %, browse tasks 19/19, knowledge pack 52/55. Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
 for the roadmap and the rules (score-driven, frugal, owner-in-the-loop, no
@@ -99,7 +99,7 @@ conversations — no public server needed) and puts real customer messages into 
 threaded under the customer's mail with their text quoted, Messenger/Instagram replies go out as customer-service responses.
 A ledger of seen ids (state/channels.json) means nothing is drafted twice. Setup for Gmail, Outlook, Aruba, Libero, own domains
 and the Meta app: [docs/CHANNELS.md](docs/CHANNELS.md). `/channels`, `/channels check`, `/channels now`.
-Test without any account: `python3 engine/scripts/score_channels.py` (fake IMAP/SMTP server + fake Graph API, 40 checks).
+Test without any account: `python3 engine/scripts/score_channels.py` (fake IMAP/SMTP server + fake Graph API, 36 checks).
 
 ## Eyes (milestone 6)
 `agent/eyes.py`: a 310 MB vision model (LFM2-VL-450M, `/eyes install` once; runs on the same llama-server only while looking,

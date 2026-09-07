@@ -89,4 +89,4 @@ last message; older conversations have to be answered from the Facebook inbox by
 - The AI never sees the addresses or ids it replies to — they stay in the inbox record, not in the model prompt.
 - Messages that mention lawyers, chargebacks, injuries, press or personal data are flagged **ESCALATION** in the draft.
 - Test everything without any account: `python3 engine/scripts/score_channels.py` runs a fake mail server and a fake Graph
-  API on your machine (40 checks).
+  API on your machine (36 checks).
