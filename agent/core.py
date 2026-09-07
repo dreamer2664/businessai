@@ -37,7 +37,7 @@ from .store import money
 def money_list(orders):
     return ", ".join(f"#{o['n']} {money(o['total'])}" for o in orders[:5]) + ("…" if len(orders) > 5 else "")
 
-VERSION = "1.4 (/shop reads your help AND product pages; customer questions about delivery, returns, contact and products are answered with the pages' own words)"
+VERSION = "1.5 (milestone 11: practice store — /store open; I run a whole shop here with fake payments and simulated customers, and every change waits for your tap)"
 
 HELP = """Just talk to me. I work out whether you're asking a question, want something looked up on the web, want a page summarized, or want suppliers compared.
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.

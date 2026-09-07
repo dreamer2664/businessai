@@ -82,8 +82,18 @@ messages and social media, reports to the owner and asks questions via phone.
    (newsletters, auto-replies, bounces, no-reply) filtered; ledger of seen ids → nothing drafted twice; secrets redacted.
    /channels [check|now]. Score: engine/scripts/score_channels.py 36/36 against a local fake mail server + fake Graph API
    (no account needed). Setup guide: docs/CHANNELS.md.
-11. Practice store (free test shop) — listings, descriptions, pricing rules; every change approved by the owner.
-   (moved to the very end at the owner's request, 2026-09-06)
+11. ✅ Practice store — `agent/store.py`: a small shop that really works, served by the agent on the owner's machine
+   (127.0.0.1:8095; `/store open`): catalogue of 5 eco home-goods with options, cart, checkout with a *practice* payment
+   button, order pages, help pages (shipping table, returns, FAQ, contact form → inbox), and an admin panel (basic-auth,
+   `/store admin`) with orders, stock, prices, page texts and a change log. Ledger `state/store/store.json`. `/store day`
+   lets a practice day pass: simulated visits, orders (stock reserved, shipping by country, no shipping outside the EU),
+   deliveries, and 1–2 customer messages that land in the normal inbox as channel "store" and get drafted replies from the
+   store's own pages (the agent reads its own shop with the same `/shop` reader). `/store review` makes the agent propose
+   what a careful shopkeeper would do — ship paid orders, reorder sold-out / low stock, reprice thin margins (< 55 % gross
+   once shipping and fees are counted) — as **proposals**: nothing changes until the owner taps Apply. `/store numbers`:
+   visits, conversion, revenue − goods − shipping − fees = profit, best sellers, low stock. Score:
+   `python3 engine/scripts/score_store.py [--model]` 27/27 (shop mechanics, ledger, days, proposals, apply/leave,
+   restart, own-page reading, operator on the store front, 5 store-customer replies from its pages).
 12. Real store — owner handles accounts, payments, legal; AI operates with approval gates on money and public posts.
 
 ## Defaults chosen (override anytime)
@@ -142,3 +152,8 @@ messages and social media, reports to the owner and asks questions via phone.
   (no more "7-15 business days" when the shipping table exists), and "yes we ship to the UK" is caught when the shop says
   not yet. tests/shopfacts.txt grew to 16 (8 product questions incl. two traps); practice pages catalogue.html,
   product_mug.html, product_lamp.html, product_case.html.
+- 2026-09-07 **Milestone 11 shipped** (see above). Design choices: the practice store is *served by the agent itself*
+  (no account, no third-party sandbox, works offline, restorable from the JSON ledger); customers are simulated
+  deterministically per day so scores are repeatable; the AI's actions are all proposals with a why-line, applied only by
+  a tap — the same gate the real store will use; the agent reads its own shop through the browser like any other shop, so
+  the customer-reply path is exactly the real one.
