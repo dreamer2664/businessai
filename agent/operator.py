@@ -23,6 +23,8 @@ from . import config
 from .browser import _JS_TEXT as _JS_TEXT_NAME
 
 MAX_STEPS = 12
+MAX_ASKS = 2            # questions to the owner per goal; more than that means I don't understand the goal
+MAX_SECONDS = 900       # wall-clock budget per goal
 DANGER = re.compile(r"\b(buy|pay|checkout|check out|place order|order now|purchase|confirm|send|post|publish|delete|remove|"
                     r"submit|subscribe|sign in|log in|login|register|agree|accept all|install|download|unsubscribe|"
                     r"transfer|donate|upgrade|start trial|add to cart|add to bag|add to basket)\b", re.I)
@@ -81,13 +83,37 @@ class Operator:
             if not (self.desktop and self.desktop.available()):
                 return "I have no desktop hands here (sh scripts/install_desktop.sh)."
             self.desktop.new_task(allow_actions=False)
+        question = self._is_question(goal)
+        prev_sig = None
+        verify_next = False
+        asks = 0
+        before, last_action = None, ""
         while steps < MAX_STEPS:
+            if time.time() - t0 > MAX_SECONDS:
+                return self._finish("I stopped: this is taking too long. Tell me a more precise goal (or a page to start from) and I'll try again.", t0, steps)
             steps += 1
             seen = self._see(where)
             if seen.get("wall"):
                 return self._finish(f"I stopped at step {steps}: the screen shows a {seen['wall']} — I never pass those. Please do that part yourself; I can continue after.", t0)
+            if question:                                            # read first: is the answer already on the screen?
+                ans = self._try_answer(goal, seen)
+                if ans:
+                    return self._finish(ans, t0, steps)
+            elif verify_next:                                       # after an action: did it work?
+                verify_next = False
+                ev = self._verify(goal, last_action, before, seen)
+                if ev:
+                    return self._finish(f"Done — the screen now shows: {ev}", t0, steps)
             decision = self._think(goal, seen)
             step = decision.get("step", "stop")
+            if question and step in ("click", "type") and DANGER.search(str(decision.get("target", ""))):
+                decision, step = {"step": "scroll", "direction": "down"}, "scroll"      # no buying/submitting to answer a question
+            sig = (step, str(decision.get("target") or decision.get("url") or decision.get("direction") or "").lower())
+            if sig == prev_sig and step in ("click", "type"):
+                self.history.append(f"not repeating '{sig[1]}' — looking further down instead")
+                decision, step = {"step": "scroll", "direction": "down"}, "scroll"
+                sig = (step, "down")
+            prev_sig = sig
             self.log("operator_step", n=steps, step=step, target=str(decision.get("target") or decision.get("url") or decision.get("direction") or "")[:60])
             if step == "done":
                 return self._finish(str(decision.get("answer") or "Done."), t0, steps)
@@ -95,11 +121,14 @@ class Operator:
                 return self._finish(f"I stopped: {decision.get('reason', 'no way forward')}.", t0, steps)
             if step == "ask":
                 q = str(decision.get("question") or "How should I continue?")
-                if self._similar(q, goal):
+                if self._similar(q, goal) or (question and q.rstrip("?").lower() in goal.lower()):
                     self.history.append("wanted to ask you the goal itself — continuing on my own")
                     decision = {"step": "scroll", "direction": "down"}
                     step = "scroll"
             if step == "ask":
+                asks += 1
+                if asks > MAX_ASKS:
+                    return self._finish(f"I stopped: I would need to ask you again ({q}) and I don't want to nag — tell me more precisely what to do and I'll retry.", t0, steps)
                 ans = self.ask_owner(q, ["Continue", "Stop"]) if self.ask_owner else None
                 self.history.append(f"asked you: {q} → {ans}")
                 if ans in (None, "Stop"):
@@ -129,7 +158,13 @@ class Operator:
                 result = self._browser_open(url) if where == "browser" and url.startswith("http") else "cannot open URLs here"
             else:
                 result = f"unknown step {step}"
-            self.history.append(f"{step} {decision.get('target') or decision.get('url') or decision.get('direction') or ''} → {result}"[:200])
+            short = str(result).replace("\n", " ")
+            short = re.sub(r"^URL: \S+\s+TITLE: ([^\n]{0,60}?)\s+TABS:.*$", r"page: \1", short)[:120]
+            self.history.append(f"{step} {decision.get('target') or decision.get('url') or decision.get('direction') or ''} → {short}")
+            if step in ("click", "type") and not str(result).startswith(("refused", "could not", "'", "click failed", "typing failed")):
+                verify_next = True
+                before = seen
+                last_action = f"{'clicked' if step == 'click' else 'typed into'} \"{decision.get('target', '')}\""
             if result == last_change:
                 same_count += 1
                 if same_count >= 2:
@@ -153,23 +188,23 @@ class Operator:
                 st = b.status()
                 shot = b.page.screenshot(type="png", timeout=8000)
                 try:
-                    els = b.page.evaluate(_JS_TEXT_NAME)[:3000]
+                    full = b.page.evaluate(_JS_TEXT_NAME)
                 except Exception:
-                    els = b.extract_text()[:3000]
+                    full = b.extract_text()
                 items = [(it.get("n"), (it.get("label") or "")[:80], it.get("role", "")) for it in (b.items or [])]
-                return st, shot, els, b.page.url, b.page.title(), items
+                return st, shot, full[:12000], b.page.url, b.page.title(), items
             try:
-                st, shot, els, url, title, items = self.tasks.on_hands(lambda: grab(self.tasks.browser()), timeout=60)
+                st, shot, full, url, title, items = self.tasks.on_hands(lambda: grab(self.tasks.browser()), timeout=60)
             except Exception as e:
                 out["elements"] = f"(browser error: {str(e)[:80]})"
                 return out
-            out.update(shot=shot, elements=els, url=url, title=title, items=items)
+            out.update(shot=shot, elements=full[:3000], fulltext=full, url=url, title=title, items=items)
             if st in ("captcha", "login"):
                 out["wall"] = "captcha" if st == "captcha" else "login wall"
         else:
             shot = self.desktop.screenshot("see")
             out["shot"] = shot
-        if self.eyes and out["shot"]:
+        if self.eyes and out["shot"] and (where == "desktop" or len(out.get("fulltext") or "") < 300):
             ls = self.eyes.lines(out["shot"]) if self.eyes.ocr else []
             out["lines"] = ls
             if not out["wall"] and self.eyes.installed() and (where == "desktop" or len(ls) < 6):
@@ -226,6 +261,86 @@ class Operator:
         return {"step": "stop", "reason": "I could not decide the next step"}
 
     @staticmethod
+    def _is_question(goal):
+        g = goal.strip().lower()
+        return bool(re.match(r"^(what|which|when|where|who|how|why|is|are|does|do|can|find out|find|tell me|check|look up|read|list|show me|summari[sz]e|count)\b", g)) or g.endswith("?")
+
+    def _try_answer(self, goal, seen):
+        """Question goals: answer from the screen text only; '' when it is not there."""
+        full = seen.get("fulltext") or ""
+        screen = self._relevant(goal, full) if len(full) > 3000 else self._screen_text(seen)
+        screen = re.sub(r"[ \t]{2,}", " ", re.sub(r"\[\s*\d+\s*\]\s*", "", screen))     # drop [n] element numbers: they confuse the reader
+        if len(screen) < 40:
+            return ""
+        try:
+            raw = self.planner.chat("You are a careful reader. Use only the given text.",
+                                    f"TEXT:\n{screen[:3000]}\n\nUsing only the TEXT above, answer: {goal}\nAnswer in one short sentence with the exact words and figures from the text. "
+                                    f"If the text does not say, answer: NOT ON SCREEN",
+                                    max_tokens=70, timeout=200)
+        except Exception as e:
+            self.log("operator_read_failed", error=str(e)[:80])
+            return ""
+        raw = raw.strip().splitlines()[0].strip() if raw.strip() else ""
+        if not raw or "NOT ON SCREEN" in raw.upper() or raw.upper().startswith(("NONE", "UNKNOWN", "I DON'T", "I DO NOT")):
+            return ""
+        return raw if self._grounded(raw, screen.lower()) else ""
+
+    def _new_text(self, before, after):
+        """Lines that appeared on the screen since `before` (what my last action changed)."""
+        old = set(l.strip() for l in self._screen_text(before).splitlines()) if before else set()
+        new = [l.strip() for l in self._screen_text(after).splitlines() if l.strip() and l.strip() not in old]
+        new = [re.sub(r"\[\d+\]\s*", "", l) for l in new]
+        return " | ".join(new)[:600]
+
+    def _verify(self, goal, action, before, after):
+        """Action goals: did my last action finish the goal? Judged only by what newly appeared. Returns that text or ''."""
+        new = self._new_text(before, after)
+        if not new:
+            return ""
+        try:
+            raw = self.planner.chat("You judge whether a task is complete. Answer YES or NO.",
+                                    f"I {action}. New text appeared on the screen:\n\"{new}\"\n\nMy task was: {goal}\nIs the task now done? Answer YES or NO.",
+                                    max_tokens=5, timeout=200)
+        except Exception:
+            return ""
+        return new if raw.strip().upper().startswith("YES") else ""
+
+    @staticmethod
+    def _relevant(goal, text, limit=2500):
+        """The parts of a long page that best match the goal's rarer words (page order kept, neighbours included)."""
+        lines = []
+        for l in text.splitlines():
+            l = l.strip()
+            if not l:
+                continue
+            if len(l) > 300:                                            # long paragraphs → sentences
+                lines.extend(x.strip() for x in re.split(r"(?<=[.!?])\s+(?=[A-Z\[])", l) if x.strip())
+            else:
+                lines.append(l)
+        if sum(len(l) for l in lines) <= limit:
+            return "\n".join(lines)
+        stop = {"the", "and", "for", "what", "which", "when", "does", "how", "many", "find", "out", "tell", "with", "from", "this",
+                "that", "are", "was", "were", "has", "have", "who", "where", "why", "much", "there", "about", "into", "page", "site"}
+        keys = {w for w in re.findall(r"[a-z0-9]{3,}", goal.lower()) if w not in stop}
+        lows = [l.lower() for l in lines]
+        df = {k: sum(1 for low in lows if k in low) for k in keys}      # rare goal words weigh more ("founded" ≫ "etsy")
+        scored = []
+        for i, low in enumerate(lows):
+            sc = sum(1.0 / df[k] for k in keys if df[k] and k in low)
+            scored.append((sc, i))
+        keep, size = set(), 0
+        for sc, i in sorted(scored, key=lambda x: (-x[0], x[1])):
+            if sc <= 0:
+                break
+            for j in (i, i - 1, i + 1):                                 # the neighbour often holds the value ("Founded" / "June 18, 2005")
+                if 0 <= j < len(lines) and j not in keep and size + len(lines[j]) <= limit:
+                    keep.add(j)
+                    size += len(lines[j]) + 1
+            if size >= limit - 40:
+                break
+        return "\n".join(lines[i] for i in sorted(keep))
+
+    @staticmethod
     def _similar(a, b):
         wa = set(re.findall(r"[a-z]{4,}", a.lower()))
         wb = set(re.findall(r"[a-z]{4,}", b.lower()))
@@ -234,10 +349,15 @@ class Operator:
     @staticmethod
     def _grounded(answer, screen):
         """A 'done' answer must have its numbers/years and most of its long words on the screen."""
-        nums = re.findall(r"\d[\d.,]*", answer)
-        if nums and not all(n.strip(".,") in screen for n in nums):
+        def norm(t):                                   # "12.90" == "12,90" == "12 90"; "1,000" == "1000"
+            return re.sub(r"[.,\s]", "", t)
+        screen_nums = {norm(n) for n in re.findall(r"\d[\d.,\s]*\d|\d", screen)}
+        nums = [norm(n) for n in re.findall(r"\d[\d.,]*\d|\d", answer)]
+        if nums and not all(n in screen_nums or n in norm(screen) for n in nums):
             return False
-        words = [w for w in re.findall(r"[a-z]{5,}", answer.lower()) if w not in ("found", "there", "which", "about", "their", "these", "those", "answer", "shows", "screen")]
+        stop = ("found", "there", "which", "about", "their", "these", "those", "answer", "shows", "screen", "contains", "costs", "pieces", "piece",
+                "according", "states", "total", "price", "amount", "number", "years", "around", "approximately", "including", "currently")
+        words = [w for w in re.findall(r"[a-z]{5,}", answer.lower()) if w not in stop]
         if not words:
             return bool(nums)
         return sum(1 for w in words if w in screen) >= max(1, int(0.6 * len(words)))

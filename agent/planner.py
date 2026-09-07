@@ -37,6 +37,16 @@ REMOTE_URL = os.environ.get("BAI_LLM_URL", "")
 IDLE_STOP = int(os.environ.get("BAI_LLM_IDLE", "600"))
 THREADS = os.environ.get("BAI_LLM_THREADS") or str(max(1, (os.cpu_count() or 2) - 1))
 
+
+def _mem_available_mb():
+    try:
+        for line in open("/proc/meminfo"):
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) // 1024
+    except Exception:
+        pass
+    return 99999
+
 SYSTEM = ("You are the thinking part of a small business AI that helps its owner run an online store (dropshipping, "
           "marketing, suppliers, customers). Be brief, concrete and honest. Use only the EVIDENCE you are given; if it "
           "does not contain the answer, say so plainly. Never invent prices, names, dates or numbers.")
@@ -96,10 +106,14 @@ class Planner:
         self.last_error = ""
         self._self_repair(env)
         logf = open(config.LOG_DIR / "llm.log", "ab")
+        args = [str(SERVER_BIN), "-m", str(MODEL_FILE), "--host", "127.0.0.1", "--port", str(PORT),
+                "-c", "4096", "-np", "1", "-t", THREADS, "--no-warmup"]
+        if _mem_available_mb() < 3000:
+            # small machines: keep the weights memory-mapped (evictable) instead of copied into private RAM,
+            # otherwise the browser + model together get the model killed by the kernel (OOM)
+            args.append("--no-repack")
         try:
-            self._proc = subprocess.Popen([str(SERVER_BIN), "-m", str(MODEL_FILE), "--host", "127.0.0.1", "--port", str(PORT),
-                                           "-c", "4096", "-np", "1", "-t", THREADS, "--no-warmup"],
-                                          env=env, stdout=logf, stderr=subprocess.STDOUT)
+            self._proc = subprocess.Popen(args, env=env, stdout=logf, stderr=subprocess.STDOUT)
         except OSError as e:
             self.last_error = f"cannot execute llama-server: {e}"
             self.log("llm_start_failed", error=self.last_error)
