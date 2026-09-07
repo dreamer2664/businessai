@@ -4,7 +4,8 @@ An AI that (eventually) runs an online store end to end: product and supplier
 research, listings, customer messages, social media — reporting to its owner
 and asking questions through Telegram.
 
-**Status: milestone 3 — thinking model, plain language, memory** (marketing exam 90 %, browse tasks 18/19, knowledge pack 52/55). Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
+**Status: milestone 8 — it works a screen by itself (`/do <goal>`)**: eyes (vision model + OCR, 16/16), desktop hands, and the
+see → think → act → check loop, 10/10 on the operator score set; earlier: customer-message drafts 22/23, social post drafts, marketing exam 90 %, browse tasks 19/19, knowledge pack 52/55. Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
 for the roadmap and the rules (score-driven, frugal, owner-in-the-loop, no
 CAPTCHA-breaking, official platform connections only).
 
@@ -86,6 +87,27 @@ Try it without Telegram: `python3 -m agent.viewer --demo` (runs a few read-only 
   sign-off (`state/style.json`, visible in `/policy`); the customer-specific words are never reused for another customer.
 - `/inbox practice` loads 12 sample messages; `python3 engine/scripts/score_inbox.py` scores 23 messages
   (kind + must/must-not phrases + zero safety flags), currently 22/23.
+
+## Eyes (milestone 6)
+`agent/eyes.py`: a 310 MB vision model (LFM2-VL-450M, `/eyes install` once; runs on the same llama-server only while looking,
+~550 MB RAM) answers plain questions about any screenshot, and tesseract OCR gives every word its position on the screen
+(three views so white-on-colour button labels and boxed words are read too; menu items become separate targets).
+Telegram: `/eyes` (status), `/look [question]` (its own screen), or just send it a screenshot/photo with a question as the caption.
+Install the tools with `sh scripts/install_desktop.sh` (tesseract, Xvfb, xdotool, scrot). Score: `python3 engine/scripts/score_eyes.py` → 16/16.
+
+## Desktop hands (milestone 7)
+`agent/desktop.py`: its own virtual screen (or the real one when `DISPLAY` is set), screenshot → OCR → click on words with xdotool,
+type, keys, scroll. Same rules as the browser: clicks that spend money, publish, delete or sign in need the owner's tap, passwords are
+never typed, every click is checked by comparing the screen before and after.
+
+## Operator — `/do <goal>` (milestone 8)
+`agent/operator.py` repeats look → decide one step → guard → click/type/scroll → check, up to 12 steps (15 min), in two modes:
+- **browser** (default): `/do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded?` — fast and exact (page elements).
+- **desktop**: `/do desktop put one bamboo toothbrush set in the cart` — works whatever window is open on its screen, from pixels only.
+Questions are answered only from what is on the screen (numbers are checked against it; "I don't guess"); actions are confirmed by what
+newly appeared ("Added to cart: 1 × …", and a *buy* needs an order confirmation). Any click that costs money, publishes, signs in,
+deletes or submits waits for your tap on the phone; login / payment / password goals are refused up front; captcha and login walls stop it
+and hand the screen to you. Score: `python3 engine/scripts/score_operator.py` → 10/10 on `tests/pages/` (see docs/SCORES.md).
 
 ## Phone line (what the agent can do today)
 - Only the owner (Telegram username in `.secrets/env`, pinned to the numeric id at first contact) is served.

@@ -234,7 +234,15 @@ class Operator:
         if self.eyes and out["shot"] and (where == "desktop" or len(out.get("fulltext") or "") < 300):
             ls = self.eyes.lines(out["shot"]) if self.eyes.ocr else []
             out["lines"] = ls
-            if not out["wall"] and self.eyes.installed() and (where == "desktop" or len(ls) < 6):
+            if where == "desktop":
+                # every line of text on the screen is something I can click on (by its words) — same shape as browser items
+                out["items"] = [(i + 1, l["text"], "text") for i, l in enumerate(ls[:80])]
+                words = " ".join(l["text"].lower() for l in ls)
+                if re.search(r"\b(i'?m not a robot|captcha|verify you are human|checking your browser)\b", words):
+                    out["wall"] = "captcha"
+                elif re.search(r"\bpassword\b", words) and re.search(r"\b(sign in|log in|login)\b", words) and len(ls) < 25:
+                    out["wall"] = "login wall"
+            if not out["wall"] and self.eyes.installed() and len(ls) < 6:
                 d = self.eyes.describe(out["shot"])
                 out["description"] = d["summary"]
                 if d["kind"] == "captcha" or "captcha" in d["warnings"]:
@@ -259,6 +267,9 @@ class Operator:
         items = seen.get("items") or []
         if not items:
             return self._screen_text(seen)
+        if seen.get("where") == "desktop":
+            return ("SCREEN (my own screen; every line below is text I can click on by its words; to type, click a field first):\n"
+                    + "\n".join(f'"{lab[:70]}"' for _, lab, _ in items[:60]))
         stop = {"the", "and", "for", "what", "which", "when", "does", "how", "many", "find", "out", "tell", "with", "from", "this", "that",
                 "are", "was", "were", "has", "have", "who", "where", "why", "much", "there", "about", "into", "page", "site", "open",
                 "click", "search", "first", "sentence", "article", "product", "its", "then", "please", "put", "one"}
