@@ -405,17 +405,27 @@ class Browser:
         return loc.first
 
     def _settle(self, url_before, sig_before, wait=6.0):
-        """After a click/Enter: some single-page shops change the address but never draw the new page (the old title and
-        heading stay on screen). Wait a little for a real change; if the address changed but title/heading did not, load
-        the new address itself — that always draws the page."""
+        """After a click/Enter: wait until the new page is really drawn. Two shop habits are handled: (a) the address
+        changes first and the content arrives a few seconds later (IKEA) — wait for it; (b) single-page shops change the
+        address but never draw the new page (Unieuro: old title and heading stay) — then load the new address itself."""
         t0 = time.time()
         head = lambda sig: sig.split("|")[:2]                              # title + first heading
-        while time.time() - t0 < wait:
+        changed_at = None
+        while time.time() - t0 < wait + 4:
             if self.page.url == url_before:
                 return False
-            if head(self._dom_sig()) != head(sig_before):
-                return False
+            try:
+                sig = self._dom_sig()
+                if head(sig) != head(sig_before):
+                    changed_at = changed_at or time.time()
+                    complete = self.page.evaluate("() => document.readyState") == "complete"
+                    if len(self.page.inner_text("body", timeout=2000)) > 800 or complete or time.time() - changed_at > 3:
+                        return False                                       # new page drawn (or as drawn as it gets)
+            except Exception:
+                pass                                                       # mid-navigation: try again
             time.sleep(0.7)
+        if changed_at:
+            return False
         try:
             url = self.page.url
             self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
@@ -495,6 +505,11 @@ class Browser:
             except Exception:
                 pass
             time.sleep(0.5)
+            t0 = time.time()
+            while self.page.url == url_before and time.time() - t0 < 6:      # single-page shops change the address a few seconds later
+                if self._dom_sig().split("|")[:2] != sig_before.split("|")[:2] or self.page.url.startswith("file://"):
+                    break                                                    # results drawn in place (no address change) — fine
+                time.sleep(0.5)
             if self.page.url != url_before:
                 self._settle(url_before, sig_before)
         self.log("browser_type", n=int(n), label=it.get("label"), text=text[:80], enter=enter)
