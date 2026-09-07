@@ -1,0 +1,12 @@
+# Customer questions that only the shop's OWN pages can answer (tests/pages/shop.html → faq.html, shipping.html).
+# Scored by engine/scripts/score_shopfacts.py: the reply must contain the shop page's figure, must not contain the
+# must-not words, and must pass Inbox._check with zero flags. Needs the thinking model.
+# message<TAB>MUST contain (a|b = alternatives; ; = several groups)<TAB>MUST NOT contain (regex)
+Hi! How long does delivery to Germany take?	4-6|4–6|4 to 6	7-15|7–15|owner will confirm
+What does shipping to Italy cost?	3,90|3.90	6,90|8,90|7-15
+Do you ship to the UK? I live in London.	not yet|2027|don't ship|do not ship|not currently|only|eu	we ship to the uk|yes, we ship|7-15
+Can I still return the toothbrush set after 3 weeks? Who pays the return shipping?	30 days|30-day;4,90|4.90|faulty	7-15
+Is there a phone number I can call you on?	help@greennest.example|chat	7-15|call us on|\+39
+Ciao, quanto ci mette la consegna in Italia?	2-3|2–3|2 to 3	7-15|4-7
+How much is shipping to Spain and how long does it take?	6,90|6.90;4-6|4–6	8,90|7-15
+Do you offer free shipping?	39	7-15

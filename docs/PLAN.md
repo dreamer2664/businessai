@@ -122,3 +122,12 @@ messages and social media, reports to the owner and asks questions via phone.
   when its figures are on the page; a figure taken from a "maximum / from / free above" sentence is reported with the page's
   exact words. Small machines: lean Chromium (one renderer, no images/fonts) and both cores for the thinking model.
   Operator test set still 15/15 (now 170 s instead of 321 s); new live set tests/live.txt 10/10.
+- 2026-09-07 **Customer replies from the shop's own pages** (`agent/shopfacts.py`, `/shop <address>`). The browser reads the
+  shop's start page and follows its help / shipping / returns / contact / FAQ links (same site, ≤ 7 pages; usual addresses
+  such as /faq, /shipping, /pages/returns are tried when the start page links to none), keeps every sentence that states a
+  customer-relevant fact (delivery times, costs, destinations, return rules, contact ways, payment, where the shop is) word
+  for word with its page, and stores the sheet in `state/shopfacts.json` (re-read by itself once a week when idle). No model
+  is involved in reading. Drafts get the matching sentences as "facts from the shop's own website"; the safety checks accept
+  figures, time spans and destinations that stand on those pages (a reply may say "4–6 business days to Germany" when the
+  shipping table says so) and still flag everything else. New score set tests/shopfacts.txt (8 questions only the shop's
+  pages can answer; run `python3 engine/scripts/score_shopfacts.py`, `--nofacts` shows the baseline without the pages).

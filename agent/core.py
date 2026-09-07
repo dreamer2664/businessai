@@ -23,6 +23,7 @@ from .planner import Planner
 from .memory import Memory
 from .learn import Learner
 from .inbox import Inbox
+from .shopfacts import ShopFacts
 from .channels import Channels, REAL as REAL_CHANNELS
 from .social import Social
 from .eyes import Eyes
@@ -45,6 +46,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /channels — your real channels (shop e-mail, Facebook/Instagram messages): what is connected, /channels check tests the connection, /channels now looks for new messages right away. New messages get a drafted reply; nothing is sent until you tap Approve & send
 /post <platform> <what about> — I draft a social post (instagram, facebook, tiktok, x, linkedin, pinterest), you approve/edit, then copy it — I never publish by myself
 /policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
+/shop <address> — I read your own shop's help, shipping, returns and contact pages and answer customers with their exact words (re-read by itself every week) · /shop — what I know from them · /shop forget
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
 /do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do <page1> <page2> | which is cheaper? (compare several pages) · /do <page> | fill in the form: name = …, email = …, message = … (I type, you send) · /do desktop <goal> — same on my own screen. Any click that costs money, publishes, signs in or deletes waits for your tap.
 /screen · /watch on|off — see my browser · /status · /selftest
@@ -73,7 +75,8 @@ class Agent:
         self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer, eyes=self.eyes,
                            planner=self.planner, memory=self.memory)
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
-        self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log)
+        self.shopfacts = ShopFacts(tasks=self.tasks, log=self.log)
+        self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log, shopfacts=self.shopfacts)
         self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
         self.channels = Channels(inbox=self.inbox, log=self.log)
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
@@ -601,6 +604,17 @@ class Agent:
                 return "Inbox: nothing waiting. (/inbox practice loads sample messages.)"
             threading.Thread(target=self.process_inbox, daemon=True).start()
             return f"{len(new)} message(s) waiting — drafting replies now."
+        if low.startswith("/shop"):
+            arg = text[5:].strip()
+            if arg.lower() in ("forget", "clear", "reset"):
+                self.shopfacts.forget()
+                return "Forgotten — I no longer use any facts from a shop website."
+            if not arg:
+                return self.shopfacts.sheet_text()
+            if self.busy:
+                return f"I'm still busy with: {self.busy}. Ask me again in a minute."
+            self.start_shop_read(arg)
+            return f"Reading {arg} now — its help, shipping, returns and contact pages. About a minute; I'll show you what I found."
         if low.startswith("/policy"):
             arg = text[7:].strip()
             m = re.match(r"set\s+(\w+)\s+(.+)", arg, re.S | re.I)
@@ -697,6 +711,19 @@ class Agent:
         self.log("out", text=out[:300])
         self.bot.send(self.owner_id, out)
 
+    def start_shop_read(self, url):
+        def go():
+            self.busy = "reading the shop's pages"
+            try:
+                out = self.shopfacts.learn(url)
+            except Exception as e:
+                out = f"Something broke while reading the shop: {str(e)[:120]}"
+            finally:
+                self.busy = None
+            self.log("out", text=out[:300])
+            self.bot.send(self.owner_id, out)
+        threading.Thread(target=go, daemon=True).start()
+
     def start_task(self, kind, arg, prefix=""):
         if self.busy:
             return f"I'm still busy with: {self.busy}. Ask me again in a minute."
@@ -741,6 +768,9 @@ class Agent:
         if self.learner.pending() and self.planner.installed():
             threading.Thread(target=self.run_digest, daemon=True).start()
             return
+        if self.shopfacts.stale() and 8 <= hour < 23 and not self.busy:      # weekly: re-read the shop's own pages
+            self.start_shop_read(self.shopfacts.url)
+            return
         goal = self.memory.next_goal()
         if goal and 8 <= hour < 23 and self.owner_id:
             threading.Thread(target=self.run_study, args=(goal,), daemon=True).start()
@@ -778,7 +808,7 @@ class Agent:
                 f"up {up // 3600}h {up % 3600 // 60}m · brain: {self.brain.describe()}\n"
                 f"{self.planner.describe()} · notes: {len(self.memory.notes(limit=100000))} · {self.memory.list_text().splitlines()[-1]}\n"
                 f"{self.learner.status()}\n"
-                f"{self.inbox.status()}\n{self.social.status()}\n"
+                f"{self.inbox.status()} · {self.shopfacts.describe()}\n{self.social.status()}\n"
                 f"channels: {', '.join(c.describe().split(' (')[0] for c in self.channels.active()) or 'none connected (/channels)'}\n"
                 f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "

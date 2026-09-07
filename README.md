@@ -81,6 +81,14 @@ Try it without Telegram: `python3 -m agent.viewer --demo` (runs a few read-only 
   promises, no cancellations "done", no product or shipping facts the policy does not contain. A failing draft is
   repaired once, otherwise a safe template is used. Legal, chargeback, injury, personal-data and press messages get a
   holding reply and are handed to the owner; spam gets no reply.
+- `/shop <address>` makes the agent read the owner's **own shop pages** (help, shipping, returns, contact, FAQ) and keep
+  their exact sentences (`state/shopfacts.json`, refreshed weekly). Customer questions about delivery times, costs,
+  destinations, returns, contact or payment are then answered with the shop's own words and figures; without it, such
+  questions are deferred to the owner rather than guessed. `/shop` shows the sheet, `/shop forget` drops it.
+- `/shop <address>` makes the agent read the owner's **own shop pages** (help, shipping, returns, contact, FAQ) and keep
+  their exact sentences (`state/shopfacts.json`, refreshed weekly). Customer questions about delivery times, costs,
+  destinations, returns, contact or payment are then answered with the shop's own words and figures; without it, such
+  questions are deferred to the owner rather than guessed. `/shop` shows the sheet, `/shop forget` drops it.
 - Every draft goes to the owner's phone with **Approve / Edit / Reject** buttons. Approved or edited text is written to
   `state/outbox.jsonl` — the agent never sends anything by itself. `/stats` shows the approval rate per message type
   and how far each is from the automatic-sending bar (30 decisions, ≥ 90 % approved as written; still off by design).
