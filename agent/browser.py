@@ -351,15 +351,25 @@ class Browser:
     def type(self, n, text, enter=False):
         it = self._item(n)
         el = self._el(n)
-        el.click()
-        el.fill("")
-        el.type(text, delay=20)
+        el.click(timeout=8000)
+        # Some sites (Wikipedia, many shops) swap the search box for a new widget on focus, so the numbered element
+        # goes stale. After the click the keyboard goes to whatever is focused, so type through the page keyboard.
+        try:
+            el.fill("", timeout=1500)
+        except Exception:
+            try:
+                self.page.keyboard.press("Control+A")
+                self.page.keyboard.press("Backspace")
+            except Exception:
+                pass
+        self.page.keyboard.type(text, delay=20)
         if enter:
-            el.press("Enter")
+            self.page.keyboard.press("Enter")
             try:
                 self.page.wait_for_load_state("domcontentloaded", timeout=8000)
             except Exception:
                 pass
+            time.sleep(0.5)
         self.log("browser_type", n=int(n), label=it.get("label"), text=text[:80], enter=enter)
         self._show(f"Typed '{text[:40]}' into '{it.get('label')}'")
         return self.read() if enter else f"typed into [{n}] {it.get('label')!r}"

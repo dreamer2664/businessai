@@ -38,18 +38,20 @@ WHAT YOU DID SO FAR:
 WHAT IS ON THE SCREEN NOW (%s):
 %s
 
-Pick exactly ONE next step and answer with JSON only, no other text:
-{"step": "click", "target": "<exact visible text of the button or link>"}
-{"step": "type", "target": "<exact visible text of the field or its placeholder>", "text": "<what to type>", "enter": true|false}
-{"step": "scroll", "direction": "down"|"up"}
+Answer with exactly ONE JSON object for the next step:
+{"step": "type", "target": "<name of a field from FIELDS YOU CAN TYPE IN>", "text": "<what to type>", "enter": true}
+{"step": "click", "target": "<exact text from THINGS YOU CAN CLICK>"}
+{"step": "scroll", "direction": "down"}
 {"step": "back"}
-{"step": "open", "url": "https://..."}
-{"step": "done", "answer": "<what you found / did, in one or two plain sentences with the concrete facts>"}
-{"step": "ask", "question": "<one short question for the owner when you truly cannot decide>"}
-{"step": "stop", "reason": "<why you cannot continue, e.g. login wall, captcha, nothing relevant on this page>"}
-Rules: ONE object only. First check whether the screen already answers the goal — if yes, answer "done" with the facts
-copied from the screen. Click only text that is really on the screen. Never invent facts. Never try to log in, pay or
-pass a captcha — "stop" instead. Use "ask" only when two reasonable steps conflict, never to ask the owner the goal itself."""
+{"step": "done", "answer": "<the facts copied from the screen that fulfil the goal>"}
+{"step": "stop", "reason": "<why you cannot continue: login wall, captcha, nothing relevant here>"}
+Examples:
+- goal "find the price of the blue mug", screen text says "Blue mug — $4" → {"step": "done", "answer": "The blue mug costs $4."}
+- goal "search the site for lamps", field "Search" exists → {"step": "type", "target": "Search", "text": "lamps", "enter": true}
+- goal "open the shipping page", link "Shipping" exists → {"step": "click", "target": "Shipping"}
+- goal "read the reviews", nothing about reviews on the screen yet → {"step": "scroll", "direction": "down"}
+Rules: one object, nothing else. Use the screen only; never invent facts. To search for something, TYPE it into the search
+field. Never log in, pay or pass a captcha — "stop" instead. Never ask the owner anything; decide yourself."""
 
 
 class Operator:
@@ -84,6 +86,8 @@ class Operator:
                 return "I have no desktop hands here (sh scripts/install_desktop.sh)."
             self.desktop.new_task(allow_actions=False)
         question = self._is_question(goal)
+        wants_info = question or bool(re.search(r"\b(tell me|what|which|how many|how much|who|when|where|find out|report|list|read me|price of|cost of)\b", goal.lower()))
+        acted = False
         prev_sig = None
         verify_next = False
         asks = 0
@@ -95,7 +99,8 @@ class Operator:
             seen = self._see(where)
             if seen.get("wall"):
                 return self._finish(f"I stopped at step {steps}: the screen shows a {seen['wall']} — I never pass those. Please do that part yourself; I can continue after.", t0)
-            if question:                                            # read first: is the answer already on the screen?
+            if question or (wants_info and acted):                  # read first: is the answer already on the screen?
+                verify_next = False
                 ans = self._try_answer(goal, seen)
                 if ans:
                     return self._finish(ans, t0, steps)
@@ -106,6 +111,11 @@ class Operator:
                     return self._finish(f"Done — the screen now shows: {ev}", t0, steps)
             decision = self._think(goal, seen)
             step = decision.get("step", "stop")
+            if step == "type" and where == "browser":
+                n = self._element_number(seen, str(decision.get("target") or ""))
+                role = next((r for k, _, r in seen.get("items", []) if k == n), "")
+                if n is not None and role not in ("textbox", "searchbox", "combobox", "textarea"):
+                    decision, step = {"step": "click", "target": decision.get("target")}, "click"     # it's a link/button, not a field
             if question and step in ("click", "type") and DANGER.search(str(decision.get("target", ""))):
                 decision, step = {"step": "scroll", "direction": "down"}, "scroll"      # no buying/submitting to answer a question
             sig = (step, str(decision.get("target") or decision.get("url") or decision.get("direction") or "").lower())
@@ -160,11 +170,14 @@ class Operator:
                 result = f"unknown step {step}"
             short = str(result).replace("\n", " ")
             short = re.sub(r"^URL: \S+\s+TITLE: ([^\n]{0,60}?)\s+TABS:.*$", r"page: \1", short)[:120]
-            self.history.append(f"{step} {decision.get('target') or decision.get('url') or decision.get('direction') or ''} → {short}")
+            what = f"typed into '{decision.get('target', '')}': {decision.get('text', '')}" if step == "type" else \
+                   f"{step} {decision.get('target') or decision.get('url') or decision.get('direction') or ''}"
+            self.history.append(f"{what} → {short}")
             if step in ("click", "type") and not str(result).startswith(("refused", "could not", "'", "click failed", "typing failed")):
                 verify_next = True
+                acted = True
                 before = seen
-                last_action = f"{'clicked' if step == 'click' else 'typed into'} \"{decision.get('target', '')}\""
+                last_action = f"{'clicked' if step == 'click' else 'typed into'} \"{decision.get('target', '')}\"" + (f" the text \"{decision.get('text', '')}\"" if step == "type" else "")
             if result == last_change:
                 same_count += 1
                 if same_count >= 2:
@@ -227,9 +240,71 @@ class Operator:
         return "\n".join(parts)[:3500] or "(blank screen)"
 
     # ---- think -----------------------------------------------------------------------------
+    def _think_view(self, goal, seen):
+        """What the thinker gets to see: typing fields, clickable things (goal-relevant first), then a text excerpt."""
+        items = seen.get("items") or []
+        if not items:
+            return self._screen_text(seen)
+        stop = {"the", "and", "for", "what", "which", "when", "does", "how", "many", "find", "out", "tell", "with", "from", "this", "that",
+                "are", "was", "were", "has", "have", "who", "where", "why", "much", "there", "about", "into", "page", "site", "open",
+                "click", "search", "first", "sentence", "article", "product", "its", "then", "please", "put", "one"}
+        keys = {w for w in re.findall(r"[a-z0-9]{3,}", goal.lower()) if w not in stop}
+        fields, clicks = [], []
+        for n, label, role in items:
+            lab = re.sub(r"\s+", " ", label or "").strip()
+            if not lab:
+                continue
+            if role in ("textbox", "searchbox", "combobox", "textarea"):
+                fields.append(lab)
+            else:
+                rel = sum(1 for k in keys if k in lab.lower())
+                clicks.append((-rel, 0 if role == "button" else 1, lab))
+        clicks.sort()
+        seen_labels, click_labels = set(), []
+        for _, _, lab in clicks:
+            if lab.lower() in seen_labels:
+                continue
+            seen_labels.add(lab.lower())
+            click_labels.append(lab[:60])
+            if len(click_labels) >= 30:
+                break
+        text = re.sub(r"\[\s*\d+\s*\]\s*", "", seen.get("fulltext") or seen.get("elements") or "")
+        text = re.sub(r"\n\s*\n+", "\n", text).strip()[:1400]
+        parts = [f"PAGE: {seen.get('title', '')} — {seen.get('url', '')}"]
+        parts.append("FIELDS YOU CAN TYPE IN: " + (", ".join(f'"{f[:50]}"' for f in fields[:8]) or "(none)"))
+        parts.append("THINGS YOU CAN CLICK: " + (", ".join(f'"{c}"' for c in click_labels) or "(none)"))
+        parts.append("PAGE TEXT (start):\n" + text)
+        return "\n".join(parts)
+
+    def _obvious_step(self, goal, seen):
+        """Cheap rules for the most common first moves (no model call): search goals → type into the search field."""
+        m = re.search(r"\b(?:search|look up|look for|find)\b[^'\"“]*['\"“]([^'\"”]{2,60})['\"”]", goal, re.I) or \
+            re.search(r"\bsearch(?: for)?\s+([a-z0-9 -]{2,40}?)\s+(?:on|in|at)\b", goal, re.I)
+        if not m:
+            mo = re.match(r"^\s*(?:open|go to|click|click on|visit|show)\s+(?:the\s+)?['\"“]?([^'\"”,.]{2,50}?)['\"”]?(?:\s+(?:page|tab|link|button|section|product))?(?:\s+(?:and|then|,)\b|\s*$)", goal, re.I)
+            if mo:
+                want = mo.group(1).strip().lower()
+                if not any(h.lower().startswith(f"click {want}") for h in self.history):
+                    n = self._element_number(seen, want)
+                    if n is not None:
+                        label = next((lab for k, lab, _ in seen.get("items", []) if k == n), want)
+                        return {"step": "click", "target": label}
+            return None
+        term = m.group(1).strip()
+        if any(("typed into" in h and term.lower() in h.lower()) for h in self.history):
+            return None                                                   # already searched
+        for n, label, role in seen.get("items") or []:
+            lab = (label or "").lower()
+            if role in ("textbox", "searchbox", "combobox") and ("search" in lab or "find" in lab or lab == "q"):
+                return {"step": "type", "target": label, "text": term, "enter": True}
+        return None
+
     def _think(self, goal, seen):
+        obvious = self._obvious_step(goal, seen)
+        if obvious:
+            return obvious
         hist = "\n".join(f"{i+1}. {h}" for i, h in enumerate(self.history[-6:])) or "(nothing yet)"
-        prompt = THINK_PROMPT % (goal, hist, seen.get("where", ""), self._screen_text(seen))
+        prompt = THINK_PROMPT % (goal, hist, seen.get("where", ""), self._think_view(goal, seen))
         try:
             raw = self.planner.chat("You are a careful computer operator. Output one JSON object only.", prompt, max_tokens=120, timeout=200, stop=["\n\n"])
             cands = []
@@ -391,7 +466,18 @@ class Operator:
                 sc = min(len(want), len(txt)) / max(len(want), len(txt))
                 if sc > best:
                     best, best_n = sc, n
-        return best_n if best >= 0.3 else None
+        if best >= 0.3:
+            return best_n
+        # last resort: word overlap (the model paraphrased "Reusable make-up pads — € 8,90" as "Reusable make-up pads product")
+        ww = set(re.findall(r"[a-z0-9]{3,}", want))
+        cand = []
+        for n, label, role in seen.get("items", []):
+            tw = set(re.findall(r"[a-z0-9]{3,}", (label or "").lower()))
+            if ww and tw and len(ww & tw) >= max(2, int(0.7 * min(len(ww), len(tw)))):
+                cand.append((len(ww & tw) / len(ww | tw), n))
+        if len(cand) == 1 or (cand and sorted(cand)[-1][0] > 0.5):
+            return sorted(cand)[-1][1]
+        return None
 
     def _act_click(self, where, target, seen, approved=False):
         if where == "browser":
