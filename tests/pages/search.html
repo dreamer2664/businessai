@@ -1,0 +1,9 @@
+<html><head><title>Green Nest — Search</title></head><body style="font-family:sans-serif;margin:30px">
+<h1>Green Nest — Eco Home Store</h1>
+<form onsubmit="event.preventDefault();var q=document.getElementById('q').value.toLowerCase();var r=document.getElementById('r');
+ if(q.indexOf('soap')>=0){r.innerHTML='<h2>Results for soap (2)</h2><ul><li><a href=#>Olive oil soap bar 100 g — € 4,20</a></li><li><a href=#>Soap dish, bamboo — € 6,50</a></li></ul>';}
+ else if(q.indexOf('tooth')>=0){r.innerHTML='<h2>Results for toothbrush (1)</h2><ul><li><a href=shop.html>Bamboo Toothbrush Set (4 pcs) — € 12,90</a></li></ul>';}
+ else {r.innerHTML='<h2>No results for '+q+'</h2>';}">
+<label>Search products <input id=q placeholder="Search products"></label> <button type=submit>Search</button></form>
+<div id=r><p>Type a product name above.</p></div>
+</body></html>
