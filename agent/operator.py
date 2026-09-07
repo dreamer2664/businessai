@@ -102,6 +102,9 @@ class Operator:
             self.desktop.new_task(allow_actions=False)
         question = self._is_question(goal)
         wants_info = question or bool(re.search(r"\b(tell me|what|which|how many|how much|who|when|where|find out|report|list|read me|price of|cost of)\b", goal.lower()))
+        redirected = self._redirect_note(start_url) if (where == "browser" and start_url) else ""
+        if redirected:
+            self.history.append(redirected)
         acted = False
         prev_sig = None
         verify_next = False
@@ -114,7 +117,22 @@ class Operator:
             steps += 1
             seen = self._see(where)
             if seen.get("wall"):
+                if seen["wall"] == "captcha" and steps == 1:
+                    return self._finish(f"This site blocks robots with a bot-check ({(seen.get('title') or '').strip()[:40] or 'security verification'}) and I never try to get past those. "
+                                        f"If you open the site in your own browser it will work for you; I can read a page you paste, or another shop.", t0)
                 return self._finish(f"I stopped at step {steps}: the screen shows a {seen['wall']} — I never pass those. Please do that part yourself; I can continue after.", t0)
+            if where == "browser" and self._error_page(seen):
+                if steps == 1:
+                    return self._finish(f"That page shows an error ({(seen.get('title') or 'error page').strip()[:60]}) — the site would not serve it to me right now. "
+                                        f"Please try again in a few minutes or send me another link.", t0, steps)
+                self.history.append("that page shows a site error — going back")
+                self._act_back(where)
+                acted = False
+                prev_sig = ("back", "")
+                continue
+            if steps == 1 and redirected and re.search(r"\b(this|these|here|the page)\b", goal.lower()):
+                return self._finish(f"I could not reach that page: {redirected}. The address may be old or the item no longer listed — "
+                                    f"send me the current link (or a search page) and I'll read it.", t0, steps)
             if question or (wants_info and acted):                  # read first: is the answer already on the screen?
                 verify_next = False
                 ans = self._try_answer(goal, seen)
@@ -133,6 +151,11 @@ class Operator:
                 continue
             decision = self._think(goal, seen)
             step = decision.get("step", "stop")
+            if step == "stop" and where == "browser" and "could not decide" in str(decision.get("reason", "")):
+                nav = self._best_link(goal, seen, done_sigs)                  # slow/undecided thinker: a goal-related link is a sane next step
+                if nav:
+                    self.history.append(f"could not decide — trying the link '{nav}'")
+                    decision, step = {"step": "click", "target": nav}, "click"
             if step == "type":
                 tgt, txt = str(decision.get("target") or ""), str(decision.get("text") or "")
                 if where == "browser":
@@ -588,10 +611,21 @@ class Operator:
         term = m.group(1).strip()
         if any(("typed into" in h and term.lower() in h.lower()) for h in self.history):
             return None                                                   # already searched
+        best = None
         for n, label, role in seen.get("items") or []:
             lab = (label or "").lower()
-            if role in ("textbox", "searchbox", "combobox") and ("search" in lab or "find" in lab or lab == "q"):
-                return {"step": "type", "target": label, "text": term, "enter": True}
+            if role not in ("textbox", "searchbox", "combobox") or not re.search(r"search|find|cerc|ricerca|such|buscar|recherch|zoek|looking for|\bq\b", lab):
+                continue
+            if re.search(r"\b(store|shop|negozio|negozi|punto vendita|città|city|region|regione|zip|postcode|postal|cap\b|address|indirizzo|email|e-mail|newsletter|password|coupon|promo|gift)", lab):
+                score = 0                                                 # store locator / postcode / newsletter — not the product search
+            elif role == "searchbox" or re.search(r"product|prodott|articol|item|catalog|what are you looking|cosa (stai )?cerc|search (for )?(the )?(site|store|shop)?$|^search$|^cerca$|^cerca (prodott|nel|su)", lab):
+                score = 2
+            else:
+                score = 1
+            if best is None or score > best[0]:
+                best = (score, label)
+        if best and best[0] > 0:
+            return {"step": "type", "target": best[1], "text": term, "enter": True}
         return None
 
     def _think(self, goal, seen):
@@ -630,14 +664,66 @@ class Operator:
             self.log("operator_think_failed", error=str(e)[:100])
         return {"step": "stop", "reason": "I could not decide the next step"}
 
-    NAV_STOP = {"home", "shop", "cart", "account", "login", "sign", "register", "help", "menu", "search", "skip", "content", "privacy", "terms",
-                "cookie", "cookies", "policy", "back", "next", "previous", "more", "read", "close", "page", "main", "site", "the", "and", "for",
-                "with", "from", "this", "that", "what", "which", "when", "does", "how", "many", "find", "out", "tell", "year", "founded", "work", "there"}
+    ERROR_PAGE = re.compile(r"\b(something went wrong( on our end)?|page not found|404 not found|error 404|this page (isn'?t|is not) available|"
+                            r"page (doesn'?t|does not) exist|we couldn'?t find that page|service unavailable|503|access denied|"
+                            r"site can'?t be reached|this site can'?t be reached|try refreshing the page|temporarily unavailable|"
+                            r"qualcosa è andato storto|pagina non trovata|seite nicht gefunden|page introuvable)\b", re.I)
+
+    def _error_page(self, seen):
+        """A site error page (eBay 'Something went wrong', 404s…): short, with the error words near the top."""
+        full = (seen.get("fulltext") or "")
+        title = seen.get("title") or ""
+        head = (title + " " + full[:600])
+        return len(full) < 1500 and bool(self.ERROR_PAGE.search(head))
+
+    def _redirect_note(self, start_url):
+        """'' when the browser is on the page it was sent to (or a trivial variant); otherwise a plain sentence about where it landed."""
+        try:
+            cur = self.tasks.on_hands(lambda: self.tasks.browser().page.url, timeout=10) or ""
+        except Exception:
+            return ""
+        def key(u):
+            u = re.sub(r"^https?://(www\.|m\.)?", "", u.split("#")[0].split("?")[0]).rstrip("/").lower()
+            u = re.sub(r"^([^/]+)/([a-z]{2}(-[a-z]{2})?|[a-z]{2}/[a-z]{2}|it|en|de|fr|es|online|shop|home|index\.html?)$", r"\1", u)   # /it/, /en-gb, /online/ = the home page
+            return u
+        a, b = key(start_url), key(cur)
+        if not cur or a == b or b.startswith(a) or (a.startswith(b) and a.count("/") - b.count("/") <= 1 and b.count("/") >= 1):
+            return ""
+        if b.count("/") == 0 and a.count("/") <= 1:                       # sent to the home page from a shallow address: not a lost product
+            return ""
+        return f"the site sent me from {start_url} to {cur}"
+
+    NAV_STOP = {"home", "cart", "account", "login", "sign", "register", "menu", "skip", "content", "cookie", "cookies", "policy",
+                "back", "next", "previous", "more", "read", "close", "page", "main", "site", "the", "and", "for", "with", "from", "this",
+                "that", "what", "which", "when", "does", "how", "many", "find", "out", "tell", "year", "founded", "work", "there", "have",
+                "has", "shop", "window", "long", "much"}
+
+    SYNONYMS = {
+        "returns": ("return", "resi", "reso", "rückgabe", "retour", "retours", "devoluciones", "refund", "rimborso"),
+        "return": ("returns", "resi", "reso", "rückgabe", "retour", "devolución"),
+        "refund": ("refunds", "rimborso", "rimborsi", "erstattung", "remboursement", "reembolso"),
+        "shipping": ("delivery", "spedizione", "spedizioni", "consegna", "versand", "lieferung", "livraison", "envío", "envíos"),
+        "delivery": ("shipping", "consegna", "spedizione", "lieferung", "livraison", "entrega"),
+        "contact": ("contacts", "contatti", "contattaci", "kontakt", "contactez", "contacto"),
+        "about": ("chi siamo", "über uns", "à propos", "sobre", "azienda", "company"),
+        "help": ("aiuto", "assistenza", "hilfe", "aide", "ayuda", "support", "faq"),
+        "warranty": ("garanzia", "garantie", "garantía", "guarantee"),
+        "payment": ("payments", "pagamento", "pagamenti", "zahlung", "paiement", "pago"),
+        "price": ("prezzo", "preis", "prix", "precio"),
+        "cart": ("carrello", "warenkorb", "panier", "carrito", "basket", "bag"),
+        "search": ("cerca", "ricerca", "suche", "recherche", "buscar"),
+        "terms": ("condizioni", "termini", "agb", "conditions", "términos"),
+        "privacy": ("privacy", "datenschutz", "confidentialité", "privacidad"),
+        "stores": ("store", "negozi", "punti vendita", "filialen", "magasins", "tiendas"),
+        "offers": ("offerte", "promozioni", "angebote", "promotions", "ofertas", "sale", "deals"),
+    }
 
     def _best_link(self, goal, seen, done_sigs=()):
         """The link/button most related to the goal's words that we have not clicked yet (e.g. 'About us' for a founding-year question).
         Falls back to generic 'about / contact' links for who/when/where questions."""
         gw = {w for w in re.findall(r"[a-z]{3,}", goal.lower()) if w not in self.NAV_STOP}
+        for w in list(gw):                                                   # the page may be in another language
+            gw |= set(self.SYNONYMS.get(w, ()))
         stems = {w[:5] for w in gw}
         best, best_sc = None, 0
         for n, label, role in seen.get("items") or []:
@@ -651,7 +737,8 @@ class Operator:
                 best, best_sc = lab, sc
         if best:
             return best
-        if re.search(r"\b(founded|found|who|when|where|history|company|team|people|employees|based|located|address|contact|owner|about)\b", goal.lower()):
+        if re.search(r"\b(founded|found|who|when|where|history|company|team|people|employees|based|located|address|contact|owner|about)\b", goal.lower()) \
+                and not best:
             for n, label, role in seen.get("items") or []:
                 low = (label or "").lower()
                 if role in ("link", "button") and ("click", low) not in done_sigs and re.search(r"\b(about|company|who we are|our story|team|contact|imprint|impressum)\b", low):
@@ -780,10 +867,15 @@ class Operator:
             if len(l) > 60 or i < 3:
                 keep.add(i)
                 size += len(l) + 1
+        wants_figure = bool(re.search(r"\b(price|cost|costs|cheap|expensive|how much|how many|number|year|when|date|weight|size|tall|height|width|length|rating|stars|review|delivery|days|time)\b", goal.lower()))
+        figure = re.compile(r"\d|€|\$|£")
         for sc, i in sorted(scored, key=lambda x: (-x[0], x[1])):
             if sc <= 0:
                 break
-            for j in (i, i - 1, i + 1):                                 # the neighbour often holds the value ("Founded" / "June 18, 2005")
+            window = (i, i - 1, i + 1)
+            if wants_figure:                                            # shop listings: title, then rating, then the price a few lines down
+                window = (i,) + tuple(j for j in range(i - 2, i + 6) if j != i and 0 <= j < len(lines) and (figure.search(lines[j]) or abs(j - i) == 1))
+            for j in window:
                 if 0 <= j < len(lines) and j not in keep and size + len(lines[j]) <= limit:
                     keep.add(j)
                     size += len(lines[j]) + 1

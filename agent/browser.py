@@ -27,7 +27,9 @@ from . import config
 
 BLOCKED = re.compile(r"(porn|xxx|casino|bet365|poker|bank(ing)?\.|paypal\.com/(signin|myaccount))", re.I)
 CAPTCHA_HINTS = re.compile(r"(captcha|verify you are human|unusual traffic|are you a robot|cloudflare.*checking your browser|"
-                           r"access denied|press and hold)", re.I)
+                           r"access denied|press and hold|just a moment|performing security verification|verifying you are|"
+                           r"verifica di sicurezza|checking if the site connection is secure|verify that you are not a bot|"
+                           r"enable javascript and cookies to continue)", re.I)
 LOGIN_HINTS = re.compile(r"(sign in to continue|log in to continue|please log in|create an account to)", re.I)
 MAX_TEXT = 12000          # characters of page text handed to the planner per read()
 INTERACTIVE = "a[href], button, input, select, textarea, [role=button], [role=link], [role=tab], [role=menuitem], [onclick], summary"
@@ -312,8 +314,12 @@ class Browser:
         self.items = self.page.evaluate(_JS_SNAPSHOT, max_items)
         return self.items
 
+    BOT_WALL_MARKERS = re.compile(r"(datadome|captcha-delivery\.com|geo\.captcha-delivery|cf-chl|challenge-platform|/cdn-cgi/challenge|"
+                                  r"px-captcha|perimeterx|_Incapsula_Resource|akamai.*bot|hcaptcha\.com|recaptcha/api|arkoselabs|awswaf)", re.I)
+
     def status(self):
-        """Detect walls the agent must not try to pass."""
+        """Detect walls the agent must not try to pass. A bot-check (DataDome, Cloudflare challenge, PerimeterX, hCaptcha…) is
+        usually an almost empty page whose HTML carries the vendor's markers — it counts as a captcha."""
         try:
             body = self.page.inner_text("body", timeout=3000)[:4000]
         except Exception:
@@ -321,6 +327,13 @@ class Browser:
         title = self.page.title()
         if CAPTCHA_HINTS.search(title) or CAPTCHA_HINTS.search(body):
             return "captcha"
+        if len(body.strip()) < 600:
+            try:
+                html = self.page.content()[:40000]
+            except Exception:
+                html = ""
+            if self.BOT_WALL_MARKERS.search(html):
+                return "captcha"
         if LOGIN_HINTS.search(body):
             return "login"
         return "ok"
