@@ -157,3 +157,22 @@ messages and social media, reports to the owner and asks questions via phone.
   deterministically per day so scores are repeatable; the AI's actions are all proposals with a why-line, applied only by
   a tap — the same gate the real store will use; the agent reads its own shop through the browser like any other shop, so
   the customer-reply path is exactly the real one.
+- 2026-09-07 **Practice weeks** (`engine/scripts/practice_week.py [days] [--fresh]`: a whole week of simulated customers,
+  every reply drafted by the thinking model and judged by rules, the "owner" applying proposals). What the first week
+  broke and what changed:
+  * *"Where is order 51002?"* → the AI wrote "I will check and send the tracking within one business day" although it
+    runs the order system. Now `Store.order_facts()` puts the real ledger status in front of the writer (paid / shipped +
+    tracking / delivered / cancelled), the safety checks flag "shipped" claims on unshipped orders, invented delivery
+    dates, missing tracking numbers and "I will check the order", and the fallback templates answer from the ledger.
+  * An order that is still unshipped after 2+ days gets an apology + "the owner has been asked to ship it today" and a
+    *ship* proposal is opened for the owner at once; a cancel request on an unshipped order opens a *cancel* proposal
+    (reply: "will be cancelled and refunded in full — the owner confirms"); on a shipped order the reply says it cannot be
+    cancelled any more (return within 30 days, € 4,90). A damage report on a shipped/delivered order opens a *refund*
+    proposal. Nothing changes until the owner taps.
+  * A stranger asking about someone else's order number gets nothing but "write from the address used for the order".
+  * "Is X in stock?" is answered from the shop's live stock (units, or sold out → "I will ask the owner when it is
+    back"); "in stock" claims about sold-out items are flagged.
+  * Bug: two proposals created in the same millisecond shared one id, so the owner's second tap said "no longer open".
+  * False flag: a compliment ("Love the case") was flagged for the word "love" not being on the product page.
+  Score: `score_store.py` 35 model-free checks + 8 model replies (**36/36** with `--model`, 331 s).
+

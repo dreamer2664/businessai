@@ -306,6 +306,13 @@ class Inbox:
             c["needs"] = [n for n in c["needs"] if not re.search(r"product|item|model|which", n.lower())]
             c["contradiction"] = self.shopfacts.contradiction(rec["text"], self.shopfacts.match_products(rec["text"])[0])
             c["unmentioned"] = self.shopfacts.unmentioned(rec["text"], self.shopfacts.match_products(rec["text"])[0]) if c["kind"] != "compliment" else []
+            if self.store is not None and rec.get("channel") == "store" and re.search(r"\b(in stock|stock|available|availability|sold out|left|restock|back in)\b", rec["text"].lower()):
+                sp = self.store.find_product(c["product"])                 # our own shop: the live stock figure is known
+                if sp and sp["name"] == c["product"]:
+                    c["stock"] = int(sp["stock"])
+                    c["unmentioned"] = [w for w in c["unmentioned"] if w not in ("stock", "restock", "availability", "available")]
+                    prod += (f"\nLIVE STOCK (from the shop's own system, more current than the page): {sp['name']}: "
+                             + (f"{sp['stock']} unit(s) in stock — orders leave within 1 business day." if sp["stock"] > 0 else "SOLD OUT right now — do not promise a date; say you will ask the owner when it is back."))
         if c["kind"] == "product_question":
             about_shipping = bool(re.search(r"\b(ship|deliver|delivery|shipping)\b", rec["text"].lower()))
             have = (self.policy.get("ships_to") if about_shipping else self.policy.get("products")) or ""
@@ -390,6 +397,12 @@ class Inbox:
 
     def _template(self, c):
         p = self.policy
+        if c.get("stock") is not None and c.get("product"):
+            if c["stock"] > 0:
+                return (f"Thank you for your question. The {c['product']} is in stock right now — {c['stock']} unit{'s' if c['stock'] != 1 else ''} available — "
+                        "and orders leave our warehouse within 1 business day. Just write back if you need anything else.")
+            return (f"Thank you for your question. The {c['product']} is sold out at the moment. I will ask the owner when it will be back "
+                    "and let you know within one business day.")
         if c["kind"] in ("product_question", "other") and c.get("product") and self.shopfacts:
             prods = [x for x in self.shopfacts.products if x["name"] == c["product"]]
             line = c.get("contradiction") or (self.shopfacts.best_detail(c.get("text", ""), prods[0]) if prods else "")
@@ -542,6 +555,8 @@ class Inbox:
                             [v for vs in prods[0].get("variants", []) for v in vs]).lower() if prods else ""
             page_nums = set(re.findall(r"\d+(?:[.,]\d+)?", page)) | set(re.findall(r"\d+(?:[.,]\d+)?", source or "")) | set(re.findall(r"\d+(?:[.,]\d+)?", self.policy_text()))
             page_nums |= self.shopfacts.numbers() if self.shopfacts else set()
+            if c.get("stock") is not None:
+                page_nums.add(str(c["stock"]))                                  # the live stock figure is a true figure
             bad = [n for n in re.findall(r"\d+(?:[.,]\d+)?", text) if n not in page_nums and n.replace(",", ".") not in {x.replace(",", ".") for x in page_nums}]
             if bad:
                 flags.append(f"states a figure that is not on the product page: {', '.join(sorted(set(bad)))}")
@@ -560,6 +575,11 @@ class Inbox:
                     if re.search(r"\b" + re.escape(w[:5]), low):
                         flags.append(f"makes a claim about '{w}' which the product page never mentions — only 'I will check with the owner' is safe")
                         break
+        if c.get("stock") is not None:
+            if c["stock"] == 0 and re.search(r"\b(is|are|still|currently) (currently |still |now )?(in stock|available)\b|available for purchase", low):
+                flags.append("says it is in stock — the shop's own system says it is sold out")
+            if c["stock"] > 0 and re.search(r"\b(out of stock|sold out|not available|unavailable|no longer available)\b", low):
+                flags.append(f"says it is sold out — the shop's own system has {c['stock']} in stock")
         od = c.get("order") or {}
         if od.get("mismatch") and re.search(r"\b(shipped|warehouse|tracking|delivered|cancel+ed|refunded|gls)\b", low):
             flags.append("reveals order details to an e-mail address that did not place the order")
