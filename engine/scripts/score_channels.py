@@ -28,6 +28,10 @@ os.environ.update(MAIL_USER="shop@test.local", MAIL_PASSWORD="s3cretpassw0rd", M
 sys.path.insert(0, "tests")
 import warnings
 warnings.filterwarnings("ignore")
+try:
+    import aiosmtpd  # noqa: F401
+except ImportError:
+    sys.exit("this test needs the tiny package aiosmtpd:  python3 -m pip install aiosmtpd   (only for the test, the agent itself needs nothing)")
 import fake_mail                                   # noqa: E402
 fake_mail.PASSWORD = "s3cretpassw0rd"
 fake_mail.serve(1143, 1025)
@@ -238,6 +242,6 @@ check("/status lists the channels", "channels: e-mail shop@test.local" in A.stat
 log_text = "".join(open(p).read() for p in __import__("glob").glob("state/test_channels/logs/*.jsonl"))
 check("no secret in the logs", "s3cretpassw0rd" not in log_text and "TOKEN1234567890" not in log_text)
 
-print(f"\nCHANNELS SCORE: {score}/{total}")
+print(f"\nCHANNELS SCORE: {score}/{total}", flush=True)
 srv.shutdown()
 os._exit(0 if score == total else 1)

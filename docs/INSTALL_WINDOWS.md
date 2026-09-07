@@ -67,7 +67,7 @@ cd ~/businessai && git pull && sh scripts/install_desktop.sh && sh scripts/servi
 ```
 (`install_desktop.sh` adds the screen tools — tesseract, Xvfb, xdotool, scrot — once; harmless to repeat.)
 Then, once, in Telegram: `/eyes install` (downloads the 310 MB vision model). Check with `/status` — it should say
-`Business AI 1.0 …` and `/eyes` should list the vision model and the screen tools as present.
+`Business AI 1.1 …` and `/eyes` should list the vision model and the screen tools as present.
 
 ## 6. Letting it work a page for you (`/do`)
 - `/do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded?` — its own browser, exact and fast.
@@ -76,6 +76,11 @@ Then, once, in Telegram: `/eyes install` (downloads the 310 MB vision model). Ch
 - `/do <url> | fill in the contact form: name = …, email = …, message = …` — it types everything in and stops; you press Send.
 It reports each result with a short "What I did" list. When it wants to press a button that spends money, publishes, signs in or
 deletes, your phone gets a question with **Yes, click it / No** — nothing happens until you tap.
+
+## 7. Your real customer messages (e-mail, Facebook, Instagram)
+Once you want it to handle real messages, follow [CHANNELS.md](CHANNELS.md): a few lines in `.secrets/env` (mailbox address,
+an app password, the mail servers — there is a table for Gmail, Outlook, Aruba, Libero…), restart, then `/channels check`.
+From then on every customer mail arrives on your phone with a drafted answer and **Approve & send / Edit / Reject**.
 
 ## Troubleshooting
 - `python3 -m agent.selfcheck` (in the businessai folder) tells you whether the

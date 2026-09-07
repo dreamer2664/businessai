@@ -4,9 +4,10 @@ An AI that (eventually) runs an online store end to end: product and supplier
 research, listings, customer messages, social media — reporting to its owner
 and asking questions through Telegram.
 
-**Status: milestone 9 — bigger jobs for the operator (`/do`)**: compares several pages (cheapest / fastest / lowest minimum
-order, figures ranked in code), fills in forms for your approval (never sends), closes cookie banners (also the ones inside
-iframes, "reject" preferred), recovers from wrong clicks; 15/15 on the operator score set in ~5 min. Before that: eyes (vision
+**Status: milestone 10 — real customer channels**: your shop e-mail (any provider) and Facebook Page / Instagram messages
+are read every few minutes, every real customer message gets a drafted reply on your phone with **Approve & send / Edit /
+Reject**, and the answer goes out only after your tap (docs/CHANNELS.md; 40/40 on the channel checks). Before that: milestone 9,
+bigger jobs for the operator (`/do` compares several pages, fills in forms, closes cookie banners, 15/15), eyes (vision
 model + OCR, 16/16), desktop hands, the see → think → act → check loop; earlier: customer-message drafts 22/23, social post drafts, marketing exam 90 %, browse tasks 19/19, knowledge pack 52/55. Packs: [docs/PACKS.md](docs/PACKS.md). See [docs/PLAN.md](docs/PLAN.md)
 for the roadmap and the rules (score-driven, frugal, owner-in-the-loop, no
 CAPTCHA-breaking, official platform connections only).
@@ -89,6 +90,16 @@ Try it without Telegram: `python3 -m agent.viewer --demo` (runs a few read-only 
   sign-off (`state/style.json`, visible in `/policy`); the customer-specific words are never reused for another customer.
 - `/inbox practice` loads 12 sample messages; `python3 engine/scripts/score_inbox.py` scores 23 messages
   (kind + must/must-not phrases + zero safety flags), currently 22/23.
+
+## Real channels — shop e-mail, Facebook, Instagram (milestone 10)
+`agent/channels.py` polls the connected channels every 3 minutes (IMAP for mail; the Meta Graph API for Page and Instagram
+conversations — no public server needed) and puts real customer messages into the same inbox as the practice ones. Machine mail
+(newsletters, auto-replies, bounces, no-reply senders) is skipped. Each draft reaches the phone with **✅ Approve & send ·
+✏️ Edit · ❌ Reject**; the reply leaves only after the tap (`Agent.deliver` is the single sending point) — e-mail replies are
+threaded under the customer's mail with their text quoted, Messenger/Instagram replies go out as customer-service responses.
+A ledger of seen ids (state/channels.json) means nothing is drafted twice. Setup for Gmail, Outlook, Aruba, Libero, own domains
+and the Meta app: [docs/CHANNELS.md](docs/CHANNELS.md). `/channels`, `/channels check`, `/channels now`.
+Test without any account: `python3 engine/scripts/score_channels.py` (fake IMAP/SMTP server + fake Graph API, 40 checks).
 
 ## Eyes (milestone 6)
 `agent/eyes.py`: a 310 MB vision model (LFM2-VL-450M, `/eyes install` once; runs on the same llama-server only while looking,
