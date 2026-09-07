@@ -318,6 +318,7 @@ class Inbox:
         if c["kind"] == "discount_request":
             needs += "\nTHIS IS A DISCOUNT REQUEST: state the discount policy plainly (no codes in chat; newsletter subscribers get 10% on the first order). Do not ask for an order number. Do not say 'sure' or 'I can help with that'."
         if c["kind"] == "return_or_refund" and re.search(r"\bafter \d+ (days?|weeks?|months?)|\d+ (days?|weeks?) ago|too late|still return|ancora (restituire|rendere)\b", rec["text"].lower()):
+            c["asks_window"] = True
             needs += ("\nTHE CUSTOMER ASKS ABOUT THE RETURN WINDOW: first state the window explicitly, with the number of days from the returns policy / shop facts "
                       "(and who pays the return shipping if asked), then what happens next. Do not say 'of course' and do not repeat the customer's question.")
         if shop and "?" in rec["text"]:
@@ -468,6 +469,10 @@ class Inbox:
             flags.append("talks about tracking in a damage case — the customer already has the parcel")
         if c["kind"] == "return_or_refund" and re.search(r"\bof course!?\b", low) and "30 days" not in low:
             flags.append("says 'of course' to a return without stating the 30-day window")
+        if c.get("asks_window") and not re.search(r"\b\d+ days\b|\b\d+-day\b", low):
+            flags.append("the customer asked whether a return is still possible — the reply must state the return window in days")
+        if c.get("asks_window") and re.search(r"\b(sure|of course|certainly), i can help\b", low):
+            flags.append("says 'sure, I can help' instead of answering the return-window question")
         if not (self.policy.get("ships_to") or "").strip() and re.search(r"\b(we|i) (do|don't|do not|can|cannot|can't)?\s*(ship|deliver) to\b", low) \
                 and not (self.shopfacts and self.shopfacts.covers("where we ship")):
             flags.append("states a shipping destination that is not in the policy")
