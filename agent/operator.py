@@ -23,6 +23,7 @@ from . import config
 from .browser import _JS_TEXT as _JS_TEXT_NAME
 
 MAX_STEPS = 12
+MAX_PAGES = 5           # pages per multi-page (compare) goal
 MAX_ASKS = 2            # questions to the owner per goal; more than that means I don't understand the goal
 MAX_SECONDS = 900       # wall-clock budget per goal
 DANGER = re.compile(r"\b(buy|pay|checkout|check out|place order|order now|purchase|confirm|send|post|publish|delete|remove|"
@@ -71,11 +72,19 @@ class Operator:
                        r"pay(?:ment)? (?:with|by|using) (?:my )?(?:card|paypal)|checkout|check out|place (?:the |my )?order|complete (?:the |my )?(?:purchase|order))\b", re.I)
 
     def run(self, goal, where="browser", start_url=None, allow=None):
-        """Work towards `goal`. where: 'browser' | 'desktop'. Returns a plain-language report."""
+        """Work towards `goal`. where: 'browser' | 'desktop'. start_url may be a list of pages (compare goals).
+        Returns a plain-language report."""
         self.history = []
         if self.NEVER.search(goal):
             return ("I stopped before starting: that goal means logging in, paying or handling a password/captcha, and I never do those by "
                     "myself. Do that step yourself, then give me the goal that comes after it.")
+        if isinstance(start_url, (list, tuple)) and len(start_url) > 1 and where == "browser":
+            return self._run_pages(goal, list(start_url))
+        if isinstance(start_url, (list, tuple)):
+            start_url = start_url[0] if start_url else None
+        form = self._form_fields(goal)
+        if form and where == "browser":
+            return self._run_form(goal, form, start_url)
         allow = set(allow or [])            # labels the owner pre-approved for this goal
         t0 = time.time()
         steps = 0
@@ -115,6 +124,12 @@ class Operator:
                 ev = self._verify(goal, last_action, before, seen)
                 if ev:
                     return self._finish(f"Done — the screen now shows: {ev[:160]}", t0, steps)
+            if acted and where == "browser" and self._lost(goal, before, seen) and steps < MAX_STEPS:
+                self.history.append("that page has nothing to do with the goal — going back")
+                self._act_back(where)
+                acted = False
+                prev_sig = ("back", "")
+                continue
             decision = self._think(goal, seen)
             step = decision.get("step", "stop")
             if step == "type":
@@ -203,11 +218,111 @@ class Operator:
                     pass
         return self._finish(f"I used my {MAX_STEPS} steps without finishing. Last things I saw: {self.history[-1] if self.history else '-'}", t0, steps)
 
+    # ---- multi-page goals ---------------------------------------------------------------------
+    def _run_pages(self, goal, urls):
+        """Read the same question off several pages, then answer once across all of them (compare / which is cheapest)."""
+        t0 = time.time()
+        findings = []
+        for i, u in enumerate(urls[:MAX_PAGES], 1):
+            r = self._browser_open(u)
+            self.history.append(f"opened page {i}: {u} → {r}")
+            if r != "opened":
+                findings.append((u, "(could not open)"))
+                continue
+            seen = self._see("browser")
+            if seen.get("wall"):
+                findings.append((u, f"({seen['wall']} — skipped)"))
+                continue
+            fact = self._try_answer(f"{goal} (about THIS page only; give the concrete figures/words)", seen) or \
+                   self._try_answer(re.sub(r"\b(which|what)\b.*?\b(cheapest|best|fastest|lowest|highest|most|least)\b", "what is the price / value asked about", goal, flags=re.I), seen)
+            findings.append((seen.get("title") or u, fact or "(nothing relevant on this page)"))
+            self.history.append(f"page {i} ({(seen.get('title') or u)[:40]}): {fact or 'nothing relevant'}"[:200])
+        table = "\n".join(f"- {t[:70]}: {f}" for t, f in findings)
+        try:
+            raw = self.planner.chat("You compare findings from several web pages for your owner. Use only the findings given; never add outside knowledge.",
+                                    f"GOAL: {goal}\n\nFINDINGS (one line per page):\n{table}\n\nAnswer the goal in one or two plain sentences, naming the page(s) and the figures. "
+                                    f"If the findings do not settle it, say which page lacks the information.", max_tokens=120, timeout=200)
+            summary = raw.strip()
+            if not self._grounded(summary, table.lower(), goal):
+                summary = "Here is what each page says (I could not settle the comparison from that):"
+        except Exception as e:
+            self.log("operator_compare_failed", error=str(e)[:80])
+            summary = "Here is what each page says:"
+        return self._finish(f"{summary}\n{table}", t0, len(findings))
+
+    # ---- forms --------------------------------------------------------------------------------
+    @staticmethod
+    def _form_fields(goal):
+        """'fill the form: name = Anna Rossi, email = anna@x.it, message = Hi' → {'name': 'Anna Rossi', ...}; {} when not a form goal."""
+        m = re.search(r"\b(?:fill(?: in| out)?|complete|enter)\b.*?(?:form|fields?|enquiry|inquiry|request)?\s*[:\-–—]\s*(.+)$", goal, re.I | re.S)
+        if not m:
+            return {}
+        body = m.group(1)
+        fields = {}
+        for part in re.split(r"\s*[;,\n]\s*(?=[A-Za-z][A-Za-z /_-]{0,30}\s*[=:])", body):
+            mm = re.match(r"\s*([A-Za-z][A-Za-z /_-]{0,30}?)\s*[=:]\s*(.+?)\s*$", part, re.S)
+            if mm:
+                fields[mm.group(1).strip().lower()] = mm.group(2).strip().strip('"\'')
+        return fields
+
+    def _run_form(self, goal, fields, start_url):
+        """Type the given values into the matching fields, never press send: the owner gets a screenshot-style summary and decides."""
+        t0 = time.time()
+        if start_url:
+            self.history.append(f"opened {start_url} → {self._browser_open(start_url)}")
+        seen = self._see("browser")
+        if seen.get("wall"):
+            return self._finish(f"I stopped: the page shows a {seen['wall']}.", t0, 1)
+        if any(k in ("password", "card number", "cvv", "iban", "passcode") for k in fields):
+            return self._finish("I don't type passwords, card numbers or bank details — please do that part yourself.", t0, 1)
+        done, missing = [], []
+        for key, val in fields.items():
+            n = self._field_number(seen, key)
+            if n is None:
+                missing.append(key)
+                continue
+            r = self._act_type("browser", key, val, False, seen, field_n=n)
+            ok = not str(r).startswith(("typing failed", "refused", "'"))
+            (done if ok else missing).append(key if ok else f"{key} ({r[:40]})")
+            self.history.append(f"typed into '{key}': {val[:40]} → {'ok' if ok else r[:60]}")
+        after = self._see("browser")
+        send = next((lab for _, lab, role in after.get("items", []) if role == "button" and DANGER.search(lab or "")), None)
+        report = f"I filled in {len(done)} field(s): {', '.join(done) or '-'}."
+        if missing:
+            report += f"\nI could not find: {', '.join(missing)}."
+        if send:
+            report += f"\nThe form is ready but NOT sent — the “{send}” button is untouched. Check it on the live screen and tell me “/do click {send}” if it should go out."
+        else:
+            report += "\nI did not find a send/submit button on this page."
+        return self._finish(report, t0, len(fields) + 1)
+
+    def _field_number(self, seen, key):
+        """The [n] of the typing field whose label best matches key ('email' → 'E-mail address')."""
+        k = re.sub(r"[^a-z0-9]", "", key.lower())
+        alias = {"email": ("email", "mail"), "name": ("name", "yourname", "fullname", "nome"), "phone": ("phone", "tel", "mobile"),
+                 "message": ("message", "comment", "enquiry", "inquiry", "text", "messaggio"), "company": ("company", "business", "azienda", "organisation", "organization"),
+                 "subject": ("subject", "topic"), "quantity": ("quantity", "qty", "amount"), "website": ("website", "url", "site"), "city": ("city", "town"), "country": ("country",)}
+        wanted = alias.get(k, (k,))
+        best, best_n = 0, None
+        for n, label, role in seen.get("items", []):
+            if role not in ("textbox", "textarea", "searchbox", "combobox", "select"):
+                continue
+            lab = re.sub(r"[^a-z0-9]", "", (label or "").lower())
+            for w in wanted:
+                if lab == w:
+                    return n
+                if w in lab or (lab and lab in w):
+                    sc = len(w) / max(len(lab), len(w))
+                    if sc > best:
+                        best, best_n = sc, n
+        return best_n if best >= 0.3 else None
+
     # ---- see ---------------------------------------------------------------------------------
     def _see(self, where):
         out = {"where": where, "lines": [], "elements": "", "shot": None, "wall": ""}
         if where == "browser":
             def grab(b):
+                banner = b.dismiss_banner() if hasattr(b, "dismiss_banner") else ""
                 b.snapshot()
                 st = b.status()
                 shot = b.page.screenshot(type="png", timeout=8000)
@@ -216,12 +331,14 @@ class Operator:
                 except Exception:
                     full = b.extract_text()
                 items = [(it.get("n"), (it.get("label") or "")[:80], it.get("role", "")) for it in (b.items or [])]
-                return st, shot, full[:12000], b.page.url, b.page.title(), items
+                return st, shot, full[:12000], b.page.url, b.page.title(), items, banner
             try:
-                st, shot, full, url, title, items = self.tasks.on_hands(lambda: grab(self.tasks.browser()), timeout=60)
+                st, shot, full, url, title, items, banner = self.tasks.on_hands(lambda: grab(self.tasks.browser()), timeout=60)
             except Exception as e:
                 out["elements"] = f"(browser error: {str(e)[:80]})"
                 return out
+            if banner:
+                self.history.append(f"closed a cookie banner ({banner})")
             out.update(shot=shot, elements=full[:3000], fulltext=full, url=url, title=title, items=items)
             if st in ("captcha", "login"):
                 out["wall"] = "captcha" if st == "captcha" else "login wall"
@@ -369,6 +486,23 @@ class Operator:
         except Exception as e:
             self.log("operator_think_failed", error=str(e)[:100])
         return {"step": "stop", "reason": "I could not decide the next step"}
+
+    @staticmethod
+    def _lost(goal, before, after):
+        """True when the page before the click mentioned the goal's words and the new one mentions none of them (a wrong turn)."""
+        if not before or not after or after.get("url") == before.get("url"):
+            return False
+        stop = {"the", "and", "for", "what", "which", "when", "does", "how", "many", "find", "out", "tell", "with", "from", "this", "that",
+                "are", "was", "were", "has", "have", "who", "where", "why", "much", "there", "about", "into", "page", "site", "open", "click",
+                "put", "one", "its", "then", "please", "add", "cart", "buy", "now", "search", "first", "sentence", "article", "product", "price", "cost"}
+        keys = {w for w in re.findall(r"[a-z]{4,}", goal.lower()) if w not in stop}
+        if not keys:
+            return False
+        txt_b = (before.get("fulltext") or before.get("elements") or "").lower() + " ".join((l or "").lower() for _, l, _ in before.get("items", []))
+        txt_a = (after.get("fulltext") or after.get("elements") or "").lower() + " ".join((l or "").lower() for _, l, _ in after.get("items", []))
+        hits_b = sum(1 for k in keys if k in txt_b)
+        hits_a = sum(1 for k in keys if k in txt_a)
+        return hits_b >= 1 and hits_a == 0
 
     @staticmethod
     def _is_question(goal):
@@ -566,11 +700,11 @@ class Operator:
         finally:
             self.desktop.allow_actions = False
 
-    def _act_type(self, where, target, text, enter, seen, approved=False):
+    def _act_type(self, where, target, text, enter, seen, approved=False, field_n=None):
         if any(k in text.lower() for k in ("password", "token", "cvv")):
             return "refused: I don't type passwords or card details"
         if where == "browser":
-            n = self._element_number(seen, target)
+            n = field_n if field_n is not None else (self._field_number(seen, target) or self._element_number(seen, target))
             if n is None:
                 return f"'{target}' is not a field on this page"
             try:

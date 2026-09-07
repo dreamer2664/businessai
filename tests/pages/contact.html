@@ -1,0 +1,14 @@
+<html><head><title>Contact — Green Nest</title></head><body style="font-family:sans-serif;margin:30px">
+<h1>Green Nest — Contact us</h1>
+<nav><a href="shop.html">Shop</a> · <a href="faq.html">Help</a></nav>
+<div id="cookie" style="position:fixed;bottom:0;left:0;right:0;background:#333;color:#fff;padding:16px">We use cookies to improve your experience. <button onclick="document.getElementById('cookie').remove()">Accept all</button> <button onclick="document.getElementById('cookie').remove()">Reject all</button></div>
+<h2>Supplier / wholesale enquiry</h2>
+<form onsubmit="event.preventDefault();document.getElementById('r').innerText='Thank you! Your enquiry has been sent. Reference #4821';">
+<p><label for="n">Your name</label><br><input id="n" size=30></p>
+<p><label for="e">E-mail address</label><br><input id="e" type="email" size=30></p>
+<p><label for="c">Company</label><br><input id="c" size=30></p>
+<p><label for="m">Message</label><br><textarea id="m" rows=4 cols=40></textarea></p>
+<p><label><input type="checkbox" id="nl"> Subscribe to the wholesale newsletter</label></p>
+<button type="submit">Send enquiry</button></form>
+<p id="r"></p>
+</body></html>

@@ -37,10 +37,18 @@ _JS_SNAPSHOT = r"""
   const seen = new Set(); const items = []; let n = 0;
   const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+  const fieldLabel = (el) => {
+    if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+    const lb = el.getAttribute('aria-labelledby'); if (lb) { const e = document.getElementById(lb); if (e) return e.innerText || e.textContent; }
+    if (el.id) { const l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]'); if (l) return l.innerText || l.textContent; }
+    const wrap = el.closest('label'); if (wrap) return (wrap.innerText || wrap.textContent || '').replace(el.value || '', '');
+    return el.getAttribute('placeholder') || el.getAttribute('title') || el.name || el.id || el.type || '';
+  };
   const label = (el) => {
-    let t = (el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('title') ||
-             el.getAttribute('alt') || el.value || el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
-    if (!t && el.tagName === 'INPUT') t = el.name || el.id || el.type || '';
+    const tag = el.tagName; let t = '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') t = fieldLabel(el);
+    else t = (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('alt') || el.innerText || el.textContent || '');
+    t = (t || '').trim().replace(/\s+/g, ' ').replace(/[:*]+$/, '').trim();
     return t.slice(0, 80);
   };
   const role = (el) => {
@@ -254,6 +262,44 @@ class Browser:
         return self._organic(limit)
 
     # ---- reading -------------------------------------------------------
+    _JS_COOKIE = r"""
+() => {
+  const words = /(cookie|consent|privacy|gdpr|tracking)/i;
+  const rejectRe = /^(reject( all)?|decline( all)?|refuse( all)?|deny( all)?|only (essential|necessary|required)|(essential|necessary|required)( cookies)? only|use (essential|necessary) only|continue without (accepting|agreeing)|no,? thanks|rifiuta( tutto)?|solo (essenziali|necessari)|ablehnen|nur notwendige|tout refuser|rechazar( todo)?)$/i;
+  const okRe = /^(ok|okay|got it|i understand|understood|close|dismiss|accept|accept all|allow all|agree|i agree|accept cookies|accetta( tutto)?|ho capito|alle akzeptieren|akzeptieren|tout accepter|aceptar( todo)?)$/i;
+  const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+  const cands = Array.from(document.querySelectorAll('div, section, aside, dialog, footer, form, [role=dialog], [role=alertdialog]'))
+    .filter(el => vis(el) && el.querySelector('button, a, input[type=button], [role=button]'))
+    .filter(el => { const s = getComputedStyle(el); const r = el.getBoundingClientRect();
+      const floating = s.position === 'fixed' || s.position === 'sticky' || el.getAttribute('role') === 'dialog' || el.tagName === 'DIALOG';
+      return floating && r.height < window.innerHeight * 0.95 && words.test((el.innerText || '').slice(0, 1500)); });
+  if (!cands.length) return null;
+  const box = cands.sort((a, b) => a.innerText.length - b.innerText.length)[0];
+  const btns = Array.from(box.querySelectorAll('button, a, input[type=button], input[type=submit], [role=button]')).filter(vis);
+  const txt = (b) => ((b.innerText || b.value || b.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' '));
+  let pick = btns.find(b => rejectRe.test(txt(b))) || btns.find(b => okRe.test(txt(b)));
+  if (!pick) return {found: true, clicked: null, text: (box.innerText || '').slice(0, 120)};
+  const label = txt(pick); pick.click();
+  return {found: true, clicked: label, text: (box.innerText || '').slice(0, 120)};
+}
+"""
+
+    def dismiss_banner(self):
+        """Close a cookie / consent banner if one covers the page: prefers 'reject' / 'necessary only', else 'ok'/'accept'.
+        Returns the label clicked, or '' when there was nothing to do."""
+        try:
+            r = self.page.evaluate(self._JS_COOKIE)
+        except Exception:
+            return ""
+        if not r:
+            return ""
+        if r.get("clicked"):
+            time.sleep(0.6)
+            self.log("browser_banner", clicked=r["clicked"], text=r.get("text", "")[:80])
+            return r["clicked"]
+        return ""
+
     def snapshot(self, max_items=150):
         self.items = self.page.evaluate(_JS_SNAPSHOT, max_items)
         return self.items

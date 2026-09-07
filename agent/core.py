@@ -44,7 +44,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /post <platform> <what about> — I draft a social post (instagram, facebook, tiktok, x, linkedin, pinterest), you approve/edit, then copy it — I never publish by myself
 /policy — the store rules every reply obeys (/policy set <field> <text>) · /stats — how often you approve my drafts
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
-/do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do desktop <goal> — same on my own screen (whatever window is open there). Any click that costs money, publishes, signs in or deletes waits for your tap.
+/do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do <page1> <page2> | which is cheaper? (compare several pages) · /do <page> | fill in the form: name = …, email = …, message = … (I type, you send) · /do desktop <goal> — same on my own screen. Any click that costs money, publishes, signs in or deletes waits for your tap.
 /screen · /watch on|off — see my browser · /status · /selftest
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
@@ -621,8 +621,11 @@ class Agent:
             return "And the goal? e.g. /do desktop what is written on my screen right now?" if where == "desktop" else "And the goal? e.g. /do en.wikipedia.org/wiki/Etsy | in which year was Etsy founded?"
         start_url, goal = None, arg
         if where == "browser":
+            mm = re.match(r"^((?:(?:https?|file)://\S+|[a-z0-9.-]+\.[a-z]{2,}\S*)(?:[\s,]+(?:(?:https?|file)://\S+|[a-z0-9.-]+\.[a-z]{2,}\S*))+)\s*[|—-]\s*(.+)$", arg, re.I | re.S)
             m = re.match(r"^((?:https?|file)://\S+|[a-z0-9.-]+\.[a-z]{2,}\S*)\s*[|—-]?\s*(.*)$", arg, re.I | re.S)
-            if m and m.group(2).strip():
+            if mm:                                                        # "/do <page1> <page2> <page3> | which is cheapest?"
+                start_url, goal = re.split(r"[\s,]+", mm.group(1).strip()), mm.group(2).strip()
+            elif m and m.group(2).strip():
                 start_url, goal = m.group(1), m.group(2).strip()          # "/do <address> | <goal>"
             else:
                 mu = re.search(r"((?:https?|file)://\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:/\S*)?)", arg, re.I)
@@ -635,7 +638,8 @@ class Agent:
         if where == "desktop" and not self.eyes.ocr:
             return "For working my own screen I need OCR: sudo apt install -y tesseract-ocr (sh scripts/install_desktop.sh does it)."
         threading.Thread(target=self.run_do, args=(goal, where, start_url), daemon=True).start()
-        return (f"On it — working {'my own screen' if where == 'desktop' else (start_url or 'the page I have open')} towards: “{goal}”. "
+        where_txt = "my own screen" if where == "desktop" else (f"{len(start_url)} pages" if isinstance(start_url, list) else (start_url or "the page I have open"))
+        return (f"On it — working {where_txt} towards: “{goal}”. "
                 f"I'll report when I'm done or stuck (usually 1–5 minutes; each step takes a moment on this machine).")
 
     def run_do(self, goal, where, start_url):
