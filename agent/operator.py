@@ -136,10 +136,15 @@ class Operator:
             if step == "type":
                 tgt, txt = str(decision.get("target") or ""), str(decision.get("text") or "")
                 if where == "browser":
-                    n = self._element_number(seen, tgt)
+                    n = self._field_number(seen, tgt) or self._element_number(seen, tgt)
                     role = next((r for k, _, r in seen.get("items", []) if k == n), "")
                     if n is not None and role not in ("textbox", "searchbox", "combobox", "textarea"):
                         decision, step = {"step": "click", "target": tgt}, "click"        # it's a link/button, not a field
+                    elif n is None:
+                        nav = self._best_link(goal, seen, done_sigs)                        # no such field: follow the most promising link instead
+                        if nav:
+                            self.history.append(f"there is no '{tgt}' field here — trying the link '{nav}'")
+                            decision, step = {"step": "click", "target": nav}, "click"
                 elif not txt.strip() or txt.strip().lower() == tgt.strip().lower() or DANGER.search(tgt):
                     decision, step = {"step": "click", "target": tgt}, "click"            # "type 'Add to cart' into 'Add to cart'" = a click
             if question and step in ("click", "type") and DANGER.search(str(decision.get("target", ""))):
@@ -183,6 +188,16 @@ class Operator:
                 if ans in (None, "Stop"):
                     return self._finish(f"Stopped after asking: {q}", t0, steps)
                 continue
+            if step == "click" and where == "browser" and self._element_number(seen, str(decision.get("target") or "")) is None:
+                nav = self._best_link(goal, seen, done_sigs)
+                if nav:
+                    self.history.append(f"'{decision.get('target')}' is not on this page — trying the link '{nav}'")
+                    decision = {"step": "click", "target": nav}
+            if step == "scroll" and where == "browser" and len(seen.get("fulltext") or "") < 1500:
+                nav = self._best_link(goal, seen, done_sigs)
+                if nav:                                                                    # short page, nothing below: follow a link instead
+                    self.history.append(f"nothing more on this short page — trying the link '{nav}'")
+                    decision, step = {"step": "click", "target": nav}, "click"
             if step in ("click", "type"):
                 target = str(decision.get("target") or "")[:80]
                 if not target:
@@ -615,6 +630,34 @@ class Operator:
             self.log("operator_think_failed", error=str(e)[:100])
         return {"step": "stop", "reason": "I could not decide the next step"}
 
+    NAV_STOP = {"home", "shop", "cart", "account", "login", "sign", "register", "help", "menu", "search", "skip", "content", "privacy", "terms",
+                "cookie", "cookies", "policy", "back", "next", "previous", "more", "read", "close", "page", "main", "site", "the", "and", "for",
+                "with", "from", "this", "that", "what", "which", "when", "does", "how", "many", "find", "out", "tell", "year", "founded", "work", "there"}
+
+    def _best_link(self, goal, seen, done_sigs=()):
+        """The link/button most related to the goal's words that we have not clicked yet (e.g. 'About us' for a founding-year question).
+        Falls back to generic 'about / contact' links for who/when/where questions."""
+        gw = {w for w in re.findall(r"[a-z]{3,}", goal.lower()) if w not in self.NAV_STOP}
+        stems = {w[:5] for w in gw}
+        best, best_sc = None, 0
+        for n, label, role in seen.get("items") or []:
+            lab = (label or "").strip()
+            low = lab.lower()
+            if not lab or role not in ("link", "button") or ("click", low) in done_sigs or DANGER.search(lab):
+                continue
+            lw = re.findall(r"[a-z]{3,}", low)
+            sc = sum(2 for w in lw if w in gw) + sum(1 for w in lw if w[:5] in stems)
+            if sc > best_sc:
+                best, best_sc = lab, sc
+        if best:
+            return best
+        if re.search(r"\b(founded|found|who|when|where|history|company|team|people|employees|based|located|address|contact|owner|about)\b", goal.lower()):
+            for n, label, role in seen.get("items") or []:
+                low = (label or "").lower()
+                if role in ("link", "button") and ("click", low) not in done_sigs and re.search(r"\b(about|company|who we are|our story|team|contact|imprint|impressum)\b", low):
+                    return label
+        return None
+
     @staticmethod
     def _lost(goal, before, after):
         """True when the page before the click mentioned the goal's words and the new one mentions none of them (a wrong turn)."""
@@ -668,6 +711,7 @@ class Operator:
             self.log("operator_read_failed", error=str(e)[:80])
             return ""
         raw = raw.strip().splitlines()[0].strip().strip('"') if raw.strip() else ""
+        self.log("operator_read", raw=raw[:120])
         negative = re.search(r"\b(not on screen|does not|doesn't|do not|no information|not mention|not provide|not specif|not state|not say|cannot be determined|unknown|unclear)\b", raw, re.I)
         if not raw or (negative and not (partial and re.search(r"\d", raw))):
             return ""
@@ -765,11 +809,13 @@ class Operator:
             return False
         stop = ("found", "there", "which", "about", "their", "these", "those", "answer", "shows", "screen", "contains", "costs", "pieces", "piece",
                 "according", "states", "total", "price", "amount", "number", "years", "around", "approximately", "including", "currently")
-        goal_words = set(re.findall(r"[a-z]{5,}", goal.lower()))
-        words = [w for w in re.findall(r"[a-z]{5,}", answer.lower()) if w not in stop and w not in goal_words]
+        def stem(w):                                   # working ≈ work, founded ≈ found, prices ≈ price
+            return re.sub(r"(ing|ed|es|s|ly|er)$", "", w) if len(w) > 5 else w
+        goal_stems = {stem(w) for w in re.findall(r"[a-z]{4,}", goal.lower())}
+        words = [w for w in re.findall(r"[a-z]{5,}", answer.lower()) if w not in stop and stem(w) not in goal_stems]
         if not words:
-            return bool(nums) or bool(goal_words & set(re.findall(r"[a-z]{5,}", answer.lower())))
-        return sum(1 for w in words if w in screen) >= max(1, int(0.6 * len(words)))
+            return bool(nums) or bool(goal_stems & {stem(w) for w in re.findall(r"[a-z]{4,}", answer.lower())})
+        return sum(1 for w in words if w in screen or stem(w) in screen) >= max(1, int(0.6 * len(words)))
 
     def _on_screen(self, target, seen):
         want = target.lower().strip()
