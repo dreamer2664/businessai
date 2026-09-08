@@ -13,6 +13,8 @@ Before a message is turned into a job, this layer catches the things that need n
   • "what time is it in Shenzhen?"           → local time there, gap to the owner's clock, office-hours hint
   • "shopify vs woocommerce?"                → a grounded opinion from a small table of the usual choices
   • "translate to english: …" / "how do you say X in italian" → {"translate", "to"} for the agent's thinking model
+  • "do I need a partita iva?" / "how much tax on € 1,000 in Italy?" / "the customer wants a refund but used it"
+                                             → Italian shop basics and EU return rules as rules of thumb (always: confirm with a commercialista)
   These "quick" ones (Talk.quick) are answered even while a job is running; the job is not touched.
 
 Everything here is rules + arithmetic; nothing is invented. Returns None when the message is not one of these,
@@ -60,6 +62,9 @@ class Talk:
     STORE_Q = re.compile(r"\b(?:how(?:'s| is| are) (?:the |my |our )?(?:practice |test |fake )?(?:store|shop|sales|orders|numbers)(?: doing| going)?|(?:store|shop) (?:numbers|stats|status|report)|come va (?:il negozio|lo shop)|quanti ordini)\b", re.I)
     DECIDED = re.compile(r"\b(?:what did we (?:decide|say|agree)|what was (?:decided|agreed)|remind me what we (?:decided|said|agreed)|cosa avevamo (?:deciso|detto)|what were (?:the|our) (?:conclusions|findings))\b.{0,12}?(?:about|on|for|regarding|su|per)\s+(?P<topic>.+?)\W*$", re.I)
     WHY_SLOW = re.compile(r"\bwhy (?:did|was|has) (?:the |that |my |your )?(?P<what>.{2,40}?) (?:take so long|so slow|take (?:that|so) much time|fail|not work|go wrong|break)\b|\bwhat (?:went wrong|happened) (?:with|on|during) (?:the |that )?(?P<what2>.{2,40}?)\W*$|\bperch[eé] (?:ci hai messo tanto|è andata male)\b", re.I)
+    IT_BIZ = re.compile(r"\b(partita iva|p\.? ?iva|vat number|forfettario|forfetario|flat[- ]tax|regime forfettario|inps|ateco|codice ateco|scia|camera di commercio|registro (?:delle )?imprese|commercialista|oss\b|one[- ]stop[- ]shop|fattura elettronica|electronic invoic)\w*", re.I)
+    TAX_ON = re.compile(r"\b(?:how much )?(?:tax(?:es)?|imposte|tasse)\b.{0,30}?(?:on|su|for|per)\s*" + _MONEY + r"\s*(?:of |di |in )?(?:sales|revenue|turnover|income|fatturato|vendite|incassi)?", re.I)
+    RETURNS_Q = re.compile(r"\b(?:customer|client|buyer|cliente)\b.{0,40}?\b(?:refund|return|rimborso|reso|money back)\b.{0,60}?\b(?:used|worn|opened|damaged by|after \d+ days|late|too late|no receipt|without (?:the )?box|usato|aperto|in ritardo)\b|\b(?:do i have to|must i|am i obliged to|devo)\b.{0,20}?\b(?:refund|accept the return|rimborsare|accettare il reso)\b", re.I)
     OPINION = re.compile(r"\b(?:what do you think(?: about| of)?|what(?:'s| is) (?:your (?:take|opinion|view)|better)|which (?:is|one is|would you) (?:better|pick|choose|recommend)|should i (?:use|go with|pick|choose)|would you (?:recommend|suggest)|is it worth|che ne pensi|cosa ne pensi|secondo te|meglio)\b", re.I)
     VS = re.compile(r"\b(?P<a>[a-z0-9][a-z0-9 .'+-]{1,30}?)\s+(?:vs\.?|versus|or|o|oppure)\s+(?P<b>[a-z0-9][a-z0-9 .'+-]{1,30}?)(?=[\s?.!,]|$)", re.I)
 
@@ -173,6 +178,13 @@ class Talk:
         m = self.WHY_SLOW.search(t)
         if m:
             return self.why_slow((m.group("what") or m.group("what2") or "").strip())
+        m = self.TAX_ON.search(t)
+        if m and re.search(r"\b(ital(?:y|ia)|forfettario|partita iva)\b", low):
+            return self.tax_on(_num(m.group(1)))
+        if self.IT_BIZ.search(t) and re.search(r"\?|\b(do i need|need|serve|devo|how|what|quanto|come|cosa)\b", low):
+            return self.it_biz(t)
+        if self.RETURNS_Q.search(t) and not self.CUSTOMER.search(t):       # "…what do I answer?" → a draft instead (inbox)
+            return self.returns_rule(t)
         m = self.TIME_IN.search(t)
         if m:
             return self.clock(m.group("place"))
@@ -283,6 +295,57 @@ class Talk:
                 f"{when.capitalize()}: open the shop, publish post 1, watch the first orders and messages together"]
         return {"todo": todo, "text": f"Launch list for {when} — in the order I'd do it, and it's on your to-do list now:\n" +
                 "\n".join(f"{i + 1}. {s}" for i, s in enumerate(todo)) + "\nTell me which ones you want me to do (2, 3, 6 and 7 are mine to prepare)."}
+
+    # ---- Italian business basics (rules of thumb, always "confirm with a commercialista") -----------
+    IT_NOTE = "\n(Rules of thumb from the official rules as I know them — confirm the numbers with a commercialista before you file anything.)"
+
+    def it_biz(self, t):
+        low = t.lower()
+        if re.search(r"partita iva|p\.? ?iva|vat number", low) and re.search(r"\b(need|serve|devo|do i|necessary|required|without|senza|start|open|aprire)\b", low):
+            return ("Yes — for a shop that is open all the time (your own site or a marketplace storefront) Italy treats selling as a continuous business, so you need a "
+                    "Partita IVA from the first sale. The famous “€ 5,000 a year without Partita IVA” does not exist for selling goods: that threshold is for occasional freelance services (INPS gestione separata). "
+                    "Only truly occasional sales (a few used items of your own, no stock, no ads) are exempt.\n"
+                    "What opening it means: Partita IVA with ATECO 47.91.10 (retail via internet), Registro Imprese, SCIA to the Comune (SUAP), INPS Gestione Commercianti — a commercialista does it all in about a week, "
+                    "typically € 300–600 for the set-up and € 800–1,500 a year to keep the books. Regime forfettario (see below) is the usual choice for a small shop." + self.IT_NOTE)
+        if re.search(r"forfettario|forfetario|flat[- ]tax", low):
+            return ("Regime forfettario for an online shop: allowed up to € 85,000 revenue a year; no VAT charged to customers and none reclaimed; taxable income = revenue × 40 % (the coefficient for retail); "
+                    "on that you pay a flat 5 % for the first 5 years of a new business, then 15 %. On top come INPS Gestione Commercianti contributions: a fixed minimum of roughly € 4,600 a year "
+                    "(you can ask for a 35 % reduction under forfettario) plus about 24 % on income above ~€ 18,500. Example: € 20,000 sales → € 8,000 taxable → € 400 tax (5 %) + INPS ≈ € 3,000 with the reduction." + self.IT_NOTE)
+        if re.search(r"\binps\b", low):
+            return ("INPS for an online shop = Gestione Commercianti: a fixed minimum contribution of about € 4,600 a year even with tiny sales (reduced by 35 % on request if you're in forfettario), "
+                    "plus roughly 24 % of business income above the minimum base (~€ 18,500). It's the biggest fixed cost of a small shop in Italy — plan for it from month one." + self.IT_NOTE)
+        if re.search(r"\boss\b|one[- ]stop[- ]shop", low):
+            return ("OSS (One Stop Shop) matters once your sales to consumers in OTHER EU countries pass € 10,000 a year in total: above that you charge the customer's country VAT and declare it through one quarterly OSS return "
+                    "in Italy instead of registering in every country. Under € 10,000 you keep Italian VAT (or none, in forfettario). Note: forfettario sellers who cross € 10,000 of EU distance sales still have to apply destination VAT via OSS." + self.IT_NOTE)
+        if re.search(r"ateco", low):
+            return "ATECO for an online shop: 47.91.10 — “commercio al dettaglio di qualsiasi tipo di prodotto effettuato via internet”. Dropshipping uses the same code. Handmade goods you make yourself add the artisan code for the craft." + self.IT_NOTE
+        if re.search(r"fattura elettronica|electronic invoic", low):
+            return "Electronic invoicing (fattura elettronica via SdI) is mandatory for all Partita IVA holders in Italy, forfettario included. For consumer sales on your own shop you issue a daily 'corrispettivo' instead of an invoice unless the customer asks for one." + self.IT_NOTE
+        if re.search(r"commercialista", low):
+            return "A commercialista for a small online shop costs about € 800–1,500 a year (forfettario, few invoices) — online ones (Fiscozen, Flextax, Taxfix-style) sit at the low end. Worth it from day one: the INPS and forfettario rules have traps." + self.IT_NOTE
+        return None
+
+    def tax_on(self, amount):
+        taxable = amount * 0.40
+        return (f"On {_eur(amount)} of sales in regime forfettario: taxable income = 40 % = {_eur(taxable)}; flat tax 5 % = {_eur(taxable * 0.05)} in the first 5 years (15 % = {_eur(taxable * 0.15)} after). "
+                f"Separately, INPS Gestione Commercianti asks a fixed minimum of about € 4,600 a year (≈ € 3,000 with the 35 % forfettario reduction) whatever you sell — so at small volumes INPS, not tax, is the real cost. "
+                f"Outside forfettario you'd pay VAT 22 % on sales plus IRPEF (23 % upward) on the real profit." + self.IT_NOTE)
+
+    def returns_rule(self, t):
+        low = t.lower()
+        if re.search(r"\b(used|worn|opened|usato|aperto|without (?:the )?box)\b", low):
+            return ("EU rule (Italy included): within 14 days of delivery the customer can withdraw for any reason and you must refund within 14 days of getting the goods back — even if the item was used. "
+                    "BUT you may deduct the loss in value caused by handling beyond what a shop would allow (worn outside, washed, scratched). Two exceptions where you can refuse: sealed hygiene goods that were unsealed "
+                    "(cosmetics, earbuds, underwear) and made-to-order items. If they say it's faulty, that's the 2-year legal guarantee instead: repair/replace first, refund if that fails.\n"
+                    "What I'd do: ask for photos, refund the price minus a fair deduction (say 20–30 % for clear use), explain it in one calm sentence. Want me to draft that reply?")
+        if re.search(r"\b(after \d+ days|late|too late|in ritardo)\b", low):
+            return ("After the 14-day withdrawal window you're not obliged to take a change-of-mind return — unless your own returns page promises more (a 30-day policy binds you). "
+                    "A faulty item is different: the 2-year legal guarantee applies whenever the defect shows up. Many small shops still accept a late return as store credit — cheap goodwill. Want me to draft the reply?")
+        if re.search(r"\bdamaged by\b", low):
+            return ("Damage the customer caused is not covered by withdrawal or guarantee — you can refuse the refund. Damage in transit is your risk until delivery: refund or replace, then claim from the courier. "
+                    "Ask for photos of the item and the box before deciding. Want me to draft the reply?")
+        return ("Refunds in the EU, in one breath: 14 days to withdraw for any reason (refund within 14 days of return, you may deduct for use beyond trying it), 2-year legal guarantee for defects (repair/replace, then refund), "
+                "transit damage is on you until delivery, sealed hygiene goods and custom items are excluded from withdrawal. Tell me the exact case and I draft the reply.")
 
     def here(self):
         """'are you there?' → yes, plus what I'm doing — the honest one-liner an assistant gives."""
