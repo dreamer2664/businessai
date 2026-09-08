@@ -64,7 +64,7 @@ Examples: "what is a good margin for dropshipping" · "find out how ePacket work
 
 Commands (optional):
 /research <topic> · /compare <product> · /summarize <url> · /visit <site> | <question> · /watch <video url or topic> · /exam [n]
-/todo — my to-do list · /todo add <text> · /todo done <n>
+/todo — my to-do list · /todo add <text> · /todo done <n> (or just say “add … to my list”, “done 2”)
 /goal <topic> — give me a standing learning goal; I study it on my own when idle (max 6 sessions a day) and keep notes
 /goals · /goal drop <n> · /notes [topic] — my notes · /learned — facts I've folded into my own knowledge pack · /report — today's summary
 Forward me any customer message (or write /customer <their text>) → I draft the answer, you tap Approve / Edit / Reject, and I hand you the final text to paste back. Nothing is ever sent by itself.
@@ -827,6 +827,12 @@ class Agent:
         shown; long ones (documents, sites) show the plan first with Go / Change / Cancel buttons."""
         low = text.strip().lower()
         if self.busy and self.mind.job and not self.last_brief:                       # a message while I'm working
+            quick = self.talk.quick(text.strip())                                     # to-do, clock, opinions: answered live, job untouched
+            if isinstance(quick, dict):
+                quick = quick.get("text")
+            if quick:
+                self.log("talk", text=text[:60], while_busy=True)
+                return quick
             what, reply = self.mind.interrupt(text)
             if what in ("status", "why", "hurry"):
                 return reply
@@ -866,6 +872,8 @@ class Agent:
             if direct.get("todo"):
                 for item in direct["todo"]:
                     self.memory.add(item)
+                return direct["text"]
+            if direct.get("text"):                                                    # e.g. a to-do item already added by talk
                 return direct["text"]
         if direct:
             self.log("talk", text=text[:60])

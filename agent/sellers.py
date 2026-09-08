@@ -457,10 +457,16 @@ class SellerCheck:
         self._step(4, "writing the document")
         doc = library.Doc(f"{product} — seller check", f"{len(options)} options researched · read-only, nothing bought or contacted", kind="seller_check")
         best = [L for L in options if L["grade"] == "good"] or [L for L in options if L["grade"] == "ok"]
-        summary = ((f"I looked at the {len(options)} listing(s) you sent ({product}). " if urls else f"I looked at {len(options)} listings for {product}. ") +
-                   (f"Best bet: {best[0]['seller']} ({best[0]['facts'].get('Price', 'price n/a')}) — {best[0]['verdict']} " if best else "None of them convinced me. ") +
-                   (f"Skip: {', '.join(L['seller'] for L in options if L['grade'] == 'bad')}. " if any(L['grade'] == 'bad' for L in options) else "") +
-                   (counterfeit_note or ""))
+        if urls and len(options) == 1:                                   # one link from the owner → a verdict on that shop, not a ranking
+            L = options[0]
+            word = {"good": "looks trustworthy", "ok": "is so-so", "bad": "I would NOT buy from"}[L["grade"]]
+            summary = (f"I checked the shop you sent ({product}): {L['seller']} {word} — {L['verdict']} "
+                       f"Price {L['facts'].get('Price', 'n/a')}, shipping {L['facts'].get('Shipping', 'n/a')}, from {L['facts'].get('Ships from / origin', 'n/a')}. " + (counterfeit_note or ""))
+        else:
+            summary = ((f"I looked at the {len(options)} listing(s) you sent ({product}). " if urls else f"I looked at {len(options)} listings for {product}. ") +
+                       (f"Best bet: {best[0]['seller']} ({best[0]['facts'].get('Price', 'price n/a')}) — {best[0]['verdict']} " if best else "None of them convinced me. ") +
+                       (f"Skip: {', '.join(L['seller'] for L in options if L['grade'] == 'bad')}. " if any(L['grade'] == 'bad' for L in options) else "") +
+                       (counterfeit_note or ""))
         doc.summary(summary)
         doc.table("Side by side", [[L["seller"], L["facts"].get("Price", "-"), L["facts"].get("Shipping", "-"), L["facts"].get("Delivery time", "-"),
                                     L["facts"].get("Ships from / origin", "-"), {"good": "👍 good", "ok": "🤔 ok", "bad": "👎 avoid"}[L["grade"]]] for L in options],

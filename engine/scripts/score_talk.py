@@ -75,5 +75,51 @@ check("agent: greeting knows what's waiting", r and "customer message" in r and 
 r = A.respond("how much should I charge for a mug that costs me 3.20?")
 check("agent: pricing answered directly (no plan, no job)", r and "Pricing mug" in r and "What I understood" not in r and not A.busy, (r or "")[:80])
 
+# ---- quick things: to-do in plain words, the clock, opinions — also while a job runs -------------------
+A.memory.todo["items"] = []; A.memory._save()
+r = A.respond("add 'call the accountant' to my list")
+check("to-do: plain-words add → stored + numbered", r and "#1" in r and "Call the accountant" in r and len(A.memory.open_items()) == 1, r)
+r = A.respond("remind me to order boxes")
+check("to-do: 'remind me to' add", r and "#2" in r and "Order boxes" in r, r)
+r = A.respond("what's on my to-do list?")
+check("to-do: list in plain words", r and "1. Call the accountant" in r and "2. Order boxes" in r, r)
+r = A.respond("I ordered the boxes, tick it off")
+check("to-do: done by description", r and "Ticked off: Order boxes" in r and len(A.memory.open_items()) == 1, r)
+r = A.respond("done 1")
+check("to-do: done by number", r and "Call the accountant" in r and not A.memory.open_items(), r)
+r = A.respond("what time is it in shenzhen?")
+check("clock: time in a supplier city with the gap", r and re.search(r"In Shenzhen it's \d\d:\d\d", r) and "ahead of you" in r, r)
+r = A.respond("what time is it")
+check("clock: local time", r and re.search(r"It's \d\d:\d\d here", r), r)
+r = A.respond("shopify vs woocommerce, what do you think?")
+check("opinion: shopify vs woocommerce → a real take, no job", r and "My take on Shopify vs Woocommerce" in r and "Shopify if" in r and not A.busy, (r or "")[:80])
+r = A.respond("is it worth holding stock or dropshipping?")
+check("opinion: stock vs dropshipping", r and "Dropshipping =" in r and "Own stock =" in r, (r or "")[:80])
+r = A.respond("is 9 € shipping to Germany normal?")
+check("shipping sanity: '9 € shipping to Germany normal' → EU verdict", r and "normal for EU" in r, r)
+# while busy: quick things are answered live, real requests are queued
+import threading
+gate = threading.Event()
+A.tasks.run = lambda c: (gate.wait(20), "fake report")[1]
+r = A.respond("research the best packaging for candles, write me a document, quick")
+for _ in range(40):
+    if A.busy:
+        break
+    time.sleep(0.25)
+r = A.respond("add 'renew the domain' to my list")
+check("busy: to-do add answered live (not 'noted for this job', not queued)", A.busy and r and "Added to your to-do list" in r and not A.mind.queue, r)
+r = A.respond("what time is it in new york?")
+check("busy: clock answered live", A.busy and r and "In New York" in r and not A.mind.queue, r)
+r = A.respond("only eco packaging")
+check("busy: a real constraint is still a change to the job", r and "Noted for this job" in r, r)
+r = A.respond("compare cj dropshipping and aliexpress for candles")
+check("busy: a new job is still queued", r and "queued as #1" in r, r)
+gate.set()
+for _ in range(60):
+    if not A.busy and not A.mind.job and not A.mind.queue:
+        break
+    time.sleep(0.5)
+A.mind.queue.clear()
+
 print(f"\nTALK SCORE: {PASS}/{PASS + FAIL}")
 sys.exit(0 if FAIL == 0 else 1)

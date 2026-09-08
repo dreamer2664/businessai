@@ -109,7 +109,7 @@ def fake_link_run():
     b.open = lambda url: real_open(BASE + "social_corkstep.html") if ("instagram.com" in url or "facebook.com" in url) else real_open(url)
     return S.run(f"is this shop legit? {BASE}listing_a.html", n=4)
 lpath, lsummary, loptions = T.on_hands(fake_link_run, timeout=240)
-check("link check: the given page is the one option, judged, with a document", lpath and len(loptions) == 1 and loptions[0].get("grade") == "good" and "you sent" in lsummary, lsummary[:120])
+check("link check: the given page is the one option, judged, with a document", lpath and len(loptions) == 1 and loptions[0].get("grade") == "good" and "you sent" in lsummary and "looks trustworthy" in lsummary and "Best bet" not in lsummary, lsummary[:120])
 check("link check: reviews still looked up for it", any("reviews_corkstep" in u for u in loptions[0].get("review_sources", [])) if loptions else False, str(loptions and loptions[0].get("review_sources")))
 check("plan: steps advanced to the end", V.state()["plan"]["step"] >= 5, str(V.state()["plan"]["step"]))
 print(f"SELLERS SCORE: {ok}/{total}  ({time.time() - t0:.0f}s browser part)")
