@@ -15,6 +15,7 @@ No model, no browsing. SelfTalk(store, inbox, memory, mind, pace, tasks_stats).r
 import datetime as _dt
 import json
 import re
+import time
 
 
 def _eur(x):
@@ -94,7 +95,10 @@ class SelfTalk:
         (r"^\W*(?:be honest(?: with me)?|honestly\??|tell me the truth|straight answer|no sugar ?coating|don'?t sugar ?coat it|sii onest[oa]|dimmi la verità|give it to me straight)\W*$|\bbe honest\b.{0,20}?\b(?:shop|store|business|numbers|me)\b", "be_honest"),
         (r"\bwhat would you do differently\b|\bwhat should (?:i|we) (?:do|have done) differently\b|\bcosa faresti di diverso\b|\bdifferently (?:than|from|to) last (?:week|month)\b", "differently"),
         (r"^\W*(?:please |ok |so |right,? )?(?:stop|don'?t|do not|no more|quit|smetti di|basta)\s+(?:proposing|suggesting|asking (?:me )?(?:about|for)|nagging (?:me )?about|sending(?: me)?|with the|proporre|proporr?mi)\s+(?:the |those |these |any |me )?(?P<what>price|prices|pricing|price changes?|repric\w*|stock|restock\w*|reorders?|reordering|stock changes?|ship\w*|shipping reminders?|order reminders?|proposals?|suggestions?|everything|cambi di prezzo|prezzi|riordini|scorte)\b.{0,30}$", "mute_kind"),
-        (r"^\W*(?:ok |please |from now on |you can |you may |go ahead and )?(?:send|answer|reply to|handle|do)\s+(?:the )?(?:routine|simple|easy|standard|normal|tracking|basic)\s+(?:replies|answers|messages|ones|questions|e-?mails|customer (?:replies|messages))\s+(?:yourself|on your own|by yourself|alone|without (?:asking|me)|automatically|directly|da sol[oa])\b|\byou (?:can|may) (?:send|answer) (?:the )?(?:routine|simple|easy) (?:ones|replies|messages) (?:yourself|on your own|without me)\b|\brispondi (?:tu )?(?:da sol[oa]|direttamente) (?:a quelle|alle) (?:semplici|di routine)\b", "auto_routine"),
+        (r"^\W*(?:ok |please |from now on |you can |you may |go ahead and |just )?(?:send|answer|reply to|handle|do|deal with|take care of)\s+(?:the |all the |any )?(?:routine|simple|easy|standard|normal|tracking|basic|obvious|trivial)\s+(?:customer |client )?(?:replies|answers|messages|ones|questions|stuff|e-?mails|emails|customer (?:replies|messages))\b.{0,25}?(?:yourself|on your own|by yourself|alone|without (?:asking|me)|automatically|directly|da sol[oa]|from now on)\b|\byou (?:can|may) (?:send|answer|reply to) (?:the )?(?:routine|simple|easy) (?:ones|replies|messages|questions) (?:yourself|on your own|without me)\b|\brispondi (?:tu )?(?:da sol[oa]|direttamente) (?:a quelle|alle) (?:semplici|di routine)\b|\b(?:turn on|enable|switch on|activate) (?:the )?auto[- ]?(?:replies|reply|answers)\b", "auto_routine"),
+        (r"^\W*(?:what|which)\s+(?:do|can|would|will)\s+you\s+(?:answer|reply to|send|handle)\s+(?:on your own|yourself|by yourself|alone|automatically|without me|without asking)\W*$|\bwhat (?:counts as|is|are) (?:a )?routine (?:reply|replies|message|messages|question|questions)\b|\bcosa rispondi da sol[oa]\b", "auto_scope"),
+        (r"^\W*(?:which|what|how many|show me the|list the)\s+(?:replies|messages|answers|e-?mails)\s+(?:did you|have you|you)\s+(?:send|sent|answer|answered)\s+(?:yourself|on your own|by yourself|alone|automatically|without me)\b.{0,20}$|\bsent by you today\b|\bwhat did you (?:send|answer) (?:on your own|yourself|alone|automatically)\b|\bcosa hai (?:mandato|risposto) da sol[oa]\b", "auto_log"),
+        (r"^\W*(?:stop|don'?t|do not|quit|smetti di|basta|no more)\s+(?:answering|replying to|sending|handling|answer|reply to|send)\s+(?:the |to )?(?:customers?|clients?|messages|replies|e-?mails|routine (?:replies|ones|messages))\s*(?:yourself|on your own|by yourself|alone|automatically|without me|without asking|da sol[oa])?\W*$|\b(?:turn off|disable|switch off) (?:the )?auto[- ]?(?:replies|reply|answers)\b", "auto_off"),
         (r"^\W*(?:ok,? |please |and |then |now )?(?:ask|check with|send|show) me (?:everything|all|every (?:reply|message|proposal|change)|the (?:routine|simple) ones)(?: again| from now on| too)?\W*$|\b(?:stop|don'?t) (?:sending|answering) (?:replies |messages |anything )?(?:yourself|on your own|alone|automatically)\b|\bback to (?:asking|approving) (?:me )?(?:everything|every(?:thing)?|all)\b|\bpropose (?:price|stock|ship\w*|everything|all)(?: changes)? again\b", "unmute"),
         (r"^\W*(?:ok,? |please |so |yes,? |good,? )?(?:fix (?:them|it|those|that|all of (?:it|them)|everything)|sort (?:them|it|that|those) out|handle (?:them|it|all of it|those)|deal with (?:them|it|those)|take care of (?:them|it|those)|do (?:them|those|all of it|it all)|go ahead with (?:them|those|all)|sistemali|sistema tutto|risolvi(?:li)?|occupatene)\W*$", "fix_them"),
         (r"\b(?:write|draft|prepare|scrivi|prepara)\b.{0,20}?\b(?:e-?mail|mail|message|newsletter|messaggio)\b.{0,30}?\b(?:past|previous|old|existing|former|earlier) (?:customers|buyers|clients|clienti)\b|\b(?:e-?mail|mail|message) to (?:our |my |the )?(?:past|previous|old|existing) (?:customers|buyers|clients)\b|\bwin-?back (?:e-?mail|mail)\b|\b(?:back in stock|new colou?r|restock) (?:e-?mail|mail|announcement)\b.{0,20}?\b(?:customers|buyers|write|draft)\b|\bmail ai vecchi clienti\b", "email_past_customers"),
@@ -1388,6 +1392,39 @@ class SelfTalk:
                 "Each one still shows up in your chat afterwards, marked 'sent by me', so you can read it and tell me if you'd have said it differently — I learn from that.\n"
                 "Still yours to approve, always: refunds and returns with money in them, damaged/wrong items, cancellations, complaints, anything angry, discounts, press/collab, and anything my checks flag. "
                 "Say “ask me everything again” to switch it back.")
+
+    def auto_scope(self, t, m):
+        on = bool(self.memory and self.memory.pref("auto_routine"))
+        return ((f"Right now: {'ON — I send the routine ones myself' if on else 'OFF — every reply waits for your tap'}.\n" if self.memory else "") +
+                "What counts as routine (sent by me only when switched on, and only when my checks find nothing wrong):\n"
+                "• where is my order — with the tracking number and dates from the ledger\n• product questions answered from the product page (material, size, care)\n• shipping and returns information straight from the shop pages\n• thank-you notes / compliments\n"
+                "Never on my own: refunds, returns with money, damaged or wrong items, cancellations, complaints, angry tone, discount requests, press/collab, anything the checks flag, anything I'm not sure about.\n"
+                + ("Say “ask me everything again” to switch it off." if on else "Say “answer the routine replies yourself” to switch it on — each one still shows up in your chat afterwards."))
+
+    def auto_log(self, t, m):
+        if self.inbox is None:
+            return None
+        try:
+            today = time.strftime("%Y-%m-%d")
+            decs = self.inbox.decisions() if hasattr(self.inbox, "decisions") else []
+        except Exception:
+            decs = []
+        mine = [d for d in decs if str(d.get("note", "")).startswith("auto") and str(d.get("t", "")).startswith(today)]
+        if not mine:
+            on = bool(self.memory and self.memory.pref("auto_routine"))
+            return "Nothing sent on my own today" + (" — every reply went through your tap." if not on else " — nothing routine came in (or my checks flagged the ones that did, so they waited for you).")
+        lines = []
+        for d in mine[-8:]:
+            body = re.sub(r"^\s*(?:Hi|Hello|Dear|Buongiorno|Salve|Ciao)[^\n]*\n+", "", (d.get("text") or "").strip())   # skip the greeting line, show the substance
+            lines.append(f"• {d.get('kind', '').replace('_', ' ')} → {d.get('id', '')}: “{body[:120].strip()}…”")
+        return f"Sent by me today ({len(mine)}):\n" + "\n".join(lines) + "\nTell me if you'd have said any of them differently and I adjust."
+
+    def auto_off(self, t, m):
+        if self.memory is None:
+            return None
+        was = self.memory.pref("auto_routine")
+        self.memory.set_pref("auto_routine", False)
+        return ("OK — every customer reply comes to you again before it goes out." if was else "It was already off — nothing goes out without your tap.")
 
     def fix_them(self, t, m):
         facts = self._facts()

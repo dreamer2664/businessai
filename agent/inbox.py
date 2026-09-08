@@ -838,6 +838,10 @@ class Inbox:
 
     AUTO_WINDOW, AUTO_RATE = 30, 0.9      # a kind may be sent automatically only after 30 decisions with ≥ 90 % approved as written
 
+    def decisions(self):
+        """All reply decisions (approved / edited / rejected / auto), oldest first."""
+        return _load(DECISIONS)
+
     def stats(self):
         d = [x for x in _load(DECISIONS) if x.get("note") != "spam"]
         n = len(d)
