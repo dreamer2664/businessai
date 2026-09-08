@@ -956,6 +956,14 @@ class Agent:
             b["steps"] = ["Reuse the brief of the last site (name, place, facts)", "Write the copy in " + " and ".join({"it": "Italian", "en": "English"}[x] for x in langs), "Build the pages with a language switch in the menu", "Check every page in the browser", "Send you the files"]
             return self.execute(b, approved=True)
         direct = self.talk.reply(text)                                              # everyday questions: answered here, no job
+        if not direct and not re.search(r"https?://", text):
+            parts = self.split_requests(text)                                        # "lower the lamp to 35 and remind me tomorrow at 9 to call the supplier"
+            if parts:
+                outs = []
+                for part in parts:
+                    r = self.understand(part)
+                    outs.append(r if isinstance(r, str) else f"“{part[:60]}” → sent above (waiting for your tap)" if r is None else str(r))
+                return "\n\n".join(f"{i + 1}) {o}" for i, o in enumerate(outs))
         if isinstance(direct, dict):
             if direct.get("customer"):
                 self.bot.send(self.owner_id, "That's a customer message — I'll draft the reply and you approve it." +
@@ -1024,6 +1032,23 @@ class Agent:
                           buttons=[[("▶ Go", "b:go"), ("✏️ Change", "b:edit"), ("✖ Cancel", "b:no")]])
             return None
         return self.execute(b)
+
+    SPLIT_AT = re.compile(r"\s*(?:;|\.\s+(?=[a-z])|,?\s+and (?:also |then |please )?(?=(?:remind|tell|add|put|lower|raise|set|change|cancel|refund|ship|mark|show|give|write|translate|check|what|how|when|who|which|is|are|do|does|can|ricordami|abbassa|alza|metti|dimmi|quanto|quanti|cosa)\b)|,\s*(?:also|then|plus|poi|inoltre|e poi)\s+|\s+(?:also|poi|inoltre)\s+(?=(?:remind|tell|add|lower|raise|set|what|how|ricordami|dimmi)\b))\s*", re.I)
+
+    def split_requests(self, text):
+        """Two or three plain requests in one message → the parts, only when EVERY part is something I answer directly (else None)."""
+        if len(text) > 400 or text.strip().startswith("/"):
+            return None
+        parts = [x.strip(" ,.;") for x in self.SPLIT_AT.split(text) if x and x.strip(" ,.;")]
+        if not 2 <= len(parts) <= 3:
+            return None
+        for part in parts:
+            if len(part.split()) < 2:
+                return None
+            r = self.talk.reply(part)
+            if not r:
+                return None
+        return parts
 
     def execute(self, b, prefix="", approved=False):
         """approved=True when the owner already saw the plan (▶ Go / 'go' / queued brief) → no second copy of it."""
@@ -1646,7 +1671,7 @@ class Agent:
             return None
         if k == "stock":
             prop = st.propose("stock", ch["product"], ch["value"], f"you said: stock {ch['old']} → {ch['value']}")
-            self.bot.send(self.owner_id, f"🏪 {ch['name']}: stock {ch['old']} → {ch['value']}. Apply it?",
+            self.bot.send(self.owner_id, (f"🏪 {ch['text']}. Apply it?" if ch.get("text") else f"🏪 {ch['name']}: stock {ch['old']} → {ch['value']}. Apply it?"),
                           buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
             return None
         if k == "product":

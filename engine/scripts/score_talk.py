@@ -407,14 +407,47 @@ for q, need in [("someone ordered 2 lamps but we only have 3, should I keep one 
     r = A.respond(q)
     r = r if isinstance(r, str) else ""
     check(f"round 6: '{q[:60]}'", all(x in r for x in need), r[:120].replace("\n", " | "))
+# round 7: orders, catalogue facts, availability, quotes, two requests in one message
+n1 = A.store.data["orders"][0]["n"]
+for q, need in [(f"what's the status of order {n1}?", [f"Order #{n1}", "•"]),
+                (f"did we ship {n1}?", [f"order #{n1}", "placed"]),
+                (f"what's the total of order {n1}?", [f"Order #{n1}: total", "shipping"]),
+                ("who is our best customer?", ["Best customers so far", "order(s)"]),
+                ("any refunds this week?", ["refunds", "this week"]),
+                ("did we lose money on any order?", ["lost money", "so far"]),
+                ("how much is a lamp with shipping to france?", ["LED Desk Lamp Nordic to FR", "6,90"]),
+                ("what do we charge for 2 mugs to spain?", ["2 × Stoneware Coffee Mug 350 ml to ES", "= €"]),
+                ("is the lamp still available?", ["LED Desk Lamp Nordic", "in stock"]),
+                ("when will the wraps be back?", ["Beeswax Food Wraps", "0 left"]),
+                ("what do I need to reorder?", ["Reorder list", "order ~"]),
+                ("give me the top 3 things to do today", ["Top 3 for today", "1."]),
+                ("a customer asks if the mug is dishwasher safe", ["Stoneware Coffee Mug 350 ml", "dishwasher", "For the customer"]),
+                ("does the lamp come with a charger?", ["LED Desk Lamp Nordic", "no power adapter"]),
+                ("how heavy is the parcel for 2 mugs?", ["2 × Stoneware Coffee Mug", "kg"]),
+                ("sold anything today?", ["today"]),
+                ("how many items did we sell in total?", ["Items sold so far", "per order"]),
+                ("how many orders yesterday?", ["Orders yesterday"]),
+                ("how's the week going?", ["Practice store", "orders"]),
+                ("how much stock do we have in total, in euros?", ["Stock: €", "at cost"])]:
+    A.last_brief = None; A.mind.queue.clear()
+    r = A.respond(q)
+    r = r if isinstance(r, str) else ""
+    check(f"round 7: '{q[:60]}'", all(x in r for x in need), r[:120].replace("\n", " | "))
+A.last_brief = None; A.mind.queue.clear(); A.bot.sent.clear()
+r = A.respond("lower the lamp to 35 and remind me tomorrow at 9 to call the supplier")
+check("two requests in one message → both done (price proposal sent + reminder set)", isinstance(r, str) and "Reminder set" in r and any("35" in x[0] and "Apply" in x[0] for x in A.bot.sent), (r or "")[:100] + " | " + " || ".join(x[0][:60] for x in A.bot.sent[-2:]))
+r = A.respond("mark the lamp as sold out")
+check("'mark the lamp as sold out' → stock proposal or already-out note", (r is None and "sold out" in A.bot.sent[-1][0]) or (isinstance(r, str) and "sold out" in r), (r or A.bot.sent[-1][0])[:100])
 r = A.respond("customer says the mug arrived broken, photo attached")
 check("forwarded customer sentence without 'what do I answer' → inbox draft + asks for the photo", r is None and "photo" in A.bot.sent[-1][0].lower(), A.bot.sent[-1][0][:100])
 r = A.respond("does temu sell the cork case cheaper?")
 check("'does temu sell X cheaper?' is a lookup, not a rule of thumb", isinstance(r, str) and ("look it up" in r or "What I understood" in r), (r or "")[:80])
-for _ in range(60):                                                  # that lookup runs as a (fake) job — let it finish
+for _ in range(240):                                                 # that lookup runs as a (fake) job — let it finish
     if not A.busy and not A.mind.job:
         break
     time.sleep(0.5)
+else:
+    A.busy = None; A.mind.job = None                                 # safety reset: a slow sandbox must not fail the next checks
 A.last_brief = None; A.mind.queue.clear()
 A.domain_check = lambda dom: f"stub {dom}"
 r = A.respond("can you check if the domain greennest.it is free?")
