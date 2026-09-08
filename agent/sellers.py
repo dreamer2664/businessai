@@ -7,6 +7,7 @@ social page and judges reliability with explicit reasons. It is read-only: no lo
 Everything is grounded in page text; the thinking model only turns extracted facts into a short verdict. When the model
 is missing, verdicts are rule-based (still explicit about why).
 """
+import os
 import re
 import time
 import urllib.parse
@@ -394,9 +395,20 @@ class SellerCheck:
         t0 = time.time()
         options = []
         with self.T._session() as b:
-            self._step(0, f"searching for {product}")
             n_eff = max(2, n - 1) if (self.pace and self.pace.hurry()) else n
-            cands = self.candidates(b, product, n_eff)
+            urls = re.findall(r"(?:https?|file)://[^\s<>\"']+", product)
+            if urls:                                                          # "is this shop legit? <link>" → that page IS the candidate
+                self._step(0, f"opening the link you gave me")
+                cands = [{"url": u.rstrip(".,;)"), "title": urllib.parse.urlparse(u).netloc.replace("www.", "")} for u in urls[:n_eff]]
+                product = re.sub(r"(?:https?|file)://\S+", "", product)
+                product = re.sub(r"\b(is|are|this|that|the|a|an|seller|shop|store|site|website|listing|ok|okay|legit|safe|good|fine|trustworthy|reliable|serious|real|check|if|can you|could you|please|\?)\b", " ", product, flags=re.I)
+                product = re.sub(r"\s{2,}", " ", product).strip(" ,.?!-—")
+                if len(product) < 3:
+                    host = cands[0]["title"] or ""
+                    product = host if (host and not host.startswith(("127.", "localhost")) and "." in host) else (os.path.basename(urllib.parse.urlparse(cands[0]["url"]).path).rsplit(".", 1)[0] or "the shop you sent")
+            else:
+                self._step(0, f"searching for {product}")
+                cands = self.candidates(b, product, n_eff)
             if not cands:
                 return None, f"I couldn't find listings for {product} (search engines walled or nothing matched).", []
             for i, c in enumerate(cands):
@@ -445,7 +457,7 @@ class SellerCheck:
         self._step(4, "writing the document")
         doc = library.Doc(f"{product} — seller check", f"{len(options)} options researched · read-only, nothing bought or contacted", kind="seller_check")
         best = [L for L in options if L["grade"] == "good"] or [L for L in options if L["grade"] == "ok"]
-        summary = (f"I looked at {len(options)} listings for {product}. " +
+        summary = ((f"I looked at the {len(options)} listing(s) you sent ({product}). " if urls else f"I looked at {len(options)} listings for {product}. ") +
                    (f"Best bet: {best[0]['seller']} ({best[0]['facts'].get('Price', 'price n/a')}) — {best[0]['verdict']} " if best else "None of them convinced me. ") +
                    (f"Skip: {', '.join(L['seller'] for L in options if L['grade'] == 'bad')}. " if any(L['grade'] == 'bad' for L in options) else "") +
                    (counterfeit_note or ""))

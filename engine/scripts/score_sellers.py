@@ -99,5 +99,17 @@ check("doc: saved in library with 3 options + pictures", path and path.exists() 
 check("doc: links + verdicts + table", "listing_a.html" in html and "Side by side" in html and "verdict good" in html, "")
 rec = library.recent(1)
 check("doc: index row", rec and rec[0]["kind"] == "seller_check" and rec[0]["options"] == 3, str(rec[:1]))
+
+# ---- "is this shop legit? <link>": the link itself is the candidate, no search needed ----------------------
+def fake_link_run():
+    b = T.browser()
+    b.search_results = lambda q, n=10: [{"url": BASE + "reviews_corkstep.html", "title": "CorkStep reviews", "n": 1}] if "review" in q else []
+    b.ENGINE_HOSTS = re.compile(r"$^")
+    real_open = b.open
+    b.open = lambda url: real_open(BASE + "social_corkstep.html") if ("instagram.com" in url or "facebook.com" in url) else real_open(url)
+    return S.run(f"is this shop legit? {BASE}listing_a.html", n=4)
+lpath, lsummary, loptions = T.on_hands(fake_link_run, timeout=240)
+check("link check: the given page is the one option, judged, with a document", lpath and len(loptions) == 1 and loptions[0].get("grade") == "good" and "you sent" in lsummary, lsummary[:120])
+check("link check: reviews still looked up for it", any("reviews_corkstep" in u for u in loptions[0].get("review_sources", [])) if loptions else False, str(loptions and loptions[0].get("review_sources")))
 check("plan: steps advanced to the end", V.state()["plan"]["step"] >= 5, str(V.state()["plan"]["step"]))
 print(f"SELLERS SCORE: {ok}/{total}  ({time.time() - t0:.0f}s browser part)")

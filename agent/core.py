@@ -394,7 +394,7 @@ class Agent:
                 self.bot.clear_buttons(chat_id, mid, new_text="(that plan is gone — just ask again)")
             elif act == "go":
                 self.bot.clear_buttons(chat_id, mid, new_text="▶ Going.")
-                r = self.execute(b)
+                r = self.execute(b, approved=True)
                 if r:
                     self.bot.send(chat_id, r)
             elif act == "edit":
@@ -846,7 +846,7 @@ class Agent:
             return f"Got it — I'm in the middle of “{self.mind.job['goal'][:60]}”, so this is queued as #{len(self.mind.queue)}. I start it as soon as I'm done (or say 'stop' to switch now)."
         if self.last_brief and self.GO_WORDS.match(low):
             b, self.last_brief = self.last_brief, None
-            return self.execute(b)
+            return self.execute(b, approved=True)
         if self.last_brief and re.match(r"^(no|cancel|stop|forget it|nah|annulla|lascia)\W*$", low):
             self.last_brief = None
             return "Okay, dropped."
@@ -899,7 +899,8 @@ class Agent:
             return None
         return self.execute(b)
 
-    def execute(self, b, prefix=""):
+    def execute(self, b, prefix="", approved=False):
+        """approved=True when the owner already saw the plan (▶ Go / 'go' / queued brief) → no second copy of it."""
         if self.busy:                                  # e.g. ▶ Go tapped while another job runs → queue it, never a dead end
             self.mind.queue.append((b, time.time()))
             return (f"I'm still on: {self.busy}. I queued “{(b.get('goal') or '')[:60]}” as #{len(self.mind.queue)} and start it right after "
@@ -911,8 +912,11 @@ class Agent:
         kind, topic = b["kind"], b["topic"]
         self.mind.begin(b["goal"], kind, b["steps"], why=f"You asked: “{b['goal'][:100]}” — I hand you {b['deliverable']} at {b['pace']['pace']} pace.")
         adv = self.mind.advice(kind)
-        head = Brief.text(b) if not prefix else prefix + Brief.text(b)
-        if adv:
+        if approved:
+            head = f"▶ On it: {b['goal'][:120]}" + (f"\nStep 1 — {b['steps'][0]}" if b.get("steps") else "")
+        else:
+            head = Brief.text(b) if not prefix else prefix + Brief.text(b)
+        if adv and not approved:
             head += "\n\n🧠 From last time: " + " · ".join(adv[:2])
         if kind == "seller_check":
             threading.Thread(target=self.run_seller_check, args=(b,), daemon=True).start()
@@ -1360,7 +1364,7 @@ class Agent:
         """A queued item is either the owner's text (goes through understanding again) or an already-approved brief (runs as is)."""
         time.sleep(1)
         try:
-            r = self.execute(item) if isinstance(item, dict) else self.respond(item)
+            r = self.execute(item, approved=True) if isinstance(item, dict) else self.respond(item)
             if r:
                 self.bot.send(self.owner_id, r)
         except Exception as e:

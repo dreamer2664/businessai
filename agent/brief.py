@@ -14,6 +14,7 @@ Telegram. Deadlines are *reminders*, never a stop: the operator keeps the clock 
 """
 import json
 import re
+import urllib.parse
 import time
 
 PACE_PROMPT = """You turn the owner's message into a short work plan for a business assistant. Reply with one JSON object only:
@@ -130,8 +131,10 @@ def _rule_brief(text, pace):
         kind, deliverable = "compare", "document"
     elif re.search(r"\b(build|make|create)\b.*\b(website|web site|landing page|site)\b", low):
         kind, deliverable = "build_site", "website"
-    elif re.search(r"\b(watch|video|youtube|youtu\.be|tiktok)\b", low):
+    elif re.search(r"\b(watch|video|youtube|youtu\.be)\b", low) or (re.search(r"\btiktok\b", low) and not re.search(r"\b(trending|trends?|popular|viral|what'?s hot|selling)\b", low)):
         kind, deliverable = "watch", "list"
+    elif re.search(r"\b(trending|trends?|popular right now|viral|what'?s hot|best[- ]sellers?)\b", low):
+        kind, deliverable = "research", "document" if re.search(r"\b(list|options?|links?|doc|document)\b", low) else "answer"
     elif re.search(r"https?://\S+", low) and re.search(r"\b(summari[sz]e|read|riassumi|tl;?dr)\b", low):
         kind, deliverable = "summarize", "answer"
     elif re.search(r"\b(open|go to|visit|check)\b.*\b(youtube|amazon|etsy|ebay|vinted|instagram|tiktok|google maps|\.com|\.it)\b", low):
@@ -152,13 +155,20 @@ def _rule_brief(text, pace):
         product = re.sub(r"\b(nike|adidas|gucci|louis vuitton|prada|rolex|jordan|yeezy|balenciaga|supreme|dior|chanel)\b", "", product).strip(" ,")
         product = re.sub(r"\s{2,}", " ", product).strip() or "the product"
         product = f"genuine or unbranded {product}"
+    link = re.search(r"(?:https?|file)://\S+", text)
+    if kind == "seller_check" and link:
+        u = urllib.parse.urlparse(link.group(0))
+        host = re.sub(r"^www\.", "", u.netloc) or (u.path.rsplit("/", 1)[-1].rsplit(".", 1)[0] or "the page")
+        product = f"{host} — {link.group(0)}"
+        goal = f"Check whether {host} is a trustworthy shop/seller (the link you sent) — listing, reviews, social media, shipping, red flags"
     steps = {
-        "seller_check": [f"Search for {product or 'the product'} on marketplaces and independent shops (3–6 candidates)",
-                         "Open each listing: price, condition, photos, shipping cost/time, where it ships from, materials",
-                         "Read the seller's reviews and complaints; look up their social media page and its comments",
-                         "Judge reliability per seller (account age, ratings, response to complaints, red flags)",
-                         "Write the document: one section per option with picture, link, verdict; a short ranking on top",
-                         "If the store is open, offer to add the good ones to the shop with price and shipping"],
+        "seller_check": ([f"Open the link you gave me ({host}) and read the listing: price, condition, photos, shipping cost/time, where it ships from, materials"] if link else
+                         [f"Search for {product or 'the product'} on marketplaces and independent shops (3–6 candidates)",
+                         "Open each listing: price, condition, photos, shipping cost/time, where it ships from, materials"]) +
+                        ["Read the seller's reviews and complaints; look up their social media page and its comments",
+                         "Judge reliability" + ("" if link else " per seller") + " (account age, ratings, response to complaints, red flags)",
+                         "Write the document: " + ("the shop's card with picture, link, verdict and the red/green flags" if link else "one section per option with picture, link, verdict; a short ranking on top"),
+                         "If the store is open, offer to add " + ("it" if link else "the good ones") + " to the shop with price and shipping"],
         "compare": [f"Find 3–5 sources for {product or 'the options'}", "Extract price, shipping, terms, ratings from each",
                     "Put them side by side and pick a winner with the reason", "Write the comparison with links"],
         "research": [f"Read 3–5 solid pages about {product or 'the topic'}", "Keep the facts and figures with their sources",
