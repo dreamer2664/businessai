@@ -92,6 +92,12 @@ SHIP = [("IT", 3.90, 39.0), ("DE", 6.90, None), ("FR", 6.90, None), ("ES", 6.90,
 FIRST = ["Anna", "Luca", "Marta", "Giulia", "Paolo", "Sara", "Jonas", "Lena", "Claire", "Marco", "Elena", "Tom", "Nina", "Davide", "Sofia"]
 LAST = ["Rossi", "Bianchi", "Müller", "Schmidt", "Martin", "Bernard", "García", "Ferrari", "Conti", "Weber", "Moreau", "Russo"]
 COUNTRIES = ["IT", "IT", "IT", "IT", "DE", "DE", "FR", "ES", "AT", "NL"]
+ADDRESSES = {"IT": [("Via Roma", "20121 Milano"), ("Via Garibaldi", "10122 Torino"), ("Corso Italia", "16121 Genova"), ("Via Mazzini", "40121 Bologna"), ("Via Dante", "50122 Firenze"), ("Via Verdi", "24121 Bergamo")],
+             "DE": [("Hauptstraße", "10115 Berlin"), ("Bahnhofstraße", "80331 München"), ("Schulstraße", "20095 Hamburg"), ("Gartenweg", "50667 Köln")],
+             "FR": [("Rue de la Paix", "75002 Paris"), ("Avenue Jean Jaurès", "69007 Lyon"), ("Rue Sainte", "13001 Marseille")],
+             "ES": [("Calle Mayor", "28013 Madrid"), ("Carrer de Balmes", "08007 Barcelona"), ("Calle Larios", "29005 Málaga")],
+             "AT": [("Mariahilfer Straße", "1060 Wien"), ("Herrengasse", "8010 Graz")],
+             "NL": [("Keizersgracht", "1015 Amsterdam"), ("Coolsingel", "3011 Rotterdam")]}
 CUSTOMER_MESSAGES = [
     ("Hi, I ordered {product} (order {order}) {when} and there is no tracking yet. When does it ship?", "where_is_my_order"),
     ("Is the {product} available in other colours?", "product_question"),
@@ -444,7 +450,10 @@ class Store:
                 qty = 1 if rnd.random() < 0.8 else 2
                 name = f"{rnd.choice(FIRST)} {rnd.choice(LAST)}"
                 email = re.sub(r"[^a-z]", "", name.lower().split()[0]) + str(rnd.randint(1, 99)) + "@example.com"
-                o = self.place_order([(p["id"], opt, qty)], {"name": name, "email": email}, rnd.choice(COUNTRIES), simulated=True, day=day)
+                country = rnd.choice(COUNTRIES)
+                street, city = rnd.choice(ADDRESSES.get(country, ADDRESSES["IT"]))
+                address = f"{street} {rnd.randint(1, 120)}, {city}"
+                o = self.place_order([(p["id"], opt, qty)], {"name": name, "email": email, "address": address}, country, simulated=True, day=day)
                 if o:
                     made.append(o)
             # earlier paid orders that were shipped get delivered; a shipped one may come back

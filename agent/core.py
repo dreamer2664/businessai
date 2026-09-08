@@ -960,6 +960,10 @@ class Agent:
             if direct.get("mail_code"):
                 threading.Thread(target=self.fetch_mail_code, args=(direct.get("hint") or "",), daemon=True).start()
                 return f"Looking in my Gmail for a fresh verification code{' from ' + direct['hint'] if direct.get('hint') else ''} — I'll paste it here as soon as it lands (I check for about 2 minutes)."
+            if direct.get("store_cmd"):                                              # "open the practice store", "print the labels", "all shipped"
+                return self.store_plain(direct["store_cmd"])
+            if direct.get("store_change"):                                           # "lower the price of the lamp to 35" → proposal + Apply button
+                return self.store_change(direct["store_change"])
             if direct.get("text"):                                                    # e.g. a to-do item already added by talk
                 return direct["text"]
         if direct:
@@ -1407,6 +1411,95 @@ class Agent:
         if a.startswith("products") or a.startswith("stock"):
             return "\n".join(f"{p['name']} · {money(p['price'])} (cost {money(p.get('cost', 0))}) · stock {p['stock']}" for p in st.products())
         return "Store commands: /store [open|close|day [n]|review|numbers|orders|products|admin|reset]"
+
+    def store_plain(self, cmd):
+        """The practice store in plain words: open/close/stock/orders/day/review come from store_command; labels and 'all shipped' are new."""
+        st = self.store
+        if cmd == "labels":
+            open_ = [o for o in st.data["orders"] if o["status"] == "paid"]
+            if not open_:
+                return "Nothing to ship right now — every paid order is already marked shipped. (/store day makes practice customers come.)"
+            path = self.store_labels(open_)
+            self.bot.send_document(self.owner_id, str(path), caption=f"Shipping labels + packing slips for {len(open_)} order(s) — print on A4, one page per parcel.")
+            return (f"{len(open_)} label(s) ready (sent as a file): " + ", ".join(f"#{o['n']} {o['customer'].get('name', '')} ({o['country']})" for o in open_[:8]) +
+                    (" …" if len(open_) > 8 else "") + "\nWhen the parcels are with the courier say “all shipped” and I mark them shipped with tracking numbers.")
+        if cmd == "shipped_all":
+            open_ = [o for o in st.data["orders"] if o["status"] == "paid"]
+            if not open_:
+                return "There was nothing left to ship — all orders are already marked shipped."
+            for o in open_:
+                st.set_status(o["n"], "shipped", note="handed to the courier (owner said 'all shipped')")
+            self.log("store_shipped_all", n=len(open_))
+            return (f"Marked {len(open_)} order(s) shipped with tracking numbers: " + ", ".join(f"#{o['n']} → {st.order(o['n']).get('tracking', '')}" for o in open_[:8]) +
+                    "\nCustomers of the practice store see the tracking on their order page.")
+        if cmd == "stock":
+            rows = []
+            for p in st.products():
+                flag = " ⚠️ out" if p["stock"] == 0 else " ⚠️ low" if p["stock"] <= 3 else ""
+                rows.append(f"• {p['name']} — {p['stock']} in stock{flag} · {money(p['price'])} (cost {money(p.get('cost', 0))}, {((p['price'] - p.get('cost', 0)) / p['price'] * 100) if p['price'] else 0:.0f} % margin)")
+            low = [p for p in st.products() if p["stock"] <= 3]
+            return "Stock in the practice store:\n" + "\n".join(rows) + (f"\nReorder soon: {', '.join(p['name'] for p in low)} — say “we received 20 more <product>” when the goods arrive." if low else "")
+        if cmd == "open" and not st.server:
+            out = self.store_command("open")
+            return out
+        return self.store_command(cmd)
+
+    def store_change(self, ch):
+        """Owner asks for a change in plain words → a proposal with an Apply button (the shop only changes when the owner taps)."""
+        st = self.store
+        k = ch["kind"]
+        if k == "price":
+            cost = ch.get("cost") or 0
+            margin = (ch["value"] - cost) / ch["value"] * 100 if ch["value"] else 0
+            warn = f" ⚠️ that leaves {margin:.0f} % gross margin on a cost of {money(cost)} — thin once shipping and fees are paid." if cost and margin < 45 else (f" ({margin:.0f} % gross margin)" if cost else "")
+            prop = st.propose("price", ch["product"], ch["value"], f"you asked: price {money(ch['old'])} → {money(ch['value'])}")
+            self.bot.send(self.owner_id, f"🏪 {ch['name']}: price {money(ch['old'])} → {money(ch['value'])}{warn}\nApply it?",
+                          buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
+        if k == "stock":
+            prop = st.propose("stock", ch["product"], ch["value"], f"you said: stock {ch['old']} → {ch['value']}")
+            self.bot.send(self.owner_id, f"🏪 {ch['name']}: stock {ch['old']} → {ch['value']}. Apply it?",
+                          buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
+        if k == "product":
+            price, cost = ch["price"], ch.get("cost") or 0
+            margin = (price - cost) / price * 100 if price else 0
+            note = (f" (I picked {money(price)} = 3× the cost; tell me another price if you prefer)" if ch.get("guessed") else "")
+            warn = f"\n⚠️ {margin:.0f} % gross margin is thin — below ~55 % the shipping and fees eat it. 2.5–3× the cost is the usual floor." if cost and margin < 50 else (f" — {margin:.0f} % gross margin" if cost else "")
+            prop = st.propose("product", ch["name"], json.dumps({"name": ch["name"], "price": price, "cost": cost, "stock": 10, "short": ""}), "you asked to add it")
+            self.bot.send(self.owner_id, f"🏪 New product “{ch['name']}” at {money(price)}{note}, cost {money(cost)}{warn}\nStock starts at 10 and the description is empty — say “write a description for {ch['name']}” after adding it. Add it?",
+                          buttons=[[("✅ Add to shop", f"s:ok:{prop['id']}"), ("❌ No", f"s:no:{prop['id']}")]])
+            return None
+        return "I didn't understand which change you want in the store."
+
+    def store_labels(self, orders):
+        """One A4 page per parcel: address label on top, packing slip below — an HTML file that prints cleanly."""
+        st = self.store
+        shop = st.data.get("name", "Green Nest")
+        from_addr = st.data.get("pages", {}).get("contact", "").splitlines()
+        sender = html.escape(shop) + "<br>" + html.escape(next((l for l in from_addr if "Warehouse" in l or "Bergamo" in l), "Bergamo, Italy").replace("Warehouse: ", ""))
+        pages = []
+        for o in orders:
+            c = o["customer"]
+            lines = "".join(f"<tr><td>{html.escape(l['name'])}{(' — ' + html.escape(l['option'])) if l.get('option') else ''}</td><td>{l['qty']}</td><td>{money(l['price'])}</td></tr>" for l in o["lines"])
+            weight = sum((st.product(l["id"]) or {}).get("weight_g", 300) * l["qty"] for l in o["lines"]) + 120
+            pages.append(f"""<section class=page>
+<div class=label><div class=to><small>TO / DESTINATARIO</small><b>{html.escape(c.get('name', ''))}</b><br>{html.escape(c.get('address', '') or '(address on the order page)')}<br><b>{o['country']}</b></div>
+<div class=from><small>FROM / MITTENTE</small>{sender}</div><div class=meta>Order #{o['n']} · {weight / 1000:.2f} kg · {html.escape(str(o.get('day', '')))}</div></div>
+<div class=slip><h2>Packing slip — order #{o['n']}</h2><p>{html.escape(c.get('name', ''))} · {html.escape(c.get('email', ''))}</p>
+<table><tr><th>Item</th><th>Qty</th><th>Price</th></tr>{lines}<tr><td colspan=2>Shipping</td><td>{money(o['shipping'])}</td></tr><tr><td colspan=2><b>Total paid</b></td><td><b>{money(o['total'])}</b></td></tr></table>
+<p class=thanks>Thank you for your order! Returns within 30 days — see the returns page. Questions: reply to your order e-mail.</p></div></section>""")
+        doc = ("<!doctype html><html><head><meta charset=utf-8><title>Shipping labels</title><style>"
+               "body{font-family:system-ui,sans-serif;color:#111;margin:0}.page{page-break-after:always;padding:14mm;min-height:270mm;box-sizing:border-box}"
+               ".label{border:2px solid #111;padding:10mm;display:grid;grid-template-columns:2fr 1fr;gap:8mm;font-size:18px}.to b{font-size:26px}.from{font-size:13px;border-left:1px solid #999;padding-left:6mm}"
+               "small{display:block;color:#666;font-size:11px;letter-spacing:1px}.meta{grid-column:1/3;font-size:13px;color:#444;border-top:1px dashed #999;padding-top:4mm}"
+               ".slip{margin-top:12mm;font-size:14px}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left}th{background:#f3f3f3}.thanks{color:#555;margin-top:8mm}"
+               "@media print{.page{min-height:auto}}</style></head><body>" + "".join(pages) + "</body></html>")
+        out_dir = config.STATE_DIR / "store" / "labels"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"labels_{time.strftime('%Y%m%d_%H%M')}.html"
+        path.write_text(doc, encoding="utf-8")
+        return path
 
     def start_shop_read(self, url):
         def go():

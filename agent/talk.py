@@ -48,6 +48,25 @@ class Talk:
     CUSTOMER = re.compile(r"\b(?:a |the |my )?(?:customer|client|buyer|cliente)s?\s+(?:says?|wrote|writes|asks?|is asking|complain(?:s|ed)?|messaged|emailed|sent|dice|scrive|chiede)\b(?P<inner>.{0,400}?)(?:what (?:do|should|can) i (?:answer|reply|say|tell|write)|how (?:do|should) i (?:answer|reply|respond)|cosa (?:rispondo|gli dico|le dico)|what now)\b", re.I | re.S)
     START = re.compile(r"\b(where (do|should) i (start|begin)|how (do|should|can) i (start|begin|get started)|i want to (start|sell|open)|voglio (vendere|aprire|iniziare)|da dove (comincio|inizio|parto))\b", re.I)
     OPINION_IT = re.compile(r"\b(che ne pensi|cosa ne pensi|secondo te)\b", re.I)
+    # ---- the practice store in plain words ----
+    STORE_OPEN = re.compile(r"^\W*(?:can you |could you |please |puoi )?(?P<verb>open|start|launch|turn on|close|stop|shut|apri|avvia|chiudi)\s+(?:up |down )?(?:the |my |our |il |lo |la )?(?:practice |test |fake |training |online )?(?:store|shop|negozio|bottega)\b", re.I)
+    STORE_STOCK = re.compile(r"\b(?:what(?:'s| is| do we have| do i have) (?:in |the |our |my )?stock|stock (?:levels?|list|situation|status)|how many .{2,30}? (?:do (?:we|i) have|are left|in stock|left)|list (?:the |our |my )?products|(?:our|my) (?:products|catalogue|catalog)|cosa (?:abbiamo|c'è) in magazzino|quant[ei] .{2,30}? (?:abbiamo|restano|rimangono))\b", re.I)
+    STORE_DAY = re.compile(r"\b(?:(?:run|simulate|start|do|play|fai)\s+(?:a |one |another |the next |un |un altro )?(?:practice |test |training )?(?:day|giorno)|(?:a |one |another )?(?:practice |test )?day (?:passes|goes by)|let (?:a|the) day pass|practice day|giorno di prova|passa un giorno)\b", re.I)
+    STORE_REVIEW = re.compile(r"\b(?:review the (?:store|shop)|store review|what (?:do you|would you) (?:propose|suggest) (?:for|in) the (?:store|shop)|any proposals|what (?:should|needs to|do) (?:i|we) (?:do|fix) in the (?:store|shop)|cosa proponi per il negozio|controlla il negozio)\b", re.I)
+    STORE_ORDERS = re.compile(r"\b(?:(?:open|pending|new|today'?s|latest|recent|last|unshipped|paid) orders|orders to ship|what (?:do i|should i|needs to be|do we) ship|which orders|show (?:me )?(?:the )?orders|ordini (?:da spedire|aperti|recenti|nuovi)|quali ordini)\b", re.I)
+    STORE_LABELS = re.compile(r"\b(?:print|prepare|make|generate|create|give me|stampa|prepara|fammi)\b.{0,20}?\b(?:shipping labels?|labels?|packing slips?|etichette|bolle|lettere di vettura)\b|\b(?:shipping labels?|packing slips?|etichette)\b.{0,25}?\b(?:for|of|per)\b.{0,25}?\b(?:orders?|ordini|today|oggi)\b", re.I)
+    STORE_SHIPPED = re.compile(r"^\W*(?:all |everything |tutto )?(?:shipped|sent|handed (?:to|over to) (?:the )?(?:courier|gls|carrier)|spedito|spediti|consegnato al corriere)\b.{0,30}$|^\W*(?:i (?:have |'ve )?)?(?:shipped|sent|posted) (?:all |every |the |today's )?(?:orders|parcels|packages|ordini|pacchi)\b.{0,30}$", re.I)
+    STORE_NAME_Q = re.compile(r"\b(?:what(?:'s| is) (?:the |my |our )?(?:store|shop) (?:called|name)|what(?:'s| is) the name of (?:the|my|our) (?:store|shop)|come si chiama il (?:negozio|shop))\b", re.I)
+    ADD_PRODUCT = re.compile(r"^\W*(?:can you |could you |please |puoi )?(?:add|list|create|put up|aggiungi|metti|inserisci)\s+(?:a |the |this |new |a new |another |un |una |nuovo |nuova |un nuovo |una nuova )*(?:product|item|listing|article|prodotto|articolo)\s*[:\-–—]?\s*(?P<name>.+?)(?=\s*[,;:—]|\s+(?:that|which|it|costs?|costing|cost|at|sells?|selling|for|priced?|prezzo|costa|che)\b|\W*$)(?P<rest>.*)$", re.I | re.S)
+    PRICE_CHANGE = re.compile(r"\b(?:lower|raise|increase|decrease|drop|cut|bump|change|set|update|put|move|abbassa|alza|metti|cambia|porta)\s+(?:the |il |la )?(?:price|prezzo)\s+(?:of|for|di|del|della|dello|dei)\s+(?:the |a |an |our |my |il |la |lo |i )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:to|at|a|down to|up to|→)\s*" + _MONEY.replace("(\\d", "(?P<v1>\\d")
+                              + r"|\b(?:make|price|sell)\s+(?:the |il |la )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:at |for |a )?" + _MONEY.replace("(\\d", "(?P<v2>\\d") + r"\s*(?:from now on|instead|d'ora in poi)\b", re.I)
+    STOCK_CHANGE = re.compile(r"\b(?:set|update|put|correct|metti|aggiorna)\s+(?:the )?stock\s+(?:of|for|di|del|della)\s+(?:the |il |la )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:to|at|a)\s+(?P<n>\d+)\b|\b(?:we |i )?(?:received|got|have got|restocked|arrived with|sono arrivat[ei])\s+(?P<n2>\d+)\s+(?:more |new |extra |altri |altre |nuov[ei] )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)(?:\s+(?:today|from the supplier|dal fornitore|oggi))?\W*$", re.I)
+    # ---- shop sense: reviews, free shipping, couriers, hashtags, video ideas ----
+    BAD_REVIEW = re.compile(r"\b(?:(?:1|one|2|two)[- ]star|bad|negative|angry|nasty|terrible|awful|unfair|brutta|negativa|cattiva)\s+(?:review|recensione|rating|feedback|stelle)\b|\b(?:review|recensione)\b.{0,40}?\b(?:broke|broken|damaged|late|never arrived|rude|scam|fake|rotto|rotta|danneggiato|mai arrivato)\b|\b(?:left|gave|wrote|posted|ha lasciato|ha scritto)\s+(?:us |me |a |una )?(?:\d[- ]star|bad|negative|brutta) (?:review|recensione)\b", re.I)
+    FREE_SHIP = re.compile(r"\b(?:should (?:i|we) (?:offer|do|give|have) free (?:shipping|delivery)|free (?:shipping|delivery) (?:threshold|or not|worth it|yes or no|good idea)|is free (?:shipping|delivery) (?:a good idea|worth it|smart)|(?:offer|give) free (?:shipping|delivery)\?|spedizione gratuita (?:sì o no|conviene|o no)|conviene (?:la |offrire la )?spedizione gratuita|soglia (?:per la |della )?spedizione gratuita)", re.I)
+    COURIER = re.compile(r"\b(?:which|what|cheapest|best|good|migliore|quale|che)\b.{0,30}?\b(?:courier|carrier|shipping (?:company|service|provider)|corriere|spedizioniere)\b|\b(?:corriere|courier|carrier)\b.{0,20}?\b(?:cheap|cheapest|economico|conviene|use|choose|pick|recommend)\b|\bhow (?:do|should|can) (?:i|we) ship (?:the |my |our )?(?:orders|parcels|packages|products)\b|\bcome spedisco\b", re.I)
+    HASHTAGS = re.compile(r"\b(?:what|which|quali|che)\s+hashtags?\b|\bhashtags?\s+(?:for|per|to use|should (?:i|we) use|da usare)\b|\b(?:suggest|give me|dammi|suggerisci)\b.{0,12}?\bhashtags?\b", re.I)
+    VIDEO_IDEAS = re.compile(r"\b(?:(?P<n>\d+|three|four|five|six|a few|some|un paio di|qualche|tre|cinque)\s+)?(?:tiktok|reels?|instagram|short|short-form|video|content|post)\s+(?:video |content |post )?(?:ideas?|idee|concepts?|hooks?|scripts?)\b|\b(?:ideas?|idee)\s+(?:for|per|di)\s+(?:a |some |\d+ |un |dei )?(?:tiktoks?|reels?|videos?|short videos?|video|contenuti)\b", re.I)
     TODO_ADD = re.compile(r"^\W*(?:please\s+|can you\s+|could you\s+)?(?:add|put|write|note|jot(?: down)?|aggiungi|segna|metti)\s+(?P<item>.+?)\s+(?:to|on|in|onto|into|alla|nella|sulla)\s+(?:my |the |our |our |la |mia )?(?:to-?do(?: list)?|list|lista|todo|tasks?|reminders?|note)s?\W*$"
                           r"|^\W*(?:remind me to|ricordami di|todo:|to-do:|to do:)\s*(?P<item2>.+?)\W*$", re.I)
     TODO_SHOW = re.compile(r"^\W*(?:what(?:'s| is) (?:on )?(?:my |the |our )?(?:to-?do|list|todo)(?: list)?|show (?:me )?(?:my |the |our )?(?:to-?do|todo|list)(?: list)?|(?:my |the )?(?:to-?do|todo)(?: list)?\??|my list|read (?:me )?(?:my |the )?(?:to-?do|list)|cosa (?:c'è|ho) (?:da fare|in lista)|(?:la )?(?:mia )?lista)\W*$", re.I)
@@ -109,6 +128,12 @@ class Talk:
         m = self.CUSTOMER.search(t)
         if m:
             return {"customer": self._customer_text(t, m)}
+        st = self.store_talk(t)                                        # the practice shop in plain words (open, stock, prices, labels…)
+        if st is not None:
+            return st
+        sense = self.shop_sense(t)                                     # bad review, free shipping, couriers, hashtags, video ideas
+        if sense is not None:
+            return sense
         if self.PRICE.search(t) or (self.COST.search(t) and re.search(r"\b(price|charge|sell|margin|markup|prezzo)\b", low)):
             p = self.pricing(t)
             if p:
@@ -606,6 +631,250 @@ class Talk:
         if not parts:
             return "Nothing finished yet today — no jobs, no documents. Give me something to do, or I'll study in the quiet time."
         return f"Today ({day}):\n" + "\n".join(parts)
+
+    # ---- the practice store in plain words ----------------------------------------------------
+    def store_talk(self, t):
+        """'open the practice store', 'what's in stock?', 'lower the price of the lamp to 35', 'add a new product: …',
+        'print the shipping labels', 'all shipped' → a store command or an owner change for core to run. None otherwise."""
+        if self.store is None or re.search(r"https?://", t):
+            return None
+        low = t.lower()
+        m = self.STORE_OPEN.match(t)
+        if m:
+            return {"store_cmd": "close" if re.match(r"(close|stop|shut|chiudi)", m.group("verb"), re.I) else "open"}
+        if self.STORE_LABELS.search(t):
+            return {"store_cmd": "labels"}
+        if self.STORE_SHIPPED.match(t):
+            return {"store_cmd": "shipped_all"}
+        if self.STORE_ORDERS.search(t):
+            return {"store_cmd": "orders"}
+        if self.STORE_STOCK.search(t) and not re.search(r"\b(dead stock|stock photo|stock image|in stock\?? on|amazon|aliexpress|supplier)\b", low):
+            return {"store_cmd": "stock"}
+        if self.STORE_DAY.search(t):
+            n = re.search(r"\b(\d)\s+(?:practice |test )?days\b", low)
+            return {"store_cmd": f"day {n.group(1)}" if n else "day"}
+        if self.STORE_REVIEW.search(t):
+            return {"store_cmd": "review"}
+        if self.STORE_NAME_Q.search(t):
+            if re.search(r"\b(sells?|selling|vende|for|per)\b", low) and self.NAME_SHOP.search(t) is None:
+                return self.shop_names(t)                                    # "come si chiama il negozio? vende sandali" → name ideas
+            return f"The practice shop is called “{self.store.data.get('name', 'Green Nest')}”. Say “name ideas for a shop that sells …” if you want a name for a real one."
+        m = self.PRICE_CHANGE.search(t)
+        if m:
+            what = (m.group("what") or m.group("what2") or "").strip()
+            value = _num(m.group("v1") or m.group("v2") or "0")
+            p = self.store.find_product(what)
+            if not p:
+                return f"I don't have a product like “{what}” in the shop. Products: " + ", ".join(x["name"] for x in self.store.products()) + "."
+            if value <= 0:
+                return None
+            return {"store_change": {"kind": "price", "product": p["id"], "value": round(value, 2), "name": p["name"], "old": p["price"], "cost": p.get("cost", 0)}}
+        m = self.STOCK_CHANGE.search(t)
+        if m:
+            what = (m.group("what") or m.group("what2") or "").strip()
+            n = int(m.group("n") or m.group("n2"))
+            p = self.store.find_product(what)
+            if not p:
+                return None
+            add = bool(m.group("n2"))                                        # "we received 20 more lamps" adds; "set stock of … to 20" sets
+            return {"store_change": {"kind": "stock", "product": p["id"], "value": p["stock"] + n if add else n, "name": p["name"], "old": p["stock"]}}
+        m = self.ADD_PRODUCT.match(t)
+        if m:
+            name = re.sub(r"\s+", " ", m.group("name")).strip(" .,:;-–—\"'“”")
+            rest = m.group("rest") or ""
+            if len(name) < 3 or self.store.find_product(name) and self.store.find_product(name)["name"].lower() == name.lower():
+                return None
+            mc = self.COST.search(rest) or re.search(r"\b(?:cost|costs|costo|costa)\b\D{0,12}" + _MONEY, rest, re.I)
+            mp = re.search(r"\b(?:sell(?:ing)?(?: it)?(?: at| for)?|price(?:d)?(?: at| of)?|list(?:ed)?(?: at)?|retail(?: at)?|vend(?:o|erlo)(?: a)?|prezzo(?: di)?|at|a)\s*" + _MONEY, rest, re.I)
+            cost = _num(mc.group(1)) if mc else 0.0
+            price = _num(mp.group(1)) if mp else 0.0
+            if price and cost and abs(price - cost) < 0.01:                 # "at 24" matched the cost itself
+                price = 0.0
+            if not price and cost:
+                price = round(cost * 3 + 0.49, 0) - 0.10                    # 3× landed, X,90 style — the owner can change it
+                guessed = True
+            else:
+                guessed = False
+            if not price:
+                return f"To add “{name}” I need at least the selling price (and the cost, so I can watch the margin): e.g. “add product: {name}, costs me 8, sell at 24”."
+            return {"store_change": {"kind": "product", "name": name[:80], "price": round(price, 2), "cost": round(cost, 2), "guessed": guessed}}
+        return None
+
+    # ---- shop sense: things every shop owner asks -------------------------------------------------
+    def shop_sense(self, t):
+        low = t.lower()
+        if self.BAD_REVIEW.search(t) and not self.CUSTOMER.search(t):
+            return self.bad_review(t)
+        if self.FREE_SHIP.search(t):
+            return self.free_shipping()
+        if self.COURIER.search(t) and not re.search(r"https?://|\b(compare|research|find|cerca|trova)\b", low):
+            return self.couriers(t)
+        if self.HASHTAGS.search(t):
+            return self.hashtags(t)
+        m = self.VIDEO_IDEAS.search(t)
+        if m and not re.search(r"https?://|youtu|\b(watch|guarda)\b", low):
+            return self.video_ideas(t, m.group("n"))
+        return None
+
+    def bad_review(self, t):
+        """'a customer left a 1-star review saying the mug broke, what do I do?' → the three moves + a public reply draft."""
+        product = None
+        if self.store is not None:
+            product = self.store.find_product(t)
+        prod = product["name"] if product else "the item"
+        broke = re.search(r"\b(broke|broken|damaged|cracked|arrived (?:in pieces|broken)|rotto|rotta|danneggiato)\b", t, re.I)
+        late = re.search(r"\b(late|never arrived|still waiting|in ritardo|mai arrivato)\b", t, re.I)
+        rude = re.search(r"\b(rude|ignored|no (?:answer|reply)|maleducat)", t, re.I)
+        cause = "a broken item" if broke else "a late or missing delivery" if late else "bad service" if rude else "the problem"
+        fix = ("we replace or refund faulty items at once — no return needed for a broken piece, a photo is enough" if broke else
+               "we track the parcel with the courier today and refund or resend if it's lost" if late else
+               "we look into what happened and make it right")
+        draft = (f"Hi <name>, I'm sorry — {cause} is not what we want for you. We {fix.split(' — ')[0]}. "
+                 f"I've written to you privately to sort it out today; please answer with your order number so I can send the replacement/refund right away. — <your name>, {self.store.data.get('name', 'the shop').split(' — ')[0] if self.store is not None else 'the shop'}")
+        lesson = ("check the packaging for that product (double-wall box, bubble wrap around the item, nothing rattling) and the courier's damage rate" if broke else
+                  "check the delivery promise on the product page against the real times, and send tracking numbers automatically" if late else
+                  "answer every message within 24 hours; set a template for the common ones")
+        return (f"A bad review about {prod} — three moves, in this order:\n"
+                f"1. Fix it privately first (today): write to the customer, {fix}. Ask for a photo and the order number; don't argue about fault.\n"
+                f"2. Answer publicly, short and calm, so the next 100 readers see how you handle problems. Draft:\n“{draft}”\n"
+                f"3. Learn from it: {lesson}.\n"
+                "Never offer money for deleting the review — most platforms ban it and it reads badly. If you forward me the customer's message I draft the private reply for your approval.")
+
+    def free_shipping(self):
+        avg, n, cat = None, 0, []
+        if self.store is not None:
+            try:
+                paid = [o for o in self.store.data["orders"] if o["status"] in ("paid", "shipped", "delivered")]
+                n = len(paid)
+                avg = sum(o["subtotal"] for o in paid) / n if n else None
+                cat = [p["price"] for p in self.store.products()]
+            except Exception:
+                pass
+        base = avg if avg and n >= 3 else (sorted(cat)[len(cat) // 2] if cat else 25.0)
+        thr = round(base * 1.3 + 0.5) - 0.01                                    # a bit above the average basket, X,99
+        thr = max(19.99, min(thr, 99.99))
+        why = f"your average order so far is {_eur(avg)} over {n} orders" if avg and n >= 3 else (f"your typical product costs {_eur(base)}" if cat else "a typical small-shop basket is ~€ 25")
+        return (f"Free shipping — yes, but as a threshold, not on everything. {why.capitalize()}, so I'd set “free shipping over {_eur(thr)}”: "
+                f"shoppers add a second item to reach it (basket size usually rises 15–30 %), and you never pay € 4–7 of postage on a single € 12 item.\n"
+                "Rules of thumb: (1) show the shipping cost before checkout and the “€ X to free shipping” bar in the cart; (2) below the threshold charge your real cost, rounded (€ 3,90 / 4,90 in Italy); "
+                "(3) 'free' isn't free — either the margin covers it (2.5× cost or more) or the price already includes ~€ 3; (4) EU orders keep a fee (€ 6,90–9,90) or a higher threshold.\n"
+                f"Say “set free shipping over {thr:.0f}” and I write it into the shipping page of the practice store.")
+
+    def couriers(self, t):
+        """'which courier is cheapest in italy for small parcels?' — public list prices (2026), the way a small shop starts, and when to get a contract."""
+        eu = re.search(r"\b(europe|eu|germany|france|spain|abroad|estero|europa|germania|francia|international|internazionale)\b", t, re.I)
+        lines = ["Cheapest way to ship small parcels from Italy (public prices, 2026 — check the live quote before you promise a fee):",
+                 "• Poste Delivery Web (online, pickup at home included): € 5,65 up to 1 kg, € 5,90 up to 2 kg, € 6,70 up to 3 kg, € 7,30 up to 5 kg; 24–48 h with Express (+€ 1). From the post office counter it starts at € 10,30 — never pay counter prices.",
+                 "• Comparators (Packlink, Spedire.com, SpedireSubito…): from € 5,48 up to 2 kg with GLS/BRT/SDA/TNT, pickup or drop-off; good for choosing per parcel, prices change weekly.",
+                 "• Lockers/pickup points (InPost, GLS ParcelShop, Poste Punto Poste): usually the cheapest 1–2 kg option and customers like them; ask the price for your size in the app.",
+                 "• Direct contract with GLS / BRT / SDA: list price ~€ 15 for 3 kg, but from ~10 parcels a month they give 30–60 % off and a pickup every day — that's when you switch (a national parcel lands at € 4–6).",
+                 "• Envelopes ≤ 2 cm (phone case, wraps): Posta Raccomandata/Posta 4 Pro is cheaper than any parcel — ask the exact price at Poste Business."]
+        if eu:
+            lines.append("• Abroad: Germany from € 14,93 and France from € 17,56 via comparators; Poste Crono Internazionale from ~€ 20 up to 2 kg, 3 working days in the EU. That's why EU orders need a € 6,90–9,90 fee or a higher free-shipping threshold, and why heavy items should stay national at first.")
+        lines.append("What decides the price: weight AND size (volumetric weight = L×W×H cm / 5000 or /4000), so use the smallest box; print labels at home; always send the tracking number.")
+        lines.append("My advice for the start: Poste Delivery Web or a comparator for the first months (no contract, pay per parcel), weigh every product now so the shipping page is honest, then negotiate a contract once you ship 10+ parcels a month.")
+        return "\n".join(lines)
+
+    TAG_FAMILIES = {
+        "eco": ["ecofriendly", "sustainableliving", "zerowaste", "plasticfree", "ecosostenibile", "greenliving", "consciousconsumer"],
+        "home": ["homedecor", "casa", "interiorinspo", "cozyhome", "homestyle", "arredamento"],
+        "kitchen": ["kitchenessentials", "cucina", "foodie", "mealprep", "homecooking"],
+        "coffee": ["coffeelover", "coffeetime", "caffè", "espresso", "morningritual"],
+        "phone": ["phonecase", "phoneaccessories", "iphonecase", "techaccessories", "cover"],
+        "bamboo": ["bamboo", "bambootoothbrush", "plasticfreebathroom", "zerowastebathroom"],
+        "candle": ["candles", "candlelover", "homefragrance", "candele", "cozyvibes"],
+        "pet": ["dogsofinstagram", "petlovers", "doglife", "catsofinstagram", "petaccessories"],
+        "baby": ["babyessentials", "newmom", "momlife", "babyshower", "neonato"],
+        "fitness": ["fitnessmotivation", "homeworkout", "gymlife", "healthylifestyle", "allenamento"],
+        "beauty": ["skincare", "cleanbeauty", "selfcare", "beautyroutine", "skincareroutine"],
+        "fashion": ["ootd", "slowfashion", "outfitinspo", "madeinitaly", "styleinspo"],
+        "jewel": ["jewelry", "handmadejewelry", "gioielli", "minimaljewelry", "earrings"],
+        "garden": ["gardening", "plantsofinstagram", "urbangarden", "giardino", "plantlover"],
+        "gift": ["giftideas", "giftsforher", "giftsforhim", "regali", "regaloperfetto"],
+        "desk": ["desksetup", "workfromhome", "homeoffice", "studygram", "deskinspo"],
+        "lamp": ["lighting", "lampdesign", "homelighting", "interiordesign"],
+        "cork": ["cork", "sughero", "naturalmaterials", "veganleather"],
+        "food": ["foodwraps", "mealprep", "lunchbox", "zerowastekitchen"],
+    }
+
+    def hashtags(self, t):
+        """'what hashtags should I use for eco products?' → 12 tags in three sizes + the rules; built from the words, no browsing."""
+        low = t.lower()
+        topic = re.search(r"\b(?:for|per|about|su|on)\s+(?:my |our |the |a |an |i |le |gli |il |la )?(?P<x>[a-zà-ú][a-zà-ú0-9 \-']{2,50}?)(?:\s+(?:posts?|videos?|reels?|content|shop|store|brand)\b|\s*[?.!,]|$)", t, re.I)
+        topic = (topic.group("x") if topic else "").strip()
+        words = [w for w in re.findall(r"[a-zà-ú]{3,}", topic.lower()) if w not in ("the", "and", "our", "for", "with", "products", "product", "shop", "store", "items", "stuff", "things", "posts", "post")]
+        fam = []
+        for w in words + re.findall(r"[a-zà-ú]{4,}", low):
+            for k, v in self.TAG_FAMILIES.items():
+                if (k in w or w in k) and v not in fam:
+                    fam.append(v)
+        italian = bool(re.search(r"\b(ital(?:y|ia|ian)|milano|roma|negozio|per il|prodotti)\b", low))
+        def clean(seq):
+            out = []
+            for x in seq:
+                x = re.sub(r"[^a-z0-9à-ú]", "", x.lower())
+                if x and x not in out:
+                    out.append(x)
+            return out
+        big = clean(["smallbusiness", "shopsmall", "handmade" if re.search(r"hand|artigian", low) else "onlineshop"])
+        medium = []
+        for v in fam[:3]:                                                  # family tags: the first family gives 3, the others fill up to 5
+            medium += v[:3] if not medium else v[:2]
+        medium = [x for x in clean(medium) if x not in big][:5]
+        if len(medium) < 3 and words:
+            medium += clean([w.rstrip("s") + "life" for w in words[:2]])[:3 - len(medium)]
+        niche = []
+        for w in words[:2]:
+            base = w.rstrip("s")
+            niche += [base + "lover", base + "gift", base + "shop"]
+        if italian:
+            niche += ["madeinitaly", "negozionline", "piccoleimprese"]
+        small = [x for x in clean(niche) if x not in big + medium][:4]
+        brand = "#<yourshopname>"
+        return (f"Hashtags for {topic or 'your posts'} — mix three sizes, 8–10 on Instagram, 3–5 on TikTok, always your own brand tag:\n"
+                f"• broad (millions of posts, reach): " + " ".join("#" + x for x in big) + "\n"
+                f"• medium (10k–500k, where you can actually rank): " + " ".join("#" + x for x in medium) + "\n"
+                f"• niche/buyer intent (your people): " + " ".join("#" + x for x in small) + f" {brand}\n"
+                "Rules: put them in the caption (not the first comment), never the same block on every post, no banned/junk tags (#followforfollow #like4like), "
+                "check each tag once — if the top posts are nothing like yours, drop it. Every 2 weeks look at which posts reached non-followers (Insights → Reach) and keep the tags from those.")
+
+    def video_ideas(self, t, n=None):
+        """'write 3 tiktok video ideas for the cork phone case' → hooks + shots + text on screen + caption, from the product facts."""
+        n = {"three": 3, "tre": 3, "four": 4, "five": 5, "cinque": 5, "six": 6, "a few": 3, "some": 3, "un paio di": 2, "qualche": 3}.get((n or "").lower(), None) or (int(n) if n and n.isdigit() else 3)
+        n = max(1, min(n, 6))
+        product = self.store.find_product(t) if self.store is not None else None
+        m = re.search(r"\b(?:for|about|per|su|di)\s+(?:my |our |the |a |an |il |la |le |i )?(?P<x>[a-zà-ú][a-zà-ú0-9 \-']{2,50}?)(?:\s*[?.!,]|$)", t, re.I)
+        what = product["name"] if product else ((m.group("x").strip() if m else "the product"))
+        facts = (product.get("details") or [])[:4] if product else []
+        material = next((f for f in facts if re.search(r"\b(material|made|cork|bamboo|stoneware|cotton|wood|beech|aluminium|glaze|organic)\b", f, re.I)), None)
+        detail = next((f for f in facts if f != material), None) or "one concrete detail people don't expect"
+        platform = "TikTok" if re.search(r"tiktok", t, re.I) else "Reels" if re.search(r"reel|instagram", t, re.I) else "short video"
+        short = what.split(" (")[0]
+        ideas = [
+            ("The 3-second swap", f"Hook (text on screen, 0–2 s): “Still using the usual one?” — cut to {short} in hand.",
+             f"Shots: the ordinary version → yours, extreme close-up of the surface{' (' + material.split(':')[-1].split(';')[0].strip().lower()[:50] + ')' if material else ''}, one real use (15–20 s total).",
+             f"Caption: “Small change, every day. {detail[:70]}” + 4 tags."),
+            ("What arrives at your door", f"Hook: hands opening the parcel, no talking, natural sound (paper, no plastic).",
+             f"Shots: label → box → {short} lifted out → one detail shot; end frame: price and the shipping line from your shipping page.",
+             "Caption: “Unboxing, honestly filmed. Ships in 1 business day.” — the calm ASMR kind performs well without ads."),
+            ("3 things you didn't know", f"Hook: “3 things about {short} nobody tells you” — count on screen 1-2-3.",
+             f"Shots: one 4-second clip per fact — use your real product facts (e.g. {facts[0][:60] if facts else 'where it is made'}; {facts[1][:60] if len(facts) > 1 else 'how long it lasts'}).",
+             "Caption: the same 3 facts as bullets; ask “which one surprised you?” to get comments."),
+            ("Packing your order", f"Hook: “Packing order #{'51042' if product else '12'} — going to <city>”.",
+             "Shots: pick, wrap, seal, label, drop at the courier; 12–18 s, upbeat but not salesy. People trust shops they see working.",
+             "Caption: “Every order is packed by hand in <city>. Yours next?”"),
+            ("The honest answer", f"Hook: read a real customer question out loud (“Does it survive the dishwasher?” / “Is it really plastic-free?”).",
+             f"Shots: you answering in one take + the proof shot ({detail[:60]}).",
+             "Caption: the question + the short answer; pin the video as an FAQ."),
+            ("Before / after", f"Hook: split screen — the messy/ugly/wasteful before, {short} after.",
+             "Shots: 2 s before, 2 s after, 8 s of the result in daily life; add the trending sound quietly under it.",
+             "Caption: one line on why you chose this product for the shop."),
+        ]
+        out = [f"{n} {platform} ideas for {what} — each is 15–25 s, hook in the first 2 seconds, film vertical in daylight:"]
+        for i, (title, hook, shots, cap) in enumerate(ideas[:n], 1):
+            out.append(f"{i}. {title}\n   {hook}\n   {shots}\n   {cap}")
+        out.append("Post 3–4 a week for a month before judging; keep the ones with the best watch time (Analytics → average watch time), not the most likes. Say “write the caption for idea 2” and I'll draft it within the platform's limits for your approval.")
+        return "\n".join(out)
 
     def pricing(self, text):
         m = self.COST.search(text)
