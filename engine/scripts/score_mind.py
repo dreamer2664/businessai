@@ -121,7 +121,7 @@ check("mid-job 'don't forget …' → a change to the job", s6e and "Noted for t
 s6f = A.respond("ok take your time")
 check("mid-job 'take your time' → hurry off, kind answer", s6f and "properly" in s6f and not A.mind.job.get("hurry"), s6f)
 s6g = A.respond("what is dropshipping?")
-check("mid-job knowledge question → answered from the brain, job goes on", s6g and "Dropshipping is" in s6g and "job goes on" in s6g and len(A.mind.queue) == 1, (s6g or "")[:100])
+check("mid-job knowledge question → answered at once (glossary or brain), job goes on", s6g and ("Dropshipping:" in s6g or "Dropshipping is" in s6g) and A.busy and len(A.mind.queue) == 1, (s6g or "")[:100])
 s6h = A.respond("how much should I charge for a candle that costs me 3?")
 check("mid-job pricing question → answered now", s6h and "Pricing candle" in s6h and len(A.mind.queue) == 1, (s6h or "")[:80])
 s6i = A.respond("send it to my drive when done")
