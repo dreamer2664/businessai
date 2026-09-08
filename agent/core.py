@@ -1395,6 +1395,16 @@ class Agent:
             return
         self.bot.send(self.owner_id, out)
 
+    def clock_tick(self):
+        """The visible timer: whatever job is running, the owner hears '⏰ N min left' / 'past the N minutes' once, from here."""
+        try:
+            if self.busy and self.pace.active():
+                r = self.pace.tick()
+                if r:
+                    self.bot.send(self.owner_id, r)
+        except Exception as e:
+            self.log("clock_tick_failed", error=str(e)[:80])
+
     def idle_work(self):
         """Between messages: one self-study session when a learning goal is waiting, and the daily report at 20:00."""
         now = time.time()
@@ -1572,6 +1582,7 @@ class Agent:
             self.tasks.tick()
             self.planner.tick()
             self.eyes.tick()
+            self.clock_tick()
             self.idle_work()
             for u in updates:
                 self.state["offset"] = u["update_id"] + 1
