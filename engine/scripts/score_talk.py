@@ -13,6 +13,7 @@ show = "--show" in sys.argv
 
 from agent.talk import Talk
 from agent import core
+from agent.store import money
 
 PASS = FAIL = 0
 def check(name, ok, detail=""):
@@ -951,6 +952,9 @@ check("'turn off gift wrap' → proposal", r is None and A.bot.sent[-1][0].start
 r = A.respond("approve that")
 _ck = _op.open(_base + "/checkout").read().decode() if _op.open(_base + "/cart/add", _up.urlencode({"id": "stoneware-mug", "qty": "1"}).encode()) else ""
 check("…gift wrap gone from checkout", isinstance(r, str) and "gift wrap off" in r and "name=wrap" not in _ck, (r or "")[:80])
+_gift = next((o for o in A.store.data["orders"] if o.get("gift_wrap") and o["status"] == "paid"), None)
+_lab = A.store_labels([_gift]).read_text(encoding="utf-8") if _gift else ""
+check("labels: a gift-wrapped parcel gets a gift receipt (no prices, GIFT WRAP flag on the label, real date)", _gift is not None and "GIFT WRAP" in _lab and "Gift receipt" in _lab and money(_gift["total"]) not in _lab and "2026-" in _lab, _lab[:0])
 r = A.respond("customer says the mug arrived broken, photo attached")
 check("forwarded customer sentence without 'what do I answer' → inbox draft + asks for the photo", r is None and "photo" in A.bot.sent[-1][0].lower(), A.bot.sent[-1][0][:100])
 r = A.respond("does temu sell the cork case cheaper?")

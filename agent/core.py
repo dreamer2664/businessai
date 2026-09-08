@@ -1672,8 +1672,13 @@ class Agent:
             if not open_:
                 return "Nothing to ship right now — every paid order is already marked shipped. (/store day makes practice customers come.)"
             path = self.store_labels(open_)
-            self.bot.send_document(self.owner_id, str(path), caption=f"Shipping labels + packing slips for {len(open_)} order(s) — print on A4, one page per parcel.")
-            return (f"{len(open_)} label(s) ready (sent as a file): " + ", ".join(f"#{o['n']} {o['customer'].get('name', '')} ({o['country']})" for o in open_[:8]) +
+            try:                                                          # a PDF prints from any phone; the HTML stays as the fallback
+                from agent import pdfout
+                pdf = pdfout.html_to_pdf(path)
+            except Exception:
+                pdf = None
+            self.bot.send_document(self.owner_id, str(pdf or path), caption=f"Shipping labels + packing slips for {len(open_)} order(s) — A4, one page per parcel" + ("" if pdf else " (HTML: open and print from a browser)") + ".")
+            return (f"{len(open_)} label(s) ready (sent as a {'PDF' if pdf else 'file'}): " + ", ".join(f"#{o['n']} {o['customer'].get('name', '')} ({o['country']})" for o in open_[:8]) +
                     (" …" if len(open_) > 8 else "") + "\nWhen the parcels are with the courier say “all shipped” and I mark them shipped with tracking numbers.")
         if cmd == "shipped_all":
             open_ = [o for o in st.data["orders"] if o["status"] == "paid"]
@@ -1801,13 +1806,20 @@ class Agent:
         pages = []
         for o in orders:
             c = o["customer"]
-            lines = "".join(f"<tr><td>{html.escape(l['name'])}{(' — ' + html.escape(l['option'])) if l.get('option') else ''}</td><td>{l['qty']}</td><td>{money(l['price'])}</td></tr>" for l in o["lines"])
+            gift = bool(o.get("gift_wrap"))                                # a gift: the slip inside lists the items but no prices (gift receipt)
+            lines = "".join(f"<tr><td>{html.escape(l['name'])}{(' — ' + html.escape(l['option'])) if l.get('option') else ''}</td><td>{l['qty']}</td>" + ("" if gift else f"<td>{money(l['price'])}</td>") + "</tr>" for l in o["lines"])
             weight = sum((st.product(l["id"]) or {}).get("weight_g", 300) * l["qty"] for l in o["lines"]) + 120
+            when = (o.get("t") or "")[:10] or f"day {o.get('day', '')}"
+            if gift:
+                totals = "<tr><td colspan=2 class=thanks>Gift receipt — prices are not shown. The buyer has the full invoice by e-mail.</td></tr>"
+            else:
+                totals = ((f"<tr><td colspan=2>Code {html.escape(o['code'])}</td><td>−{money(o['discount'])}</td></tr>" if o.get('code') else '') +
+                          f"<tr><td colspan=2>Shipping</td><td>{money(o['shipping'])}</td></tr><tr><td colspan=2><b>Total paid</b></td><td><b>{money(o['total'])}</b></td></tr>")
             pages.append(f"""<section class=page>
 <div class=label><div class=to><small>TO / DESTINATARIO</small><b>{html.escape(c.get('name', ''))}</b><br>{html.escape(c.get('address', '') or '(address on the order page)')}<br><b>{o['country']}</b></div>
-<div class=from><small>FROM / MITTENTE</small>{sender}</div><div class=meta>Order #{o['n']} · {weight / 1000:.2f} kg · {html.escape(str(o.get('day', '')))}</div></div>
+<div class=from><small>FROM / MITTENTE</small>{sender}</div><div class=meta>Order #{o['n']} · {weight / 1000:.2f} kg · {html.escape(when)}{' · 🎁 GIFT WRAP — gift receipt inside, no prices' if gift else ''}</div></div>
 <div class=slip><h2>Packing slip — order #{o['n']}</h2><p>{html.escape(c.get('name', ''))} · {html.escape(c.get('email', ''))}</p>
-<table><tr><th>Item</th><th>Qty</th><th>Price</th></tr>{lines}<tr><td colspan=2>Shipping</td><td>{money(o['shipping'])}</td></tr><tr><td colspan=2><b>Total paid</b></td><td><b>{money(o['total'])}</b></td></tr></table>
+<table><tr><th>Item</th><th>Qty</th>{'' if gift else '<th>Price</th>'}</tr>{lines}{totals}</table>
 <p class=thanks>Thank you for your order! Returns within 30 days — see the returns page. Questions: reply to your order e-mail.</p></div></section>""")
         doc = ("<!doctype html><html><head><meta charset=utf-8><title>Shipping labels</title><style>"
                "body{font-family:system-ui,sans-serif;color:#111;margin:0}.page{page-break-after:always;padding:14mm;min-height:270mm;box-sizing:border-box}"
