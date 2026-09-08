@@ -94,10 +94,104 @@ class SelfTalk:
 
     JOB_WORDS = re.compile(r"https?://|\b(research|compare|look up|write me a (?:doc|document|report)|document about)\b", re.I)
 
+    FOLLOW_PRODUCT = re.compile(r"^\W*(?:and|what about|how about|same for|e|e per|and for|and the|now the|ok and)\s+(?:the |for the |il |la |lo )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\W*$", re.I)
+    FOLLOW_WHY = re.compile(r"^\W*(?:why|why so|why that|why not|how come|perch[ée]|come mai|because\?|explain|explain why|reason\?)\W*$", re.I)
+    FOLLOW_ELSE = re.compile(r"^\W*(?:what else|anything else|and then|next|another one|one more|more|other ideas?|altro|e poi|un'?altra|and\?|go on|continue)\W*$", re.I)
+    FOLLOW_DO = re.compile(r"^\W*(?:ok|okay|yes|yep|sure|fine|alright|va bene|sì|si|ok then|good|great|perfect)?[\s,]*(?:do it|do that|go ahead|go for it|make it so|let'?s do (?:it|that)|please do|yes please|do the first one|start with that|fallo|procedi|vai)\W*$", re.I)
+    FOLLOW_EXPENSIVE = re.compile(r"^\W*(?:that'?s|that is|it'?s|this is|too|sounds|seems)?\s*(?:too |way too |a bit |very )?(?:expensive|much|much money|pricey|dear|costly|a lot|caro|troppo|troppi soldi)\b.{0,30}$|\bi (?:can'?t|cannot|don'?t want to) (?:afford|spend) (?:that|this|so much|that much)\b|\bcheaper (?:version|option|way)\??\W*$", re.I)
+    FOLLOW_NOTIME = re.compile(r"^\W*(?:i )?(?:don'?t|do not|haven'?t got|have no|no)\s+(?:have )?(?:the )?time(?: for (?:that|this|it|all that|all of it))?\b.{0,20}$|^\W*(?:too long|too much work|that'?s a lot of work|no time|non ho tempo|shorter\??|tl;?dr|quicker version\??|make it (?:short|shorter|quick))\W*$", re.I)
+
+    def followup(self, t):
+        """Short reactions that only make sense after my last answer: 'and the mug?', 'why?', 'what else?', 'ok do it', 'too expensive', 'no time'."""
+        try:
+            last = self.last_reply()
+        except Exception:
+            last = None
+        if not last or not isinstance(last, tuple) or not last[1]:
+            return None
+        q, a = last
+        a = str(a)
+        m = self.FOLLOW_PRODUCT.match(t)
+        if m and self.store is not None:
+            p_new = self.store.find_product(m.group("what"))
+            p_old = self.store.find_product(q) if q else None
+            if p_new and p_old and p_new["id"] != p_old["id"]:
+                words = [w for w in re.findall(r"[a-z0-9]{3,}", p_old["name"].lower()) if w not in ("set", "pcs", "with")]
+                newq = q
+                for w in sorted(words, key=len, reverse=True):
+                    newq = re.sub(r"\b" + re.escape(w) + r"s?\b", p_new["name"].split(" (")[0].lower(), newq, count=1, flags=re.I)
+                    if newq != q:
+                        break
+                if newq != q:
+                    return {"redo": newq, "text": f"Same question for the {p_new['name'].split(' (')[0]}:"}
+        if self.FOLLOW_WHY.match(t):
+            props = [p for p in reversed(self.store.data.get("proposals", []))] if self.store is not None else []
+            if a.startswith("🏪") or "Apply it?" in a or "Do it?" in a:
+                if props:
+                    return self.why_proposal(t, re.match(r"(?P<what>.*)", props[0]["why"][:0]))
+            pure_numbers = bool(re.match(r"^(?:Yes|Not yet|No sales yet) — Profit|^Profit |^Sold today|^Orders |^Visitors |^Average order|^Stock:|^Most money|^Return/refund rate|^Last \d+ days|^Practice store —", a))
+            if pure_numbers:
+                return self.show_maths(t, None)
+            sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n", a) if x.strip()]
+            reasons = [x for x in sents if re.search(r"\b(because|since|so |so that|that'?s where|that'?s why|means|the reason)\b|—", x) and not x.startswith(("Say ", "say “"))]
+            if reasons:
+                return "Why: " + " ".join(reasons[:2])[:500] + ("\nIf you want the numbers behind it, say “show me the maths”." if re.search(r"€|%", a) else "")
+            return "Short version of my reasoning: " + " ".join(sents[:2])[:400] + "\nAsk about any one part and I'll go deeper."
+        if self.FOLLOW_ELSE.match(t):
+            if a.startswith("One idea for this week:"):
+                self._idea_offset = getattr(self, "_idea_offset", 0) + 1
+                return self.one_idea(t, None)
+            if "What I'd change, in order:" in a:
+                facts = self._facts()
+                rest = [f for f in facts if f[0] != "good"][5:]
+                if rest:
+                    return "Further down the list: " + "; ".join(f[1] for f in rest[:3]) + "."
+                return "That was the whole list from the numbers. Beyond the numbers: photos in real rooms, one short video a day, and a card in every parcel — the three things every small shop under-does."
+            if re.search(r"^\d+\. ", a, re.M):
+                return "That was the full list. If you want, I turn it into to-dos (“add them to my list”) or pick the first one and start (“do the first one”)."
+            return "Nothing else on that from me — ask the next thing, or “what's the plan for next week?” for the bigger picture."
+        if self.FOLLOW_DO.match(t):
+            cmds = re.findall(r"[“\"]([^”\"]{4,80})[”\"]", a)
+            cmds = [c for c in cmds if re.match(r"^(?:say |)?(?:[a-z])", c, re.I) and not re.search(r"\bsorry\b|\bthank you\b|^i |^we |^you |^the one|^still using|^\d", c, re.I) and "?" not in c or re.match(r"^(what|which|how|why|should)\b", c, re.I)]
+            cmds = [re.sub(r"^say\s+", "", c, flags=re.I) for c in cmds]
+            cmds = [c for c in cmds if not re.match(r"^(what|which|how|why|should|is|are|did|do)\b", c, re.I)] or []
+            if cmds:
+                return {"redo": cmds[0], "text": f"Doing it: “{cmds[0]}” →"}
+            return "Which part? Name it in a few words (or repeat the line in quotes) and I start."
+        if self.FOLLOW_EXPENSIVE.match(t):
+            amts = [_num(x) for x in re.findall(r"€ ?(\d[\d.]*,\d{2}|\d[\d.]*)", a)]
+            big = max(amts) if amts else None
+            if re.search(r"\byour money\b.*\bready to send\b", a) and self.store is not None:
+                mm = re.search(r"“(\d+) × ([^”]+?) at", a)
+                if mm:
+                    p = self.store.find_product(mm.group(2)); n = max(5, int(mm.group(1)) // 2)
+                    if p:
+                        return f"Fair — half of it then: {n} × {p['name'].split(' (')[0]} = {_eur(n * p.get('cost', 0))}, enough for a few weeks, and reorder again from the sales. Smaller batches cost a bit more per unit but never leave you with dead stock. Say “order {n} more {p['name'].split(' (')[0].lower()}” and I write the line."
+            if re.search(r"\bads?\b", a.lower()):
+                return "Then no ads yet — that's the right call at this size. The free version: one 20-second video a day for 14 days, same product, posted at 12:00 and 19:00; it costs time, not money, and teaches you the same thing an ad would (which hook people stop for). If you want to test paid at all: € 3 a day for 7 days (€ 21) is the smallest experiment that still says something."
+            if big:
+                return (f"Understood — {_eur(big)} is too much right now. The cheaper version: start with about {_eur(big / 2)} " +
+                        "and do half the plan (the first items, they carry most of the effect), then decide the rest from the results. What I'd cut first: anything that's 'nice' rather than 'stops a loss' — stock-outs and unanswered customers cost money today; cards and ads can wait a week.")
+            return "Fair. Cheapest route: do only the part that stops a loss (late orders, stock-outs, unanswered customers) and skip the rest for now — say “what's urgent?” and I list just those."
+        if self.FOLLOW_NOTIME.match(t):
+            cmds = re.findall(r"[“\"]([^”\"]{4,80})[”\"]", a)
+            cmds = [re.sub(r"^say\s+", "", c, flags=re.I) for c in cmds if not re.match(r"^(what|which|how|why|should|is|are|did|do|i |we |you )", c, re.I)]
+            first = cmds[0] if cmds else None
+            try:
+                self.memory.add("Come back to: " + (q[:80] if q else "the last suggestion")) if self.memory else None
+            except Exception:
+                pass
+            return ("Fair — the 2-minute version: I do the preparing, you tap. " + (f"I'll start with “{first}” and put it in front of you as a proposal; the rest" if first else "I've parked it") +
+                    " on your to-do list under “Come back to” for a calmer day. Nothing else is needed from you today.")
+        return None
+
     def reply(self, t):
         low = t.lower().strip()
         if self.JOB_WORDS.search(low):
             return None
+        fu = self.followup(t)
+        if fu:
+            return fu
         for pat, name in self.RULES:
             m = re.search(pat, low, re.I)
             if m:
@@ -187,7 +281,7 @@ class SelfTalk:
                 emails[k] = emails.get(k, 0) + 1
             rep = sum(1 for v in emails.values() if v > 1)
             if len(paid) >= 8:
-                out.append(("bad" if not rep else "good", f"{rep} repeat buyer(s) out of {len(emails)} customers" + (" — nothing brings people back yet (no card in the parcel, no e-mail after 3 weeks)" if not rep else ""), "repeat"))
+                out.append(("bad" if not rep else "good", (f"no repeat buyers yet (0 of {len(emails)} customers) — nothing brings people back (no card in the parcel, no e-mail after 3 weeks)" if not rep else f"{rep} repeat buyer(s) out of {len(emails)} customers"), "repeat"))
         else:
             out.append(("neutral", "no sales yet — the shop hasn't had a practice day", "run"))
         return out
@@ -230,7 +324,7 @@ class SelfTalk:
         st = self.store
         if st is None:
             return None
-        what = (m.groupdict().get("what") or m.groupdict().get("what2") or "").strip(" ?.")
+        what = ((m.groupdict().get("what") or m.groupdict().get("what2") or "") if m is not None and hasattr(m, "groupdict") else "").strip(" ?.")
         props = list(reversed(st.data.get("proposals", [])))
         if not props:
             return "I haven't proposed anything for the shop yet — when I do, each proposal carries its reason and you see it before you tap."
@@ -936,8 +1030,8 @@ class SelfTalk:
         ideas.append("Put the shipping price and the '1-day dispatch from Bergamo' line on the product page above the buy button — the checkout surprise is where small shops lose a third of carts.")
         if not ideas:
             return "Run a practice day first — with no sales I'd only be guessing which lever to pull."
-        pick = ideas[day % len(ideas)]
-        return f"One idea for this week: {pick}\n(Ask again tomorrow and I give you a different one — I rotate through {len(ideas)}.)"
+        pick = ideas[(day + getattr(self, "_idea_offset", 0)) % len(ideas)]
+        return f"One idea for this week: {pick}\n(Say “another one” for the next — I rotate through {len(ideas)}.)"
 
     def mistakes(self, t, m):
         st = self.store

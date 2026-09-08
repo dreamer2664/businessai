@@ -1012,6 +1012,18 @@ class Agent:
                 return self.domain_check(direct["domain"])
             if direct.get("weather"):                                                # "what's the weather in bergamo" → Open-Meteo (free, no key)
                 return self.weather(direct["weather"], direct.get("when", "now"))
+            if direct.get("redo"):                                                    # "and the mug?", "ok do it" → the implied request, run as if typed
+                cmd = direct["redo"]
+                if not getattr(self, "_redo_depth", 0):
+                    self._redo_depth = 1
+                    try:
+                        r = self.understand(cmd)
+                    finally:
+                        self._redo_depth = 0
+                    if r is None:
+                        return direct.get("text") or None
+                    return (direct.get("text") + "\n" if direct.get("text") else "") + (r if isinstance(r, str) else str(r))
+                return direct.get("text")
             if direct.get("fix_all"):                                                 # "fix them" after a list of problems → labels, reorder proposals, drafts
                 outs = [direct["text"]]
                 try:

@@ -181,8 +181,8 @@ class Talk:
     def reply(self, text):
         """The direct answer, or a dict {"customer": <their message>} / {"todo": [...], "text": ...} for the agent to act on, or None."""
         out = self._reply(text)
-        if isinstance(out, str) and not re.search(r"^\W*(?:are you sure|sure\??|really\??)", (text or "").lower()):
-            self.last_reply = ((text or "").strip(), out)                   # so “are you sure about that?” knows what 'that' was
+        if isinstance(out, str) and not re.search(r"^\W*(?:are you sure|sure\??|really\??|why\??|what else|and the |what about|ok do it|do it|too expensive|no time)", (text or "").lower()):
+            self.last_reply = ((text or "").strip(), out)                   # so “are you sure about that?” / “why?” / “and the mug?” know what 'that' was
         return out
 
     def note_reply(self, text, out):
