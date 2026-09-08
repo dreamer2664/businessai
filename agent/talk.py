@@ -125,7 +125,8 @@ class Talk:
                               + r"|\b(?:make|price|sell)\s+(?:the |il |la )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:at |for |a )?" + _MONEY.replace("(\\d", "(?P<v2>\\d") + r"\s*(?:from now on|instead|d'ora in poi)\b"
                               + r"|\b(?:lower|raise|increase|decrease|drop|cut|bump|change|set|update|move|abbassa|alza|cambia|porta)\s+(?:the |il |la |our |my )?(?P<what3>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:price|prezzo)\s+(?:to|at|a|down to|up to|→)\s*" + _MONEY.replace("(\\d", "(?P<v3>\\d")
                               + r"|\b(?:lower|raise|increase|decrease|drop|cut|bump|put|move|abbassa|alza|porta|metti)\s+(?:the |il |la |our |my )?(?P<what4>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:to|at|a|down to|up to|→)\s*" + _MONEY.replace("(\\d", "(?P<v4>\\d") + r"(?:\s*(?:€|eur|euro|euros))?\W*$", re.I)
-    STOCK_CHANGE = re.compile(r"\b(?:set|update|put|correct|metti|aggiorna)\s+(?:the )?stock\s+(?:of|for|di|del|della)\s+(?:the |il |la )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:to|at|a)\s+(?P<n>\d+)\b|\b(?:we |i )?(?:received|got|have got|restocked|arrived with|sono arrivat[ei])\s+(?P<n2>\d+)\s+(?:more |new |extra |altri |altre |nuov[ei] )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)(?:\s+(?:today|from the supplier|dal fornitore|oggi))?\W*$", re.I)
+    STOCK_CHANGE = re.compile(r"\b(?:set|update|put|correct|metti|aggiorna)\s+(?:the )?stock\s+(?:of|for|di|del|della)\s+(?:the |il |la )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:to|at|a)\s+(?P<n>\d+)\b|\b(?:we |i )?(?:received|got|have got|restocked|arrived with|sono arrivat[ei])\s+(?P<n2>\d+)\s+(?:more |new |extra |altri |altre |nuov[ei] )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)(?:\s+(?:today|from the supplier|dal fornitore|oggi))?\W*$|\b(?:the |il |la )?(?P<what3>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:is|are|è|sono)\s+back(?: in stock)?\W+\s*(?P<n3>\d+)\s*(?:pieces|pcs|units|pezzi)?\W*$|\b(?:the |il |la )?(?P<what4>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:is|are|è|sono)\s+back in stock\W*$", re.I)
+    ORDER_MORE = re.compile(r"^\W*(?:please |can you |could you |let'?s |ok |ordina |)?(?:order|reorder|buy|get|restock|ordina|riordina|compra)\s+(?P<n>\d+)\s+(?:more |extra |new |pcs of |pieces of |units of |altri |altre |pezzi di )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)(?:\s+(?:from the supplier|dal fornitore|today|now|oggi|subito))?\W*$", re.I)
     # ---- shop sense: reviews, free shipping, couriers, hashtags, video ideas ----
     BAD_REVIEW = re.compile(r"\b(?:(?:1|one|2|two)[- ]star|bad|negative|angry|nasty|terrible|awful|unfair|brutta|negativa|cattiva)\s+(?:review|recensione|rating|feedback|stelle)\b|\b(?:review|recensione)\b.{0,40}?\b(?:broke|broken|damaged|late|never arrived|rude|scam|fake|rotto|rotta|danneggiato|mai arrivato)\b|\b(?:left|gave|wrote|posted|ha lasciato|ha scritto)\s+(?:us |me |a |una )?(?:\d[- ]star|bad|negative|brutta) (?:review|recensione)\b", re.I)
     FREE_SHIP = re.compile(r"\b(?:should (?:i|we) (?:offer|do|give|have) free (?:shipping|delivery)|free (?:shipping|delivery) (?:threshold|or not|worth it|yes or no|good idea)|is free (?:shipping|delivery) (?:a good idea|worth it|smart)|(?:offer|give) free (?:shipping|delivery)\?|spedizione gratuita (?:sì o no|conviene|o no)|conviene (?:la |offrire la )?spedizione gratuita|soglia (?:per la |della )?spedizione gratuita)", re.I)
@@ -237,6 +238,15 @@ class Talk:
         m = self.ADS_BUDGET.search(t)
         if m and not re.search(r"https?://", t):
             return self.ads_budget(_num(m.group("amt")) if m.group("amt") else None, t)
+        if re.search(r"^\W*(?:ads?|advertising|marketing) budget\W*$|\bhow much (?:should|do|could) (?:i|we) (?:spend|put|invest|budget) (?:on|in|for) (?:ads|advertising|marketing|meta ads|facebook ads|instagram ads|tiktok ads|google ads|promotion)\b|\bwhat(?:'s| is) a (?:good|sensible|reasonable) (?:ads?|advertising|marketing) budget\b|\bshould (?:i|we) (?:run|start|do|try) ads\b|\bquanto (?:spendere|investire) in pubblicità\b", low) and not re.search(r"https?://", t):
+            return self.ads_budget(None, t)
+        if re.search(r"^\W*(?:ok,? |yes,? |please |go on,? )?(?:prepare|set up|start|launch|make|do|write|plan|prepara|avvia) (?:the |an? |my |our )?(?:first )?(?:ad test|ads? test|test (?:ad|campaign)|ad campaign|ads campaign|campaign|meta ad|tiktok ad|ads)\b.{0,30}$", low):
+            return self.ad_test()
+        if re.search(r"^\W*(?:show|give|send) me (?:the |my |all (?:the )?|any )?(?:drafts?|replies|customer (?:drafts?|replies)|pending (?:drafts?|replies)|inbox|waiting messages?)\W*$|^\W*(?:what(?:'s| is) )?(?:in the )?inbox\W*$|\bshow (?:me )?(?:the )?(?:drafts?|replies) (?:again|waiting)\b", low) and self.inbox is not None:
+            return self.show_drafts()
+        m = re.match(r"^\W*(?:ok,? |yes,? |please |go on,? )?(?:add|make|create|list|set up|prepare|aggiungi|crea)\s+(?:the |that |this |a |il |quel )?(?:bundle|kit|set|pack|combo)\b(?:\s*[:\-–—]?\s*(?P<a>[a-zà-ú][a-zà-ú0-9 ]{2,40}?)\s*\+\s*(?P<b>[a-zà-ú][a-zà-ú0-9 ]{2,40}?))?\W*(?:(?:at|for|a)\s+" + _MONEY.replace("(\\d", "(?P<price>\\d") + r")?\W*$", low)
+        if m and self.store is not None:
+            return self.make_bundle(m.group("a"), m.group("b"), _num(m.group("price")) if m.group("price") else None)
         m = self.VAT_ON.search(t)
         if m and not re.search(r"\b(register|number|partita|threshold|oss)\b", low):
             return self.vat_on(_num(m.group("amt") or m.group("amt2")), m.group("what") or "", t)
@@ -276,6 +286,9 @@ class Talk:
             return self.check_in(t)
         m = self.REMIND_AT.match(t)
         if m and self.memory is not None:
+            return self.remind_at(m.group("when"), m.group("what"))
+        m = re.match(r"^\W*(?:i (?:have to|need to|must|should|will|'ll)|we (?:have to|need to|must|should)|devo|dobbiamo)?\s*(?P<what>(?:call|phone|ring|e-?mail|mail|write to|pay|visit|chase|contact|chiamare|chiama|pagare|paga|scrivere a|scrivi a)\s+(?:the |il |la |lo |my |our )?[a-zà-ú][a-zà-ú0-9 \-']{2,50}?)\s+(?P<when>tomorrow(?: morning| afternoon| evening| at \d{1,2}(?::\d{2})?)?|domani(?: mattina| pomeriggio)?|tonight|stasera|on (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?: morning| at \d{1,2})?|next week|la settimana prossima)\W*$", low)
+        if m and self.memory is not None and not re.search(r"\?", t):
             return self.remind_at(m.group("when"), m.group("what"))
         m = self.TODO_ADD.match(t)
         if m and self.memory is not None:
@@ -966,13 +979,20 @@ class Talk:
                 return {"store_change": {"kind": "stock", "product": p["id"], "value": 0, "name": p["name"], "old": p["stock"], "text": f"Mark {p['name']} sold out (stock {p['stock']} → 0; the page shows 'sold out' and stops taking orders)"}}
         m = self.STOCK_CHANGE.search(t)
         if m:
-            what = (m.group("what") or m.group("what2") or "").strip()
-            n = int(m.group("n") or m.group("n2"))
+            what = (m.group("what") or m.group("what2") or m.group("what3") or m.group("what4") or "").strip()
             p = self.store.find_product(what)
             if not p:
                 return None
-            add = bool(m.group("n2"))                                        # "we received 20 more lamps" adds; "set stock of … to 20" sets
+            if m.group("what4") and not m.group("n3"):                        # "the lamp is back in stock" without a number → ask for it
+                return f"Good — how many {p['name'].split(' (')[0]} came in? Say “the {what} is back in stock, 12 pieces” and I set the stock (it's {p['stock']} now)."
+            n = int(m.group("n") or m.group("n2") or m.group("n3"))
+            add = bool(m.group("n2")) or (bool(m.group("n3")) and p["stock"] > 0)   # "we received 20 more lamps" adds; "set stock of … to 20" sets; "back in stock, 12 pieces" on a sold-out item sets
             return {"store_change": {"kind": "stock", "product": p["id"], "value": p["stock"] + n if add else n, "name": p["name"], "old": p["stock"]}}
+        m = self.ORDER_MORE.match(t)
+        if m and not re.search(r"\b(labels?|boxes|tape|cards|samples?|domain|etichette|scatole)\b", low):
+            p = self.store.find_product(m.group("what"))
+            if p:
+                return self.order_more(p, int(m.group("n")))
         m = self.ADD_PRODUCT.match(t)
         if m:
             name = re.sub(r"\s+", " ", m.group("name")).strip(" .,:;-–—\"'“”")
@@ -1190,6 +1210,26 @@ class Talk:
         fees = sum(0.029 * o["total"] + 0.30 for o in paid)
         visits = sum(v for d, v in st.data["visits"].items() if lo < int(d) <= hi)
         return len(paid), rev, rev - cogs - ship - fees, visits
+
+    def order_more(self, p, n):
+        """'order 20 more lamps' — I can't buy (your money), so: the purchase line, the money, and a to-do + a stock note for when it lands."""
+        cost = p.get("cost", 0) * n
+        weekly = 0
+        try:
+            day = self.store.data.get("day", 0)
+            weekly = sum(l["qty"] for o in self.store.data["orders"] if o["status"] in ("paid", "shipped", "delivered") and o.get("day", 0) > day - 7 for l in o["lines"] if l["id"] == p["id"])
+        except Exception:
+            pass
+        cover = f" — about {n / weekly:.0f} weeks of sales at {weekly}/week" if weekly else ""
+        i = None
+        try:
+            i = self.memory.add(f"Order {n} × {p['name'].split(' (')[0]} from the supplier ({_eur(cost)} at {_eur(p.get('cost', 0))} each)") if self.memory else None
+        except Exception:
+            pass
+        return (f"Ordering is your money, so I don't place it — but here's the line ready to send: “{n} × {p['name'].split(' (')[0]} at {_eur(p.get('cost', 0))} = {_eur(cost)}”{cover}. "
+                + (f"It's #{i} on your to-do list. " if i else "") +
+                f"When the parcel arrives say “we received {n} more {p['name'].split(' (')[0].lower()}” and I update the stock (now {p['stock']}). "
+                + ("Meanwhile the product is sold out on the site — say “mark it back in 2 weeks” and I put a 'ships in 2 weeks' note on the page instead of hiding it." if p["stock"] == 0 else ""))
 
     def week_compare(self):
         day = self.store.data.get("day", 0)
@@ -2052,6 +2092,7 @@ class Talk:
         return itx if it else en
 
     def ads_budget(self, amt, t):
+        assumed = amt is None
         amt = amt or 200.0
         per_month = bool(re.search(r"\b(a month|per month|al mese|monthly)\b", t, re.I))
         daily = amt / 30 if per_month else amt / 20
@@ -2064,13 +2105,83 @@ class Talk:
             except Exception:
                 best = None
         prod = best["name"].split(" (")[0] if best else "your best-margin product with stock"
-        return (f"{_eur(amt)}{' a month' if per_month else ''} for ads — my plan (small budgets die when spread thin):\n"
+        return ((f"Start small — I'd put {_eur(amt)} on the table for a first test, not more (tell me your real figure and I redo the plan). " if assumed else "") +
+                f"{_eur(amt)}{' a month' if per_month else ''} for ads — my plan (small budgets die when spread thin):\n"
                 f"1. Spend € 0 for the first week: post 5–7 organic short videos of {prod}; the one with the best watch-time is your ad. Paying to promote an untested video is the classic way to lose {_eur(amt)}.\n"
                 f"2. Then ONE platform (Meta = Instagram+Facebook for home/gift products 25–55; TikTok for under-35 impulse buys), ONE product ({prod}), ONE goal (sales/conversions, never 'engagement' or 'followers').\n"
                 f"3. Test: {_eur(test)} over 5–7 days at ~{_eur(daily)} a day, 2–3 versions of the video, broad targeting (Italy, 25–55) — let the algorithm find the buyers.\n"
                 f"4. Read the numbers on day 7: cost per purchase must be under a third of the margin ({_eur((best['price'] - best.get('cost', 0)) / 3) if best else '~€ 3–4'}). Under → put the rest of the money on that video; over → stop, fix the page or the price, don't add budget.\n"
                 f"5. Keep {_eur(amt - test)} in reserve for the winner; never top up a loser.\n"
                 "Before the first euro: the pixel/tracking installed, a product page that loads in 2 s on a phone, shipping cost visible, and stock for 30+ orders. I'll prepare the ad text and the shot list when you say “write the ad for {0}”.".format(prod))
+
+    def ad_test(self):
+        """'prepare the ad test' — the concrete first campaign: product, video, text, targeting, budget, stop rules. Nothing spent — the owner sets it up in Ads Manager."""
+        st = self.store
+        best, n = None, {}
+        try:
+            n = st.numbers()
+            units = n.get("units", {})
+            ps = [p for p in st.products() if p["stock"] >= 5]
+            best = max(ps, key=lambda p: (units.get(p["name"], 0), p["price"] - p.get("cost", 0))) if ps else None
+        except Exception:
+            pass
+        if not best:
+            return "No product with enough stock for an ad test (I want 5+ units, ideally 30) — restock first; an ad that sells out on day 2 teaches nothing."
+        name = best["name"].split(" (")[0]
+        margin = best["price"] - best.get("cost", 0) - 0.029 * best["price"] - 0.30 - 3.25
+        target_cpa = margin / 3
+        facts = (best.get("details") or [])[:2]
+        return (f"Ad test, ready to set up (Meta Ads Manager, ~15 minutes; nothing spent until you press Publish there):\n"
+                f"• Product: {name} at {_eur(best['price'])} — {best['stock']} in stock, net margin about {_eur(margin)} per sale after goods, fees and shipping.\n"
+                f"• Creative: the vertical video that got the best watch-time in the last week (if none yet: 15 s, {name} in a real room, hand in frame, text on screen “{facts[0][:40] if facts else 'made to last'}”, no music rights issues — use Meta's library).\n"
+                f"• Primary text: “{name} — {facts[0][:60] if facts else 'the small upgrade you notice every day'}. Ships from Bergamo in 1 day, free over {_eur(39)}. 30-day returns.”  Headline: “{name} · {_eur(best['price'])}”  Button: Shop now → the product page.\n"
+                "• Campaign: objective Sales (conversions), 1 campaign, 1 ad set, 2–3 ads (same video, different first line). Advantage+ audience, Italy, 25–55, all placements. Pixel installed and the Purchase event tested first.\n"
+                "• Budget: € 6 a day for 7 days (€ 42), then decide. Not more — small budgets need 7 days to learn.\n"
+                f"• Stop rules on day 7: cost per purchase under {_eur(target_cpa)} → double the budget for 7 more days; between {_eur(target_cpa)} and {_eur(margin)} → change the video, keep the rest; above {_eur(margin)} (losing money per sale) → stop, fix the page, back to organic.\n"
+                "• Watch daily but don't touch it: CTR (link) above 1 %, cost per click under € 0,60, add-to-carts. Under 300 impressions nothing means anything.\n"
+                "Say “write 3 ad texts” for variants, or “what should I post today?” for the organic side. Report back the day-7 numbers and I read them with you.")
+
+    def show_drafts(self):
+        new = self.inbox.items("new")
+        if not new:
+            return "No drafts waiting — every customer message has an answer. When one comes in you get it here with Approve / Edit / Reject."
+        rows = []
+        for r in new[:5]:
+            try:
+                k = self.inbox.classify(r["text"])["kind"].replace("_", " ")
+            except Exception:
+                k = "message"
+            rows.append(f"• {r.get('from', '?')} — {k}: “{r['text'][:80]}”")
+        return (f"{len(new)} draft(s) waiting:\n" + "\n".join(rows) + (f"\n…and {len(new) - 5} more" if len(new) > 5 else "") +
+                "\nSay /inbox and each one arrives as a card with my draft and the buttons — or “send routine replies yourself” and the simple ones stop needing you.")
+
+    def make_bundle(self, a, b, price):
+        """'add the bundle' / 'add a bundle: mug + wraps at 24.90' → a new-product proposal from two real products (price default 10 % off the pair)."""
+        st = self.store
+        units = {}
+        try:
+            units = st.numbers().get("units", {})
+        except Exception:
+            pass
+        pa = st.find_product(a) if a else None
+        pb = st.find_product(b) if b else None
+        if not (pa and pb):
+            instock = [p for p in st.products() if p["stock"] > 0]
+            if len(instock) < 2:
+                return "A bundle needs two products in stock — right now there aren't two."
+            best = max(instock, key=lambda p: units.get(p["name"], 0))
+            slow = min([p for p in instock if p is not best], key=lambda p: units.get(p["name"], 0))
+            pa, pb = best, slow
+        if pa["id"] == pb["id"]:
+            return "Both halves are the same product — name two different ones: “add a bundle: mug + wraps”."
+        pair = pa["price"] + pb["price"]
+        price = price or (round(pair * 0.9) - 0.10)                          # 10 % off, X,90 ending
+        price = float(f"{price:.2f}")
+        cost = pa.get("cost", 0) + pb.get("cost", 0)
+        name = f"{pa['name'].split(' (')[0]} + {pb['name'].split(' (')[0]} Bundle"
+        stock = min(pa["stock"], pb["stock"])
+        return {"store_change": {"kind": "product", "name": name[:80], "price": price, "cost": round(cost, 2), "guessed": False, "stock": stock,
+                                 "note": f"pair price {_eur(pair)} → bundle {_eur(price)} ({(1 - price / pair) * 100:.0f} % off), {(price - cost) / price * 100:.0f} % gross margin; stock follows the scarcer half ({stock})"}}
 
     def vat_on(self, amt, what, t):
         rate = 0.22
@@ -2131,6 +2242,8 @@ class Talk:
         day = now.date()
         if re.search(r"\b(tomorrow|domani)\b", low):
             day = day + dt.timedelta(days=1)
+        elif re.search(r"\b(next week|la settimana prossima)\b", low):
+            day = day + dt.timedelta(days=(7 - now.weekday()) % 7 or 7)       # next Monday
         wd = {"monday": 0, "lunedì": 0, "tuesday": 1, "martedì": 1, "wednesday": 2, "mercoledì": 2, "thursday": 3, "giovedì": 3, "friday": 4, "venerdì": 4, "saturday": 5, "sabato": 5, "sunday": 6, "domenica": 6}
         for k, v in wd.items():
             if re.search(r"\b" + k + r"\b", low):

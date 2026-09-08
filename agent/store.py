@@ -559,13 +559,14 @@ class Store:
             return {"day": day, "visits": visits, "orders": made, "messages": msgs}
 
     # ---- the AI's own review: what would a careful shopkeeper propose today? ---------
-    def review(self):
-        """Rule-based proposals (no model): unshipped orders, out-of-stock listings, low stock, price sanity."""
+    def review(self, mute=()):
+        """Rule-based proposals (no model): unshipped orders, out-of-stock listings, low stock, price sanity.
+        mute = kinds the owner asked me not to propose ('price', 'stock', 'ship')."""
         props = []
         with self.lock:
             open_ids = {p["target"] for p in self.data["proposals"] if p["status"] == "open"}
             for o in self.data["orders"]:
-                if o["status"] == "paid" and str(o["n"]) not in open_ids:
+                if o["status"] == "paid" and str(o["n"]) not in open_ids and "ship" not in mute:
                     props.append(self.propose("ship", str(o["n"]), "shipped", f"order #{o['n']} is paid and waiting ({', '.join(l['name'] + ' ×' + str(l['qty']) for l in o['lines'])}) — mark it shipped once the parcel is handed to GLS"))
             sold = {}                                                          # units sold per product in the last 7 practice days → reorder by demand
             for o in self.data["orders"]:
@@ -577,14 +578,16 @@ class Store:
                 if p["id"] in open_ids:
                     continue
                 weekly = sold.get(p["id"], 0)
-                if p["stock"] == 0:
+                if "stock" in mute:
+                    pass
+                elif p["stock"] == 0:
                     qty = max(25, 3 * weekly)
                     props.append(self.propose("stock", p["id"], qty, f"{p['name']} is sold out and still listed — reorder from the supplier (suggested {qty} units" + (f" = 3 weeks at {weekly}/week" if weekly else "") + ") or hide it; until then customers see 'out of stock'"))
                 elif p["stock"] <= max(3, weekly):
                     qty = p["stock"] + max(20, 3 * weekly)
                     props.append(self.propose("stock", p["id"], qty, f"{p['name']} has only {p['stock']} left" + (f" and sold {weekly} last week" if weekly else "") + f" — reorder now (suggested +{qty - p['stock']}) so it is not out of stock this week"))
                 margin = (p["price"] - p.get("cost", 0)) / p["price"] if p["price"] else 0
-                if margin < 0.55 and p.get("cost") and ("price", p["id"]) not in rejected:   # the owner said 'leave it' once → do not nag
+                if margin < 0.55 and p.get("cost") and ("price", p["id"]) not in rejected and "price" not in mute:   # the owner said 'leave it' once → do not nag
                     new = round(p["cost"] / 0.4 + 0.0, 1) - 0.1
                     props.append(self.propose("price", p["id"], new, f"{p['name']} sells at {money(p['price'])} with a landed cost of {money(p['cost'])} — {margin*100:.0f} % gross margin is thin once shipping (~€ 3,25) and fees (2,9 % + € 0,30) are paid; {money(new)} keeps ~60 %"))
         return props

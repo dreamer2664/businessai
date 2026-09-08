@@ -36,6 +36,22 @@ class SelfTalk:
         self.last_reply = lambda: None         # talk sets this: () → (question, answer) of the last thing I said
 
     RULES = [
+        (r"^\W*(?:show me|let me see|walk me through|spiegami|fammi vedere)\s+(?:the |your |i |la )?(?:maths?|math|calculation|calcolo|conti|numbers behind (?:it|that)|working|workings)\W*$|\bhow did you (?:get|calculate|compute|work out) (?:that|this|it|those numbers?|the number)\b|\bwhere does (?:that|this) (?:number|figure) come from\b", "show_maths"),
+        (r"^\W*(?:hmm+,? |well,? |ok,? )?(?:not convinced|i'?m not convinced|not sure about that|i doubt (?:it|that)|i disagree|i don'?t (?:buy|think so|agree)|that doesn'?t (?:sound|seem|feel) right|non sono convint[oa]|non ci credo|mah)\W*$", "not_convinced"),
+        (r"\b(?:i'?m|i am|im) (?:tired|sick|fed up|done|exhausted|frustrated|losing (?:hope|faith|motivation)|about to give up)\b|\bnothing (?:sells|is selling|works|is working)\b|\bthis (?:isn'?t|is not|doesn'?t) work(?:ing)?\b|\bi (?:want to|should|might|will) (?:give up|quit|stop|close (?:the )?shop)\b|\bwhat'?s the point\b|\bsono stanc[oa]\b|\bnon vende (?:niente|nulla)\b|\bmollo tutto\b", "discouraged"),
+        (r"^\W*(?:be honest(?: with me)?|honestly\??|tell me the truth|straight answer|no sugar ?coating|don'?t sugar ?coat it|sii onest[oa]|dimmi la verità|give it to me straight)\W*$|\bbe honest\b.{0,20}?\b(?:shop|store|business|numbers|me)\b", "be_honest"),
+        (r"\bwhat would you do differently\b|\bwhat should (?:i|we) (?:do|have done) differently\b|\bcosa faresti di diverso\b|\bdifferently (?:than|from|to) last (?:week|month)\b", "differently"),
+        (r"^\W*(?:please |ok |so |right,? )?(?:stop|don'?t|do not|no more|quit|smetti di|basta)\s+(?:proposing|suggesting|asking (?:me )?(?:about|for)|nagging (?:me )?about|sending(?: me)?|with the|proporre|proporr?mi)\s+(?:the |those |these |any |me )?(?P<what>price|prices|pricing|price changes?|repric\w*|stock|restock\w*|reorders?|reordering|stock changes?|ship\w*|shipping reminders?|order reminders?|proposals?|suggestions?|everything|cambi di prezzo|prezzi|riordini|scorte)\b.{0,30}$", "mute_kind"),
+        (r"^\W*(?:ok |please |from now on |you can |you may |go ahead and )?(?:send|answer|reply to|handle|do)\s+(?:the )?(?:routine|simple|easy|standard|normal|tracking|basic)\s+(?:replies|answers|messages|ones|questions|e-?mails|customer (?:replies|messages))\s+(?:yourself|on your own|by yourself|alone|without (?:asking|me)|automatically|directly|da sol[oa])\b|\byou (?:can|may) (?:send|answer) (?:the )?(?:routine|simple|easy) (?:ones|replies|messages) (?:yourself|on your own|without me)\b|\brispondi (?:tu )?(?:da sol[oa]|direttamente) (?:a quelle|alle) (?:semplici|di routine)\b", "auto_routine"),
+        (r"^\W*(?:ok,? |please |and |then |now )?(?:ask|check with|send|show) me (?:everything|all|every (?:reply|message|proposal|change)|the (?:routine|simple) ones)(?: again| from now on| too)?\W*$|\b(?:stop|don'?t) (?:sending|answering) (?:replies |messages |anything )?(?:yourself|on your own|alone|automatically)\b|\bback to (?:asking|approving) (?:me )?(?:everything|every(?:thing)?|all)\b|\bpropose (?:price|stock|ship\w*|everything|all)(?: changes)? again\b", "unmute"),
+        (r"^\W*(?:ok,? |please |so |yes,? |good,? )?(?:fix (?:them|it|those|that|all of (?:it|them)|everything)|sort (?:them|it|that|those) out|handle (?:them|it|all of it|those)|deal with (?:them|it|those)|take care of (?:them|it|those)|do (?:them|those|all of it|it all)|go ahead with (?:them|those|all)|sistemali|sistema tutto|risolvi(?:li)?|occupatene)\W*$", "fix_them"),
+        (r"\b(?:write|draft|prepare|scrivi|prepara)\b.{0,20}?\b(?:e-?mail|mail|message|newsletter|messaggio)\b.{0,30}?\b(?:past|previous|old|existing|former|earlier) (?:customers|buyers|clients|clienti)\b|\b(?:e-?mail|mail|message) to (?:our |my |the )?(?:past|previous|old|existing) (?:customers|buyers|clients)\b|\bwin-?back (?:e-?mail|mail)\b|\b(?:back in stock|new colou?r|restock) (?:e-?mail|mail|announcement)\b.{0,20}?\b(?:customers|buyers|write|draft)\b|\bmail ai vecchi clienti\b", "email_past_customers"),
+        (r"\b(?:write|draft|prepare|scrivi|prepara)\b.{0,20}?\b(?:review|feedback|rating|recensione) (?:request|ask|asking)? ?(?:e-?mail|mail|message|template|messaggio)\b|\b(?:review|feedback) request\b|\be-?mail (?:asking|to ask) for (?:a )?(?:review|feedback)\b|\bmail per chiedere (?:una )?recensione\b", "email_review_request"),
+        (r"\b(?:do you )?remember (?:what|when|that|the thing|anything) (?:i|we) (?:told|said|mentioned|wrote|decided|agreed)(?: to)? ?(?:you)?\b.{0,20}?\b(?:about|on|regarding|for|su|del|della|riguardo)\s+(?:the |our |my |il |la |lo )?(?P<topic>[a-zà-ú][a-zà-ú0-9 \-']{2,40}?)\W*$|\bwhat did i (?:tell|say to) you about (?:the |our |my )?(?P<topic2>[a-zà-ú][a-zà-ú0-9 \-']{2,40}?)\W*$|\bti ricordi (?:cosa|quello che) (?:ti )?(?:ho detto|avevo detto|abbiamo detto) (?:su|del|della|sul|sulla|riguardo a?l?)\s+(?P<topic3>[a-zà-ú][a-zà-ú0-9 \-']{2,40}?)\W*$", "remember_topic"),
+        (r"\b(?:what(?:'s| is) )?(?:the )?(?:most important|key|one|single most important|number one|main|first) (?:number|metric|figure|kpi|stat|thing to watch|thing to track|indicator)s?\b.{0,25}?\b(?:to )?(?:watch|track|look at|follow|check|care about|matter|matters)\b|\bwhich (?:number|metric|kpi) (?:matters|counts) (?:the )?most\b|\bwhat should i (?:watch|track|look at) (?:every day|daily|most|first)\b|\bil numero più importante\b|\bquale metrica\b", "key_number"),
+        (r"\bhow much (?:did|have) we (?:lose|lost|pay|paid|spend|spent)\b.{0,20}?\b(?:on |in |to |for |because of )?(?:refunds?|returns?|cancellations?|cancelled orders|resi|rimborsi)\b|\b(?:refunds?|returns?|cancellations?) (?:cost|cost us|lost us|total|totale)\b|\bmoney (?:lost|spent) on (?:refunds?|returns?)\b|\bquanto (?:abbiamo perso|ci sono costati) (?:con |per |in )?(?:i )?(?:resi|rimborsi)\b", "refund_losses"),
+        (r"\b(?:customer|client|buyer|someone|cliente|he|she|they) (?:paid|was charged|got charged|has been charged|were charged|was billed|ha pagato|è stato addebitato)\s+(?:twice|two times|double|2 times|2x|due volte|doppio)\b|\b(?:double|duplicate) (?:payment|charge|order|pagamento|addebito)\b|\bcharged (?:them|him|her) twice\b|\btwo (?:payments|charges) for (?:one|the same) order\b", "paid_twice"),
+        (r"^\W*(?:give me|i need|can i have|i could use|dammi|ho bisogno di)\s+(?:a |some |un |una )?(?:pep ?talk|motivation|encouragement|boost|kick|push|good news|reason to (?:keep going|continue|go on)|motivazione|incoraggiamento|carica)\W*$|\b(?:motivate|encourage|cheer) me( up)?\b|\btell me (?:something good|it'?s going to be (?:ok|fine|alright)|we'?ll make it)\b|\bcheer me up\b|\bincoraggiami\b", "pep_talk"),
         (r"^\W*(?:are you sure(?: about (?:that|this|it))?|sure\??|really\??|(?:is|are) (?:that|those|these) (?:right|correct|true|real)|sei sicur[oa]|davvero)\W*$|\bhow do you know (?:that|this)\b|\bwhere (?:did you get|does) (?:that|this) (?:number|figure)? ?(?:come )?from\b", "are_you_sure"),
         (r"\b(?:best[- ]selling|top|most popular|best) (?:product|item|seller)\b.{0,20}?\b(?:and )?why\b|\bwhy (?:does|is) (?:the |our )?(?:\w+ ){0,3}(?:sell|selling) (?:so )?(?:well|best|most)\b|\bwhy is (?:it|that) (?:the|our) best[- ]?seller\b|\bperch[ée] (?:si )?vende", "best_why"),
         (r"\b(?:how long|when) (?:until|till|before|do) (?:we|i) ?(?:break even|breakeven|reach break[- ]even|get (?:the|our) money back|recover (?:the|our) (?:investment|money|start-?up costs?))\b|\bbreak[- ]?even\b.{0,20}?\b(?:when|how long|point)\b|\bquando (?:andiamo in pari|rientriamo)\b|\bhave we (?:broken even|made (?:the|our) money back)\b", "break_even"),
@@ -92,6 +108,22 @@ class SelfTalk:
                 if r:
                     return r
         return None
+
+    # ---- owner preferences read by core ----
+    def muted(self):
+        try:
+            return tuple(self.memory.pref("mute_proposals", []) or []) if self.memory else ()
+        except Exception:
+            return ()
+
+    def auto_ok(self, kind, checks):
+        """May this customer reply go out without a tap? Only if the owner said 'send routine replies yourself' and the kind is routine and clean."""
+        try:
+            if not (self.memory and self.memory.pref("auto_routine")):
+                return False
+        except Exception:
+            return False
+        return kind in ("where_is_my_order", "product_question", "compliment") and not checks
 
     # ---- helpers --------------------------------------------------------------------------------
     def _n(self):
@@ -1024,6 +1056,351 @@ class SelfTalk:
                 "3. Never spend your money or speak in public without your tap — and get so good at preparing things that your tap takes 10 seconds.\n"
                 "4. Get smarter every week: learn from what you accept and reject, from the customers' messages, and from what I read in the quiet hours.\n"
                 "What I'm NOT optimising for: sales at any margin, ads before the page converts, or a hundred products — three that sell beat thirty that don't.")
+
+    def show_maths(self, t, m):
+        n = self._n()
+        st = self.store
+        last = None
+        try:
+            last = self.last_reply()
+        except Exception:
+            pass
+        if not n or not n.get("orders"):
+            return "No sales yet, so the only maths I have is the price list: " + "; ".join(f"{p['name'].split(' (')[0]} {_eur(p['price'])} − cost {_eur(p['cost'])} = {_eur(p['price'] - p['cost'])} gross ({(p['price'] - p['cost']) / p['price'] * 100:.0f} %)" for p in st.products()) + "."
+        rev, cogs, ship, fees, profit = n["revenue"], n["cogs"], n["shipping_cost"], n["fees"], n["profit"]
+        losses = n.get("losses", 0)
+        paid = self._paid()
+        units = sum(l["qty"] for o in paid for l in o["lines"])
+        conv = n["conversion"]
+        head = "The maths behind it, line by line" + (f" (for “{last[0][:50]}”)" if last and last[0] and "€" in str(last[1]) else "") + ":\n"
+        lines = [f"• sales: {len(paid)} paid orders, totals added up = {_eur(rev)} (goods + shipping the customers paid)",
+                 f"• goods: for every order line, quantity × the cost you set per product → {units} units = {_eur(cogs)}",
+                 f"• shipping we pay: € 2,90 per parcel + € 0,35 per unit → {len(paid)} × 2,90 + {units} × 0,35 = {_eur(ship)} (practice rates; give me your real contract and I swap them)",
+                 f"• payment fees: 2,9 % of each total + € 0,30 → {_eur(fees)}"]
+        if losses:
+            lines.append(f"• refunds/cancellations: fees the gateway kept + goods and postage on parcels that had already left = {_eur(losses)}")
+        lines.append(f"• profit = {_eur(rev)} − {_eur(cogs)} − {_eur(ship)} − {_eur(fees)}" + (f" − {_eur(losses)}" if losses else "") + f" = {_eur(profit)} → {profit / rev * 100:.0f} % of sales")
+        lines.append(f"• conversion: {len(paid)} orders ÷ {n['visits']} visits × 100 = {conv:.1f} %")
+        lines.append(f"• average basket: {_eur(rev)} ÷ {len(paid)} = {_eur(rev / len(paid))}; profit per order {_eur(profit / len(paid))}")
+        lines.append("Not in there: your time, boxes (~€ 1 a parcel), the domain, ads, taxes — say “explain the numbers like I'm 5” for the plain version, or ask about one product and I do its line alone.")
+        return head + "\n".join(lines)
+
+    def not_convinced(self, t, m):
+        last = None
+        try:
+            last = self.last_reply()
+        except Exception:
+            pass
+        if not last or not last[1]:
+            return "Fair — tell me which part and I'll show you what it rests on. I'd rather be corrected than trusted blindly."
+        q, a = last
+        a_l = a.lower()
+        if re.search(r"€|\d+ orders?|\d+ visits|conversion", a_l):
+            return ("Fair enough. What's solid in what I said: the counts and euros (from the ledger, nothing estimated). What's arguable: the conclusions I drew from them — small numbers, a few days, one shop. "
+                    "So here's the test instead of my opinion: pick the smallest version of it, run it for a week, and look at the numbers with me on Friday. If it didn't move anything, we drop it and I'll say so. "
+                    "And if you know something the ledger doesn't (a supplier, a customer's tone, the neighbourhood), tell me — that changes the answer more than my maths does.")
+        if re.search(r"\b(law|legal|vat|tax|inps|forfettario|guarantee|withdraw)\b", a_l + q.lower()):
+            return "Then don't take my word for it — this is a legal/tax point, and the right move is a 20-minute call with a commercialista with my summary in hand. I'll write it as three questions to ask: say “write the questions for the accountant”."
+        return ("That's allowed. It's my judgement, not a fact — I can be wrong, especially about people and taste. Tell me what you'd do instead and I'll argue it honestly: "
+                "if your version is better I'll say so and remember it for next time; if I still disagree I'll give you the one number that would settle it.")
+
+    def discouraged(self, t, m):
+        n = self._n() or {}
+        st = self.store
+        day = st.data.get("day", 0)
+        facts = self._facts()
+        bad = [f for f in facts if f[0] == "bad"]
+        if not n.get("orders"):
+            return ("I hear you. Two honest things: first, no shop sells before people see it — with zero visits the product isn't the problem, the door is. Second, the fix is boring and it works: one short video a day for 14 days, "
+                    "same product, real room, and the shipping price visible on the page. Let's not decide anything about quitting on a day with no data. "
+                    "Say “run a practice week” and “what should I post today?” and we look at real numbers together next week — if they're bad, I'll be the first to say what to change.")
+        conv = n.get("conversion", 0)
+        aov = n["revenue"] / n["orders"]
+        good_bits = []
+        if conv >= 1.5:
+            good_bits.append(f"{conv:.1f} % of visitors buy — that's a shop that works; what's missing is visitors, not a better shop")
+        if n["revenue"] and n["profit"] / n["revenue"] >= 0.4:
+            good_bits.append(f"every order leaves {_eur(n['profit'] / n['orders'])} — the maths is healthy")
+        per_day = n["orders"] / max(1, day)
+        lines = [f"I get it — {n['orders']} orders in {day} day(s) feels like nothing when you're the one packing. Let me be straight rather than cheerful:"]
+        if good_bits:
+            lines.append("• what's actually good: " + "; ".join(good_bits) + ".")
+        if bad:
+            lines.append("• what's actually wrong: " + "; ".join(f[1].split(' — ')[0] for f in bad[:2]) + " — fixable this week, not a reason to quit.")
+        lines.append(f"• the size of it: at {per_day:.1f} orders a day you're on the normal curve for month one; shops that make it don't sell more in week 1, they post more and don't stop.")
+        lines.append("What I'd do today: one thing that changes the door, not the shop — say “what should I post today?” and I hand you the shot and caption; then leave the numbers alone for three days. "
+                     "If in a month the visits are up and nothing sells, that's a real signal and we'll talk about changing products — with data, not on a bad evening.")
+        return "\n".join(lines)
+
+    def be_honest(self, t, m):
+        facts = self._facts()
+        n = self._n() or {}
+        if not facts or (len(facts) == 1 and facts[0][2] == "run"):
+            return "Honest: there's nothing to judge yet — no sales data. The honest risk is spending weeks polishing a shop nobody visits; the honest fix is posting daily from day one. Run practice days and ask me again; I'll be blunt."
+        bad = [f for f in facts if f[0] == "bad"]
+        good = [f for f in facts if f[0] == "good"]
+        out = ["Honest, no cushion:"]
+        if bad:
+            out.append("• Bad: " + "; ".join(f[1] for f in bad[:3]) + ".")
+        if good:
+            out.append("• Good: " + "; ".join(f[1] for f in good[:2]) + ".")
+        rev = n.get("revenue", 0)
+        day = self.store.data.get("day", 0) or 1
+        monthly = rev / day * 30
+        out.append(f"• The size: {_eur(monthly)} of sales a month at this pace — " + ("pocket money, not an income yet. That's normal at the start and it's a traffic problem, not a product problem." if monthly < 1500 else "a real side income; the next step is repeat customers, not new products." if monthly < 5000 else "a real business — start acting like one (accountant, contracts, backup shipper)."))
+        out.append("• About me: I see the ledger, not the world — I don't know how your photos look next to the competition or how you sound to customers. Where I'm guessing I'll say so; where I'm sure I'll say that too.")
+        out.append("• What I'd stop doing: asking me for opinions more than once a day — the numbers change slowly; posting changes them faster.")
+        return "\n".join(out)
+
+    def differently(self, t, m):
+        st = self.store
+        day = st.data.get("day", 0)
+        if day < 7:
+            fx = self._facts()
+            bad = [f for f in fx if f[0] == "bad"]
+            return ("There isn't a full 'last week' yet (day " + str(day) + "), so from what I can see: " + ("; ".join(f[1].split(' — ')[0] for f in bad[:3]) + " — I'd fix those first and I'd propose them earlier instead of waiting to be asked." if bad else "nothing went wrong yet — I'd start posting daily from day one, that's the one thing every shop wishes it had done sooner.")
+                    + " Ask again after a week and I compare the two weeks properly.")
+        a = self._week(day - 7, day); b = self._week(day - 14, day - 7)
+        out = ["Differently than last week:"]
+        if b["orders"] and a["orders"] < b["orders"]:
+            out.append(f"• Sales fell ({a['orders']} vs {b['orders']} orders): last week I'd have posted more mid-week — visits {a['visits']} vs {b['visits']} say the door was quieter.")
+        elif b["orders"]:
+            out.append(f"• Sales held or grew ({a['orders']} vs {b['orders']} orders) — I'd change less, not more; one lever at a time.")
+        if a["late"]:
+            out.append(f"• {a['late']} order(s) shipped late — I'd print the labels every morning before anything else; it's 10 minutes and it's the promise on the page.")
+        if a["oos_days"]:
+            out.append("• Something was sold out for part of the week — I'd reorder at 2 weeks of stock, not at zero.")
+        if a["unanswered"]:
+            out.append(f"• {a['unanswered']} customer message(s) waited — I'd approve drafts once a day at a fixed time.")
+        if len(out) == 1:
+            out.append("• Nothing I'd undo — the week ran clean. I'd add one thing: a post about the second product, so the shop isn't one item deep.")
+        out.append("Me: I'd nag less about small things and earlier about the big ones (late orders, stock-outs).")
+        return "\n".join(out)
+
+    def _week(self, lo, hi):
+        st = self.store
+        orders = [o for o in st.data["orders"] if o["status"] in ("paid", "shipped", "delivered") and lo < o.get("day", 0) <= hi]
+        visits = sum(v for d, v in st.data.get("visits", {}).items() if lo < int(d) <= hi)
+        late = sum(1 for o in orders if o["status"] == "paid" and st.data.get("day", 0) - o.get("day", 0) >= 1)
+        oos_days = any(p["stock"] == 0 for p in st.products())
+        unanswered = 0
+        try:
+            unanswered = len([r for r in self.inbox.items("new")]) if self.inbox is not None else 0
+        except Exception:
+            pass
+        return {"orders": len(orders), "visits": visits, "late": late, "oos_days": oos_days, "unanswered": unanswered}
+
+    def mute_kind(self, t, m):
+        what = (m.group("what") or "").lower()
+        kind = ("price" if re.search(r"pric|repric|prezz", what) else "stock" if re.search(r"stock|reorder|riordin|scort", what) else
+                "ship" if re.search(r"ship|order remind", what) else "all")
+        if self.memory is None:
+            return None
+        muted = set(self.memory.pref("mute_proposals", []) or [])
+        if kind == "all":
+            muted = {"price", "stock", "ship"}
+        else:
+            muted.add(kind)
+        self.memory.set_pref("mute_proposals", sorted(muted))
+        names = {"price": "price changes", "stock": "reorders / stock", "ship": "shipping reminders"}
+        what_now = ", ".join(names[k] for k in sorted(muted))
+        return (f"Understood — no more proposals about {names.get(kind, 'anything')} from me" + (f" (now muted: {what_now})" if kind != "all" else " (all three kinds muted)") +
+                ". I'll still answer if you ask, and I'll still mention it once in the evening report when it costs money (a thin margin, a sold-out best seller). "
+                "Say “propose price changes again” to switch it back on.")
+
+    def unmute(self, t, m):
+        if self.memory is None:
+            return None
+        low = t.lower()
+        changed = []
+        if re.search(r"\b(everything|all|every)\b", low) or not re.search(r"\b(price|stock|ship|replies|messages|yourself|alone|automatically)\b", low):
+            if self.memory.pref("mute_proposals"):
+                self.memory.set_pref("mute_proposals", []); changed.append("proposals of every kind are back on")
+            if self.memory.pref("auto_routine"):
+                self.memory.set_pref("auto_routine", False); changed.append("every customer reply comes to you again before it goes out")
+        else:
+            muted = set(self.memory.pref("mute_proposals", []) or [])
+            for k in ("price", "stock", "ship"):
+                if k in low and k in muted:
+                    muted.discard(k); changed.append(f"{k} proposals back on")
+            if re.search(r"\b(replies|messages|yourself|alone|automatically|answering)\b", low) and self.memory.pref("auto_routine"):
+                self.memory.set_pref("auto_routine", False); changed.append("every customer reply comes to you again before it goes out")
+            self.memory.set_pref("mute_proposals", sorted(muted))
+        if not changed:
+            return "Nothing was switched off — you already see everything: every proposal and every reply before it goes out."
+        return "Done: " + "; ".join(changed) + "."
+
+    def auto_routine(self, t, m):
+        if self.memory is None:
+            return None
+        self.memory.set_pref("auto_routine", True)
+        return ("OK — from now on I send the routine replies myself: where-is-my-order (with the tracking from the ledger), product questions answered from the product page, shipping/returns information. "
+                "Each one still shows up in your chat afterwards, marked 'sent by me', so you can read it and tell me if you'd have said it differently — I learn from that.\n"
+                "Still yours to approve, always: refunds and returns with money in them, damaged/wrong items, cancellations, complaints, anything angry, discounts, press/collab, and anything my checks flag. "
+                "Say “ask me everything again” to switch it back.")
+
+    def fix_them(self, t, m):
+        facts = self._facts()
+        st = self.store
+        acts = []
+        for f in facts:
+            if f[2] == "ship":
+                acts.append("labels + packing slips for the waiting orders (say “all shipped” when they're with GLS)")
+            elif f[2] == "restock":
+                acts.append("a reorder proposal for what's sold out — quantities from the sales pace, you tap Apply")
+            elif f[2] == "reorder":
+                acts.append("a reorder proposal for what's nearly out")
+            elif f[2] == "inbox":
+                acts.append("the customer drafts, one by one with Approve / Edit / Reject")
+            elif f[2] == "proposals":
+                acts.append("the open proposals again, so you can tap them")
+        if not acts:
+            return "There's nothing broken to fix right now — orders shipped, stock fine, inbox empty. If you meant something specific, name it."
+        return {"fix_all": True, "text": "On it — in order: " + "; ".join(acts) + "."}
+
+    def email_past_customers(self, t, m):
+        st = self.store
+        n = self._n() or {}
+        units = n.get("units", {})
+        shop = st.data.get("name", "Green Nest")
+        low = t.lower()
+        back = [p for p in st.products() if p["stock"] > 0 and re.search(r"\bback in stock\b", low)]
+        best = max(units, key=units.get).split(" (")[0] if units else "the bamboo toothbrush set"
+        new_item = next((p for p in st.products() if p["stock"] > 0 and not units.get(p["name"])), None)
+        hook = (f"{back[0]['name'].split(' (')[0]} is back" if back else f"Something new next to your {best}")
+        body = (f"Subject: {hook} — and a small thank-you\n\n"
+                f"Hi {{first name}},\n\n"
+                f"A few weeks ago you ordered from {shop} — thank you, really: a small shop notices every single order.\n\n"
+                + (f"Quick news: the {back[0]['name'].split(' (')[0]} is back in stock (we had run out — sorry to anyone who looked for it).\n\n" if back else
+                   (f"Quick news: we've added the {new_item['name'].split(' (')[0]} ({_eur(new_item['price'])}) — it sits well next to the {best} you have.\n\n" if new_item else f"Quick news: the {best} now ships the same day, and free over the threshold you'll see in the cart.\n\n"))
+                + "As a thank-you, the code BACK10 takes 10 % off your next order until Sunday. No pressure — if you'd rather not hear from us, the unsubscribe link is below and it works.\n\n"
+                "One favour: if something wasn't perfect with your last parcel, reply to this e-mail and tell me — I read every reply.\n\n"
+                f"Warmly,\n{{your name}}, {shop}\n\n(unsubscribe link)")
+        return ("E-mail to past customers — short, one piece of news, one code, one question:\n\n" + body +
+                "\n\nSend it once, Tuesday–Thursday morning, only to people who bought (that's legitimate interest under GDPR; the unsubscribe link is mandatory). "
+                "Expect 30–40 % opens and 3–8 % of them ordering. Say “make it Italian” or “change the code” and I redo it; say “send it” and I prepare the list for your tap.")
+
+    def email_review_request(self, t, m):
+        st = self.store
+        shop = st.data.get("name", "Green Nest")
+        it = bool(re.search(r"\b(italian|in italiano|italiano)\b", t.lower()))
+        if it:
+            body = (f"Oggetto: Com'è andata con il tuo ordine {shop}?\n\n"
+                    "Ciao {nome},\n\n"
+                    "Il tuo {prodotto} dovrebbe essere arrivato da qualche giorno — spero ti stia piacendo.\n\n"
+                    "Ti chiedo un favore piccolo ma per noi enorme: una recensione onesta, anche di due righe (una foto vale doppio). Bastano 30 secondi: {link recensione}\n\n"
+                    "Se invece qualcosa non è andato bene, rispondi a questa mail prima di lasciare la recensione: lo sistemiamo, sempre.\n\n"
+                    f"Grazie davvero,\n{{il tuo nome}}, {shop}")
+        else:
+            body = (f"Subject: How's your {shop} order working out?\n\n"
+                    "Hi {first name},\n\n"
+                    "Your {product} should have arrived a few days ago — I hope it's already in use.\n\n"
+                    "A small favour that's huge for a small shop: an honest review, even two lines (a photo counts double). It takes 30 seconds: {review link}\n\n"
+                    "And if anything wasn't right, reply to this e-mail before you review — we fix it, always.\n\n"
+                    f"Thank you,\n{{your name}}, {shop}")
+        return ("Review request e-mail — send it 5–7 days after delivery, one per order, never twice:\n\n" + body +
+                "\n\nRules I kept: no reward for the review itself (an EU no-no when undisclosed), a way to complain privately first, one link, no images. Expect 5–10 % of buyers to leave one. "
+                + ("Say “in English” for the English version." if it else "Say “in Italian” for the Italian version.") + " When the real shop has a review link, I fill it in and queue them automatically after delivery — with your tap on the first few.")
+
+    def remember_topic(self, t, m):
+        topic = (m.group("topic") or m.group("topic2") or m.group("topic3") or "").strip(" ?.!")
+        out = []
+        try:
+            for r in (self.memory.notes(topic, limit=3) if self.memory else []):
+                if r.get("kind") in ("owner", "decision", "owner_said") or topic.lower() in (r.get("topic", "") + " " + r.get("text", "")).lower():
+                    out.append(f"• {r['t'][:10]}: {r['text'][:200]}")
+        except Exception:
+            pass
+        try:
+            for x in (self.memory.todo.get("items", []) if self.memory else []):
+                if topic.lower() in x["text"].lower():
+                    out.append(f"• to-do #{x['id']} ({x['status']}): {x['text'][:120]}")
+        except Exception:
+            pass
+        try:
+            for c in reversed(self.store.data.get("changes", [])[-30:]):
+                if topic.lower() in (str(c.get("what", "")) + " " + str(c.get("why", ""))).lower():
+                    out.append(f"• store change {c['t'][:10]}: {c['what'][:100]}")
+        except Exception:
+            pass
+        if not out:
+            return (f"Honestly, no — I have nothing written down from you about “{topic}”. I keep what you tell me only when it's a to-do, a decision, a reminder or a store change; plain chat I don't store. "
+                    f"Tell me again in one line (“note: the supplier …”) and I'll keep it under “{topic}”.")
+        return f"What I have from you about “{topic}”:\n" + "\n".join(dict.fromkeys(out[:6]))
+
+    def key_number(self, t, m):
+        n = self._n() or {}
+        st = self.store
+        conv = n.get("conversion", 0)
+        if not n.get("orders"):
+            return ("One number: visits a day. Before the first sales nothing else can move — no visits, no data. Watch it every evening; when it's above ~50 a day, switch to conversion (buyers ÷ visitors). "
+                    "Say “how many visitors did we get today?” each evening and I'll tell you.")
+        margin = n["profit"] / n["revenue"] if n["revenue"] else 0
+        day = st.data.get("day", 0) or 1
+        per_day = n["orders"] / day
+        if conv < 1.2:
+            pick = ("conversion", f"{conv:.1f} % — under 1,2 % it means visitors arrive and leave; every euro on traffic is wasted until it's ~2 %. Watch it weekly (daily is noise), fix the page, not the ads.")
+        elif margin < 0.35:
+            pick = ("net margin per order", f"{_eur(n['profit'] / n['orders'])} ({margin * 100:.0f} %) — thin; one refund eats three sales. Watch it every time you change a price or a shipping rule.")
+        elif per_day < 3:
+            pick = ("visits a day", f"~{n['visits'] / day:.0f} — the shop converts ({conv:.1f} %) and earns ({margin * 100:.0f} %), so the only thing between you and more orders is people at the door. Watch it daily; each post should show up in it.")
+        else:
+            pick = ("repeat rate", "how many buyers come back within 60 days — at this volume growth comes from the second order, which costs nothing; watch it monthly, aim for 15–20 %.")
+        return (f"One number to watch right now: {pick[0]} — {pick[1]}\n"
+                "The other two on the dashboard, not to obsess over: orders a day (the pulse) and net margin (the health). Everything else — followers, likes, page views — is weather.\n"
+                "It changes as the shop grows: visits first, then conversion, then margin, then repeat rate — ask me again in a month.")
+
+    def refund_losses(self, t, m):
+        st = self.store
+        orders = st.data["orders"]
+        if not orders:
+            return "No orders yet, so no refunds and nothing lost."
+        ref = [o for o in orders if o["status"] == "refunded"]
+        canc = [o for o in orders if o["status"] == "cancelled"]
+        if not ref and not canc:
+            return f"Nothing lost on refunds so far: 0 refunds and 0 cancellations out of {len(orders)} orders. Keep it that way with double boxes for anything breakable and same-day tracking mails — the two causes of most refunds."
+        fees = sum(0.029 * o["total"] + 0.30 for o in ref + canc)
+        shipped = [o for o in ref if o.get("tracking")]
+        post = sum(2.9 + 0.35 * sum(l["qty"] for l in o["lines"]) for o in shipped)
+        goods = sum(l["qty"] * l.get("cost", 0) for o in shipped for l in o["lines"])
+        total = fees + post + goods
+        refunded_money = sum(o["total"] for o in ref)
+        return (f"Refunds and cancellations so far: {len(ref)} refund(s) ({_eur(refunded_money)} given back) and {len(canc)} cancellation(s) out of {len(orders)} orders.\n"
+                f"What it actually cost us (the refund itself is the customer's money going back, not a loss):\n"
+                f"• payment fees the gateway kept: {_eur(fees)}\n"
+                + (f"• postage on {len(shipped)} parcel(s) that had already left: {_eur(post)}\n• goods on those parcels (not back on the shelf in the practice store): {_eur(goods)}\n" if shipped else "• no postage or goods lost — everything was cancelled before shipping\n")
+                + f"Total lost: {_eur(total)} — {total / max(1, len(ref) + len(canc)):.2f} € per case. "
+                + ("Under 3 % of orders is normal for home goods." if (len(ref) + len(canc)) / len(orders) < 0.03 else "That's above the 2–5 % normal — ask me “did anyone complain?” to see the reasons."))
+
+    def paid_twice(self, t, m):
+        return ("Double payment — do this, in order:\n"
+                "1. Check before believing it: in the payment provider (Stripe/PayPal) look for two charges with the same amount minutes apart. Often it's one charge plus a pending authorisation that disappears in 3–5 days — no refund needed, just tell the customer.\n"
+                "2. If there really are two orders: cancel the duplicate order and refund the second charge in full from the provider (not a bank transfer — provider refunds are traceable and free of dispute risk). Do it today; a customer who paid twice is one click from a chargeback.\n"
+                "3. Keep the first order moving — ship it, don't hold it hostage to the refund.\n"
+                "4. Write to them: “You're right — the second payment is refunded, it shows on your card in 5–10 business days; your order ships as planned. Sorry for the scare.” I'll draft it: say “customer paid twice, write the reply”.\n"
+                "5. Refund costs you the fee on the duplicate (~2,9 % + € 0,30) — annoying, not worth arguing over.\n"
+                "Give me the order number and I prepare the cancel + refund proposal for your tap.")
+
+    def pep_talk(self, t, m):
+        n = self._n() or {}
+        st = self.store
+        day = st.data.get("day", 0)
+        if not n.get("orders"):
+            return ("Here's the honest pep talk: you've done the part most people never do — the shop exists, the prices are set, the pages are written. Everyone else is still 'thinking about it'. "
+                    "What's left isn't clever, it's daily: one post, one parcel, one reply. Nobody's first month is impressive; the ones who make it are simply still there in month three. "
+                    "Run a practice day, post once today, and let me carry the boring parts.")
+        good = []
+        if n.get("conversion", 0) >= 1.5:
+            good.append(f"{n['conversion']:.1f} % of visitors buy — that's a shop people trust on first sight")
+        if n["revenue"] and n["profit"] / n["revenue"] >= 0.4:
+            good.append(f"{n['profit'] / n['revenue'] * 100:.0f} % stays as profit — the maths works, which is rarer than it sounds")
+        units = n.get("units", {})
+        if units:
+            best = max(units, key=units.get).split(" (")[0]
+            good.append(f"{units[max(units, key=units.get)]} people chose the {best} — strangers, with their own money")
+        return (f"Pep talk, with facts (I don't do the empty kind): {n['orders']} orders in {day} day(s). " + ("; ".join(good) + ". " if good else "") +
+                "Everything that's not working is a traffic problem, and traffic is the one problem that gives in to plain stubbornness — a post a day, for weeks. "
+                "You don't need a better idea; you need the same idea for 60 more days. I'll take the numbers, the drafts and the labels; you take the camera. Say “what should I post today?” — that's today's whole job.")
 
     def learned(self, t, m):
         bits = []

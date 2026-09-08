@@ -100,6 +100,17 @@ class Memory:
     def open_items(self):
         return [x for x in self.todo["items"] if x["status"] == "open"]
 
+    # ---- owner preferences ('stop proposing price changes', 'send routine replies yourself') ----
+    def pref(self, key, default=None):
+        return self.todo.setdefault("prefs", {}).get(key, default)
+
+    def set_pref(self, key, value):
+        self.todo.setdefault("prefs", {})[key] = value
+        self.todo["prefs_t"] = self.todo.get("prefs_t", {})
+        self.todo["prefs_t"][key] = _now()
+        self._save()
+        return value
+
     def list_text(self):
         items = self.open_items()
         goals = self.todo["goals"]

@@ -607,6 +607,12 @@ class Agent:
                     self.inbox.decide(rec["id"], "rejected", "", note="spam", kind=d["kind"])
                     self.notify(f"🗑 Spam from {rec['from']} — no reply: “{rec['text'][:120]}”")
                     continue
+                if self.talk.selftalk.auto_ok(d["kind"], d["checks"]) and d.get("text") and not d.get("escalate") and d.get("urgency") != "high":
+                    self.inbox.decide(rec["id"], "approved", d["text"], note="auto (owner: routine replies)", kind=d["kind"], draft=d["text"])
+                    self.deliver(rec["id"], d["text"])
+                    self.bot.send(self.owner_id, f"📤 Sent by me (routine · {d['kind'].replace('_', ' ')}) to {rec['from']}:\n“{rec['text'][:200]}”\n\n— my reply —\n{d['text']}\n\nTell me if you'd have said it differently.")
+                    self.log("inbox_auto", id=rec["id"], mtype=d["kind"])
+                    continue
                 self.drafts[rec["id"]] = d
                 head = f"📨 {rec['from']} ({rec['channel']}) · {d['kind'].replace('_', ' ')} · {d['urgency']}" + (" · ⚠️ ESCALATION" if d.get("escalate") else "")
                 flags = ("\n⚠️ " + "; ".join(d["checks"])) if d["checks"] else ""
@@ -1006,6 +1012,24 @@ class Agent:
                 return self.domain_check(direct["domain"])
             if direct.get("weather"):                                                # "what's the weather in bergamo" → Open-Meteo (free, no key)
                 return self.weather(direct["weather"], direct.get("when", "now"))
+            if direct.get("fix_all"):                                                 # "fix them" after a list of problems → labels, reorder proposals, drafts
+                outs = [direct["text"]]
+                try:
+                    if any(o["status"] == "paid" for o in self.store.data["orders"]):
+                        outs.append(self.store_plain("labels"))
+                    props = self.store.review(mute=self.talk.selftalk.muted())
+                    for p in props:
+                        if p["kind"] in ("stock", "price"):
+                            self.bot.send(self.owner_id, f"🏪 Proposal — {p['kind']} {p['target']} → {p['change']}\n{p['why']}",
+                                          buttons=[[("✅ Apply", f"s:ok:{p['id']}"), ("❌ Leave it", f"s:no:{p['id']}")]])
+                    if props:
+                        outs.append(f"{len([p for p in props if p['kind'] in ('stock', 'price')])} reorder/price proposal(s) sent — tap Apply on the ones you agree with.")
+                    if self.inbox.items("new"):
+                        threading.Thread(target=self.process_inbox, daemon=True).start()
+                        outs.append("Drafting the customer replies now.")
+                except Exception as e:
+                    outs.append(f"(part of it failed: {str(e)[:80]})")
+                return "\n".join(outs)
             if direct.get("store_cmd"):                                              # "open the practice store", "print the labels", "all shipped"
                 return self.store_plain(direct["store_cmd"])
             if direct.get("store_change"):                                           # "lower the price of the lamp to 35" → proposal + Apply button
@@ -1484,9 +1508,9 @@ class Agent:
                 rep.append("Drafting the replies to the customer messages now — they come with Approve / Edit / Reject as usual.")
             return "\n".join(rep) + "\n\n" + st.numbers_text(st.data["day"])
         if a.startswith("review"):
-            props = st.review()
+            props = st.review(mute=self.talk.selftalk.muted())
             if not props:
-                return "Nothing to propose: all orders shipped, stock fine, prices sane."
+                return "Nothing to propose: all orders shipped, stock fine, prices sane." + (f" (you muted: {', '.join(self.talk.selftalk.muted())})" if self.talk.selftalk.muted() else "")
             for p in props:
                 self.bot.send(self.owner_id, f"🏪 Proposal — {p['kind']} {p['target']} → {p['change']}\n{p['why']}",
                               buttons=[[("✅ Apply", f"s:ok:{p['id']}"), ("❌ Leave it", f"s:no:{p['id']}")]])
@@ -1692,7 +1716,7 @@ class Agent:
         if k == "product":
             price, cost = ch["price"], ch.get("cost") or 0
             margin = (price - cost) / price * 100 if price else 0
-            note = (f" (I picked {money(price)} = 3× the cost; tell me another price if you prefer)" if ch.get("guessed") else "")
+            note = (f" (I picked {money(price)} = 3× the cost; tell me another price if you prefer)" if ch.get("guessed") else (f" — {ch['note']}" if ch.get("note") else ""))
             warn = f"\n⚠️ {margin:.0f} % gross margin is thin — below ~55 % the shipping and fees eat it. 2.5–3× the cost is the usual floor." if cost and margin < 50 else (f" — {margin:.0f} % gross margin" if cost else "")
             stock = int(ch.get("stock") or 10)
             prop = st.propose("product", ch["name"], json.dumps({"name": ch["name"], "price": price, "cost": cost, "stock": stock, "short": ""}), "you asked to add it")
