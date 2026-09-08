@@ -189,11 +189,39 @@ class Tasks:
                     opened.append((b.page.title()[:80] or r["url"], r["url"], ks))
                     if want_doc:
                         images[r["url"]] = self._page_image(b)
+        # 3) what the owner added while I was reading ("also look at prices in germany") → one or two more pages on that
+        change, extra = self.owner_change.strip(), []
+        self.owner_change = ""
+        if change and not self._stopped():
+            q = re.sub(r"^\W*(also|and|please|can you|could you|don'?t forget( to)?|make sure( to)?|remember( to)?)\s+", "", change, flags=re.I).strip(" .")
+            q = re.sub(r"^(look at|check|include|add|consider|read about|find)\s+", "", q, flags=re.I).strip() or change
+            try:
+                with self._session() as b:
+                    for r in b.search_results(f"{topic} {q}", 8):
+                        if len(extra) >= (1 if self._hurried() else 2) or self._stopped():
+                            break
+                        if FORUM.search(r["url"]) or any(r["url"] == u for _, u, _ in opened):
+                            continue
+                        try:
+                            b.open(r["url"])
+                            if b.status() != "ok":
+                                continue
+                            ks = key_sentences(b.extract_text(), f"{topic} {q}") or key_sentences(b.extract_text(), q)
+                        except BrowserError:
+                            continue
+                        if ks:
+                            extra.append((b.page.title()[:80] or r["url"], r["url"], ks))
+                            if want_doc:
+                                images[r["url"]] = self._page_image(b)
+            except BrowserError as e:
+                self.log("change_search_failed", error=str(e)[:80])
+            opened += extra
+            self.log("owner_change_applied", change=change[:80], pages=len(extra))
         brief = None
         self._release_page()
         if opened and self.planner and self.planner.installed():
             try:
-                brief = self.planner.brief(topic, opened)
+                brief = self.planner.brief(topic + (f" (you also asked: {change})" if change else ""), opened)
             except Exception as e:
                 self.log("brief_failed", error=str(e)[:100])
         if brief:
@@ -201,13 +229,17 @@ class Tasks:
         else:
             for title, url, ks in opened:
                 report.append(f"\n{title}\n{url}\n" + "\n".join(f"• {s}" for s in ks))
+        if change:
+            report.append(f"You added “{change}” while I worked: " + (f"{len(extra)} page(s) on it are included" + (" (marked in the document)" if want_doc else "") if extra else "I searched for it but found nothing solid — say it again with other words if it matters") + ".")
         report.append(f"({len(opened)} pages read in {time.time() - t0:.0f}s" + (" — stopped early as you asked" if stopped else "") + ")")
         out = "\n".join(report)
         if self.memory and opened:
             self.memory.note("research", topic, brief or out, [u for _, u, _ in opened])
         if want_doc and opened:
-            self.last_doc = self._research_doc(topic, brief, opened, images)
-            out = (f"Research: {topic}\n\n{brief}" if brief else f"Research: {topic} — {len(opened)} pages read; the document has the key points per page with links and pictures.") + f"\n({len(opened)} pages read in {time.time() - t0:.0f}s)"
+            self.last_doc = self._research_doc(topic, brief, opened, images, change=change, extra_urls={u for _, u, _ in extra})
+            out = ((f"Research: {topic}\n\n{brief}" if brief else f"Research: {topic} — {len(opened)} pages read; the document has the key points per page with links and pictures.") +
+                   (f"\nYou added “{change}” while I worked: " + (f"{len(extra)} page(s) on it are in the document, marked." if extra else "I searched for it but found nothing solid.") if change else "") +
+                   f"\n({len(opened)} pages read in {time.time() - t0:.0f}s)")
         elif want_doc:
             self.last_doc = None
             out += "\nNo document this time — none of the pages had anything solid on it. Tell me another angle (other words, a site to start from) and I try again."
@@ -242,16 +274,16 @@ class Tasks:
         except Exception:
             return None
 
-    def _research_doc(self, topic, brief, opened, images):
+    def _research_doc(self, topic, brief, opened, images, change="", extra_urls=()):
         """Write the research as a library document: summary, one option per page (picture, link, key points), sources."""
         from . import library
-        doc = library.Doc(f"Research: {topic}", f"{len(opened)} pages read · {time.strftime('%Y-%m-%d %H:%M')}", kind="research")
+        doc = library.Doc(f"Research: {topic}", f"{len(opened)} pages read · {time.strftime('%Y-%m-%d %H:%M')}" + (f" · you added: {change}" if change else ""), kind="research")
         if brief:
             doc.summary(brief)
         else:
-            doc.summary("Key points per page below; the most useful pages come first. Links open the original.")
+            doc.summary("Key points per page below; the most useful pages come first. Links open the original." + (f" Pages marked ➕ answer what you added mid-way: “{change}”." if change and extra_urls else ""))
         for i, (title, url, ks) in enumerate(opened):
-            doc.option(title, url, image=images.get(url), facts={f"Point {j + 1}": k for j, k in enumerate(ks[:5])}, grade="ok")
+            doc.option(("➕ " if url in extra_urls else "") + title, url, image=images.get(url), facts={f"Point {j + 1}": k for j, k in enumerate(ks[:5])}, grade="ok")
         for title, url, _ in opened:
             doc.source(url, title)
         path = doc.save(f"research-{topic[:40]}")
@@ -630,6 +662,7 @@ class Tasks:
     # ---- dispatcher ----------------------------------------------------
     want_doc = False          # set by the agent per job: the owner asked for a document (links + pictures), not a chat dump
     last_doc = None           # path of the last document written by research/compare
+    owner_change = ""         # what the owner said mid-job ("also look at prices in germany") — research reads one more page for it
 
     def run(self, command, want_doc=None):
         if want_doc is not None:

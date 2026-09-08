@@ -46,6 +46,26 @@ check("research: sources listed", "Sources" in html or "sources" in html.lower()
 check("research: in the library index", any("shipping days" in r.get("title", "").lower() for r in library.recent(5)), str(library.recent(2)))
 check("research: quick (< 30 s on local pages)", dt < 30, f"{dt:.0f}s")
 
+# ---- 1b. the owner adds something mid-way → one more page on it, marked in the document ------------
+def run_research_change():
+    b = T.browser()
+    calls = []
+    def sr(q, n=10):
+        calls.append(q)
+        if "returns" in q.lower():                                # the change query → a page the first pass did not open
+            return results_for(["faq.html", "supplier_a.html"])(q, n)
+        return results_for(["supplier_a.html", "supplier_b.html"])(q, n)
+    b.search_results = sr
+    T.owner_change = "also look at the returns"
+    out = T.research("shipping days", n_pages=2, want_doc=True)
+    return out, calls
+outc, calls = T.on_hands(run_research_change, timeout=200)
+htmlc = open(T.last_doc, encoding="utf-8").read() if T.last_doc else ""
+check("change: a second search was made for what the owner added", any("returns" in c.lower() for c in calls), str(calls))
+check("change: the reply says the addition was covered", "You added “also look at the returns”" in outc and "1 page(s) on it" in outc, outc[:200])
+check("change: the extra page is in the document, marked ➕", "➕" in htmlc and "faq.html" in htmlc and "you added: also look at the returns" in htmlc, str(re.findall(r"➕[^<]{0,40}", htmlc)[:2]))
+check("change: cleared after the job", T.owner_change == "")
+
 # ---- 2. no document when nothing matched (honest, no empty file) ---------------------------------
 def run_empty():
     b = T.browser(); b.search_results = results_for(["about.html", "blog.html"])
