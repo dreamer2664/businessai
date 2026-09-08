@@ -107,6 +107,7 @@ class Planner:
         self.last_error = ""
         self._self_repair(env)
         config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        config.LOG_DIR.mkdir(parents=True, exist_ok=True)                # a fresh state dir has no logs/ yet
         logf = open(config.LOG_DIR / "llm.log", "ab")
         args = [str(SERVER_BIN), "-m", str(MODEL_FILE), "--host", "127.0.0.1", "--port", str(PORT),
                 "-c", "4096", "-np", "1", "-t", THREADS, "--no-warmup"]

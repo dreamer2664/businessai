@@ -36,6 +36,21 @@ class SelfTalk:
         self.last_reply = lambda: None         # talk sets this: () → (question, answer) of the last thing I said
 
     RULES = [
+        (r"\bwhat (?:happens|would happen|will happen|if) (?:if )?(?:i|we) (?:do|did) nothing\b|\bif (?:i|we) (?:do|did) nothing (?:for|this|next|all)\b|\bwhat if (?:i|we) (?:ignore|skip|leave) (?:it|the shop|everything) (?:for )?(?:a|this|one|the) (?:week|month|day)\b|\bse non faccio (?:niente|nulla)\b|\bwhat happens if (?:i|we) (?:stop|pause|take a break)\b", "do_nothing"),
+        (r"\b(?:i'?m|i am|we'?re|we are|sono|vado|parto) (?:going |away )?(?:on|in) (?:holiday|holidays|vacation|vacanza|ferie)\b|\b(?:holiday|vacation|vacanza|ferie) (?:for|per|next|from|dal|da)\b|\b(?:i'?ll be|i will be|i'?m) (?:away|off|gone|out of town|abroad|unreachable|offline) (?:for|from|until|next|the whole|tutta|per) \b|\bgoing away for (?:a |two |three |\d+ )?(?:days?|weeks?|month)\b|\bsarò via\b|\bnon ci sono per\b", "holiday_plan"),
+        (r"\bcan you (?:run|handle|manage|watch|mind|look after) (?:the |my |our )?(?:shop|store|business|things|it) (?:while|when) (?:i|we) (?:sleep|am asleep|'m asleep|are asleep|work|'m at work|am at work|'m away|are out)\b|\bwhile i sleep\b|\b(?:at|during the) night\b.{0,30}?\b(?:you|shop|orders|customers)\b.{0,20}?\?|\bdo you (?:work|run|sleep) (?:at night|24/7|all the time|nonstop|overnight)\b|\bmentre dormo\b|\blavori (?:anche )?di notte\b", "while_sleep"),
+        (r"\bhow do you (?:decide|choose|pick|know) (?:what|which|when) to (?:propose|suggest|change|flag|recommend|ask)\b|\bwhy (?:do|did) you propose (?:that|this|it|things)\b|\bwhat makes you propose\b|\bhow do proposals work\b|\bcome decidi (?:cosa|quando) propor\w+\b", "how_propose"),
+        (r"\bwhat (?:can'?t|cannot|can not|don'?t|do not|won'?t|will not) you do\b|\bwhat are you (?:not able|unable) to do\b|\byour (?:limits|limitations|weaknesses|blind spots)\b|\bwhat are you bad at\b|\bcosa non (?:sai|puoi|riesci a) fare\b|\bthings you can'?t do\b", "cant_do"),
+        (r"\bare you sure (?:the |that the |about the )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?) (?:margin|price|cost|stock|number|figure|numbers) (?:is|are) (?:right|correct|ok|accurate)\b|\bis the (?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?) (?:margin|cost|price) (?:right|correct|accurate)\b|\b(?:check|double-check|verify|recheck) the (?P<what3>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?) (?:margin|cost|price|numbers)\b", "check_product_number"),
+        (r"\b(?:a |my )?(?:friend|mate|buddy|neighbou?r|colleague|cousin|sister|brother|mum|mom|dad|aunt|uncle|amic[oa]|collega|vicin[oa]) (?:wants?|would like|asked|asks|is asking|vuole|chiede)(?: to buy| to order| to get| to have)? (?:a |an |the |one |two |\d+ |un |una |il |la )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\b.{0,30}?\b(?:price|how much|what do i charge|charge|discount|prezzo|quanto|sconto)\b|\b(?:friends?|family|family and friends|amici|parenti) (?:price|discount|rate)\b|\bwhat (?:do i|should i|to) charge (?:a |my )?(?:friend|mate|family|cousin|neighbou?r)\b|\bhow much (?:for|do i charge) (?:a |my )?(?:friend|mate|colleague|neighbou?r)\b", "friend_price"),
+        (r"\b(?:customer|client|buyer|someone|cliente)\b.{0,20}?\b(?:paid|has paid|says (?:he|she|they) paid|ha pagato|dice di aver pagato)\b.{0,40}?\b(?:never (?:got|received|arrived|saw)|didn'?t (?:get|receive|arrive)|not (?:received|arrived|in|on) (?:the |my )?(?:account|bank|stripe|paypal)|no money|nothing (?:arrived|came)|non (?:è arrivato|ho ricevuto|vedo) (?:niente|nulla|i soldi|il pagamento))\b|\bpayment (?:missing|not received|never arrived|didn'?t arrive|not showing)\b|\b(?:money|payment|pagamento|soldi) (?:never|not|hasn'?t|non è) (?:arrived|came|showed up|arrivat[oi])\b|\bpaid but (?:no|not|nothing|never)\b", "payment_missing"),
+        (r"\b(?:when|how long until|how long before|how soon|in how many days|quando|tra quanto) (?:will|do|can|could|might|does)? ?(?:we|i|the shop|it)? ?(?:hit|reach|get to|make|pass|cross|arrive at|be at|raggiung\w+|arriv\w+ a|far\w*) (?:€|eur)?\s*(?P<amt>\d[\d.,]*)\s*(?:k|€|eur|euro|euros|mila)?\s*(?:of |in |di )?(?P<what>profit|revenue|sales|turnover|orders|customers|a month|per month|month|profitto|utile|fatturato|vendite|ordini|clienti)?\b", "when_reach"),
+        (r"\bhow (?:do|can|would) (?:i|we|you) (?:know|tell|check|see|find out|verify|spot) (?:if|whether|that) (?:a |the |this |an? online )?(?:supplier|seller|vendor|wholesaler|factory|shop|store|site|website|fornitore|venditore) is (?:legit|legitimate|real|trustworthy|reliable|safe|serious|a scam|fake|genuine|ok|okay)\b|\b(?:legit|trustworthy|reliable) (?:supplier|seller)\b.{0,20}?\b(?:how|signs|tell)\b|\bsigns of a (?:fake|scam|bad) (?:supplier|seller)\b|\bcome (?:capisco|faccio a capire|so) se (?:un |il )?(?:fornitore|venditore) è (?:serio|affidabile|una truffa)\b", "supplier_legit"),
+        (r"\bhow (?:do|does|will) (?:refunds?|a refund|rimbors[oi]) work (?:with|on|in|through) (?:stripe|paypal|shopify payments|the card|cards|satispay|klarna)\b|\b(?:stripe|paypal) refunds?\b.{0,20}?\b(?:how|fees?|cost|time|days)\b|\brefund (?:fees?|costs?)\b.{0,20}?\b(?:stripe|paypal)\b|\bcome funzionano i rimborsi (?:con|su) (?:stripe|paypal)\b", "refund_mechanics"),
+        (r"\b(?:difference|differenza) between (?:gross )?margin and markup\b|\bmargin (?:vs\.?|versus|or) markup\b|\bmarkup (?:vs\.?|versus|or) margin\b|\bmargine (?:e|o|vs) (?:ricarico|markup)\b", "margin_vs_markup"),
+        (r"\bhow many (?:orders|sales|ordini|vendite) (?:a|per|each|al|ogni) (?:day|week|month|giorno|settimana|mese) (?:is|are|counts as|would be|è|sono) (?:'|\")?(?:good|ok|okay|normal|enough|decent|healthy|bene|buono|normale)\b|\bis \d+ (?:orders|sales|ordini) (?:a|per) (?:day|week|month) (?:good|ok|okay|normal|enough|decent|bad)\b|\bwhat(?:'s| is) a (?:good|normal|decent|healthy) (?:number of )?(?:orders|sales) (?:a|per) (?:day|week|month)\b", "orders_benchmark"),
+        (r"\bwhat(?:'s| is) a (?:good|normal|acceptable|healthy|typical|decent|bad|high) (?:return|refund|cancellation|resi|reso) rate\b|\bis (?:our|my|the|a|\d+ ?%) (?:return|refund) rate (?:good|ok|okay|normal|high|bad|too high|fine)\b|\breturn rate (?:benchmark|norm|average|normal)\b|\bqual ?[èe] un (?:buon )?tasso di res[oi] (?:normale|accettabile)?\b", "return_benchmark"),
+        (r"^\W*(?:what(?:'s| is| does| do) (?:an? |the )?)?(?P<term>sku|skus|aov|cogs|roas|cpc|cpm|ctr|cac|ltv|clv|mov|upsell|cross-?sell|conversion rate|conversion|bounce rate|churn|dropshipping|dropship|3pl|fulfil+ment|landed cost|cogs|gross margin|net margin|margin|markup|break-?even|cash ?flow|inventory turnover|stock turnover|lead time|moq|minimum order quantity|white label|private label|oss|vies|incoterms|ddp|dap|exw|fob|omnibus|chargeback|reverse charge|forfettario|ateco|sdi|pec|a/b test|ab test|kpi|seo|sem|ugc|cro|dm|reel|carousel|hook|cta|call to action|funnel|retargeting|pixel|lookalike|open rate|click rate|unsubscribe rate|net promoter score|nps|omnichannel|marketplace|pos|epos|barcode|ean|gtin|hs code|customs code|tracking number|proof of delivery|pod|sla|b2b|b2c|d2c|dtc|wholesale|retail|rrp|msrp|map|bundle|loss leader|anchor price|charm pricing|psychological pricing|dynamic pricing|price elasticity|sunk cost|opportunity cost|fixed cost|variable cost|unit economics|contribution margin|payback period|working capital|invoice|pro forma|proforma|credit note|withdrawal right|diritto di recesso|legal guarantee|garanzia legale)(?: mean| stand for| stands for)?\??\W*$|\b(?:explain|spiega(?:mi)?|define|meaning of|what does) (?:the term |the word |a )?(?P<term2>sku|aov|cogs|roas|cpc|cpm|ctr|cac|ltv|conversion rate|conversion|bounce rate|churn|dropshipping|3pl|landed cost|gross margin|net margin|margin|markup|break-?even|cash ?flow|inventory turnover|lead time|moq|white label|private label|oss|vies|incoterms|ddp|omnibus|chargeback|reverse charge|forfettario|sdi|pec|kpi|seo|ugc|cro|hook|cta|funnel|retargeting|pixel|open rate|nps|b2b|d2c|wholesale|rrp|bundle|loss leader|anchor price|charm pricing|unit economics|contribution margin|payback period|working capital|credit note|withdrawal right)\b(?: like i'?m (?:5|five|10|ten|a kid|new to this))?(?: mean| stands? for)?\W*$", "glossary"),
         (r"^\W*(?:note|nota|remember|ricorda|ricordati|keep in mind|fyi|for the record|write (?:this )?down|segna|appunta)\b\s*(?:that|this|che|:)?\s*(?P<what>.{6,300})$", "take_note"),
         (r"\bwhat(?:'s| is) (?:the |our |my )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?) (?:supplier|fornitore|vendor|factory|maker|producer|courier|accountant|commercialista|photographer|designer|bank|agency)(?:'s name| called| name)?\b\W*$|\bwho (?:makes|supplies|produces|manufactures|delivers|ships) (?:the |our |my )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\W*$|\bwho (?:is|'s) (?:the |our |my )?(?P<what5>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?) (?:supplier|fornitore|vendor|courier|accountant|commercialista)\W*$|\bcome si chiama (?:il |la )?(?:fornitore|corriere) (?:del|della|dei|delle) (?P<what3>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\W*$", "recall_fact"),
         (r"\bhow(?:'s| is|’s) (?:the |our |my )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?) (?:doing|going|selling|performing|moving)\b|\bcome (?:va|vanno|sta andando) (?:la |il |le |i |lo )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\W*$", "product_report"),
@@ -119,6 +134,10 @@ class SelfTalk:
     FOLLOW_DO = re.compile(r"^\W*(?:ok|okay|yes|yep|sure|fine|alright|va bene|sì|si|ok then|good|great|perfect)?[\s,]*(?:do it|do that|go ahead|go for it|make it so|let'?s do (?:it|that)|please do|yes please|do the first one|start with that|fallo|procedi|vai)\W*$", re.I)
     FOLLOW_EXPENSIVE = re.compile(r"^\W*(?:that'?s|that is|it'?s|this is|too|sounds|seems)?\s*(?:too |way too |a bit |very )?(?:expensive|much|much money|pricey|dear|costly|a lot|caro|troppo|troppi soldi)\b.{0,30}$|\bi (?:can'?t|cannot|don'?t want to) (?:afford|spend) (?:that|this|so much|that much)\b|\bcheaper (?:version|option|way)\??\W*$", re.I)
     FOLLOW_NOTIME = re.compile(r"^\W*(?:i )?(?:don'?t|do not|haven'?t got|have no|no)\s+(?:have )?(?:the )?time(?: for (?:that|this|it|all that|all of it))?\b.{0,20}$|^\W*(?:too long|too much work|that'?s a lot of work|no time|non ho tempo|shorter\??|tl;?dr|quicker version\??|make it (?:short|shorter|quick))\W*$", re.I)
+
+    @classmethod
+    def _rule(cls, name):
+        return next(p for p, n in cls.RULES if n == name)
 
     def followup(self, t):
         """Short reactions that only make sense after my last answer: 'and the mug?', 'why?', 'what else?', 'ok do it', 'too expensive', 'no time'."""
@@ -206,7 +225,7 @@ class SelfTalk:
 
     def reply(self, t):
         low = t.lower().strip()
-        if self.JOB_WORDS.search(low) and not re.search(self.RULES[11][0], low, re.I):     # 'how do we compare to other small shops' is a ledger question, not a job
+        if self.JOB_WORDS.search(low) and not re.search(self._rule("benchmark"), low, re.I):     # 'how do we compare to other small shops' is a ledger question, not a job
             return None
         fu = self.followup(t)
         if fu:
@@ -1514,6 +1533,373 @@ class SelfTalk:
         return (f"Pep talk, with facts (I don't do the empty kind): {n['orders']} orders in {day} day(s). " + ("; ".join(good) + ". " if good else "") +
                 "Everything that's not working is a traffic problem, and traffic is the one problem that gives in to plain stubbornness — a post a day, for weeks. "
                 "You don't need a better idea; you need the same idea for 60 more days. I'll take the numbers, the drafts and the labels; you take the camera. Say “what should I post today?” — that's today's whole job.")
+
+    # ---- round 15: consequences, absence, night work, how I propose, limits, friend price, missing payment, milestones, glossary ----
+    def do_nothing(self, t, m):
+        st = self.store
+        n = self._n() or {}
+        day = st.data.get("day", 0) or 1
+        per_day = n.get("orders", 0) / day if n.get("orders") else 0
+        waiting = [o for o in st.data["orders"] if o["status"] == "paid"]
+        low = [p for p in st.products() if p["stock"] <= 3]
+        try:
+            msgs = len(self.inbox.items("new"))
+        except Exception:
+            msgs = 0
+        wk_orders = per_day * 7
+        return ("If nothing happens for a week, day by day:\n"
+                f"• Day 1–2: {len(waiting) + round(per_day * 2)} order(s) sit unshipped; the 'ships in 1 business day' promise on the page is already broken. " + (f"{msgs} message(s) wait." if msgs else "") + "\n"
+                f"• Day 3–4: the first 'where is my order?' mails (about 1 in 3 waiting customers writes); a few cancel — with card payments that's their right and it costs the fees (~€ 0,70 each).\n"
+                f"• Day 5–7: ~{max(1, round(wk_orders * 0.1))} chargeback/complaint risk, the first public 1-star ('never shipped'), and the algorithm forgets you: 7 days without a post costs about 2 weeks of reach afterwards.\n"
+                f"• Money: roughly {_eur(n.get('profit', 0) / day * 7)} of profit not made, plus refunds of what got cancelled" + (f"; {', '.join(p['name'].split(' (')[0] for p in low[:2])} run out and stay out." if low else ".") + "\n"
+                "What I'd do on my own meanwhile: keep drafting replies (they wait for your tap unless you said “send routine replies yourself”), hold the numbers, and nag you once a day — gently.\n"
+                "If you need a week off, say “I'm going on holiday for 2 weeks” and I set it up properly (holiday notice on the page, dates in replies, labels pre-printed).")
+
+    def holiday_plan(self, t, m):
+        low = t.lower()
+        mm = re.search(r"(\d+|two|three|a|one|due|tre|una)\s*(day|days|week|weeks|month|giorni|settiman[ae]|mese)", low)
+        n = {"two": 2, "three": 3, "a": 1, "one": 1, "due": 2, "tre": 3, "una": 1}.get(mm.group(1), mm.group(1)) if mm else 1
+        n = int(n)
+        unit = mm.group(2) if mm else "week"
+        days = n * (7 if unit.startswith(("week", "settiman")) else 30 if unit.startswith(("month", "mese")) else 1)
+        st = self.store
+        nn = self._n() or {}
+        day = st.data.get("day", 0) or 1
+        per_day = nn.get("orders", 0) / day if nn.get("orders") else 1
+        try:
+            if self.memory:
+                self.memory.add(f"Holiday: {days} day(s) away — set the shop's holiday notice before leaving; remove it when back")
+        except Exception:
+            pass
+        return (f"Enjoy it. {days} day(s) away, about {per_day * days:.0f} orders in that time — three ways, pick one:\n"
+                f"1. Keep selling, ship on return: a banner + a line in the order confirmation “orders placed now ship on <return date>” — legal and honest; expect ~20 % fewer orders, almost no complaints because people knew. I put the date in every reply.\n"
+                "2. Keep selling, someone ships: labels pre-printed (say “print the shipping labels” each morning from your phone), a friend drops parcels at GLS; you do 5 minutes of taps a day.\n"
+                "3. Pause the shop: ‘back on <date>’ page, no orders, no risk — you lose the sales and about a week of algorithm momentum after.\n"
+                "Either way, before you go: reorder anything under 2 weeks of stock, approve a week of posts (say “write 7 captions”) so the pages aren't silent, "
+                "say “send routine replies yourself” if you want me to answer tracking/product questions on my own, and tell me the dates so replies and the page say the same thing. "
+                "I've put “holiday notice” on your to-do list. Which option?")
+
+    def while_sleep(self, t, m):
+        return ("Yes — I don't sleep, and the shop doesn't either. Overnight I: sort every message that comes in and draft the reply in the customer's language (sent at once if you've turned on “send routine replies yourself”, otherwise waiting for your morning tap); "
+                "watch orders and stock and prepare the labels; run the numbers; study when nothing happens (PDFs, videos → my library); and I stay quiet — no notifications between 22:00 and 08:00 unless it's money or a real problem (a chargeback, a site down). "
+                "In the morning you get one “☀️ Today” message with what happened and the 2–3 taps that need you. What I never do at night: spend money, change prices, publish, or promise a customer something outside the policy. "
+                "So: sleep. The worst thing that happens overnight is a draft waiting for you.")
+
+    def how_propose(self, t, m):
+        return ("How I decide what to propose — rules, not moods:\n"
+                "• Stock: a product under ~3 weeks of sales at its recent pace → reorder proposal; at 0 → 'sold out' page note or a 'ships in N days' proposal.\n"
+                "• Price: margin after fees under 50 % → suggest a rise; conversion low with a fat margin → suggest a bundle or free-shipping threshold before any cut; never a change within 30 days of a sale (Omnibus).\n"
+                "• Shipping: a paid order older than the promise → label proposal, and a 'ship daily' nudge if it repeats.\n"
+                "• Customers: every message → a draft; refunds/damage/anger flagged first; the 'routine' kinds go out alone only if you allowed it.\n"
+                "• Content: a product without a post in 7 days moves up the 'post today' list; the best seller gets the ad test.\n"
+                "Every proposal shows the numbers it came from and has Apply/Reject; a rejection teaches me — rejected kinds come back less often, and “stop proposing price changes” switches a kind off. "
+                "Ask “why?” after any proposal and I show the line of reasoning; “show me the maths” gives the calculation.")
+
+    def cant_do(self, t, m):
+        return ("What I can't do — honestly:\n"
+                "• Touch money: no buying stock, paying suppliers, refunding, or running ads on my own — I prepare, you tap.\n"
+                "• Publish or send without you unless you've explicitly allowed a kind (routine replies, pre-approved posts).\n"
+                "• Pack and ship, take product photos, talk on the phone to couriers or the bank.\n"
+                "• See what you don't show me: your photos, your tone, the real store's back office until it exists. My 'eyes' read screens and listings, but only when pointed at them.\n"
+                "• Solve every CAPTCHA or log into sites that block robots — I try, then hand you a one-tap fallback.\n"
+                "• Give legal or tax advice you can rely on in a dispute — I know the rules of the common case; a commercialista signs off.\n"
+                "• Predict: my forecasts come from a few weeks of numbers; treat them as direction, not promises.\n"
+                "• Remember what you never told me: supplier names, your costs, your plans — say “remember that …” and I keep it.\n"
+                "Everything else in the shop routine — replies, numbers, proposals, labels, research, documents, posts' text, study — I do.")
+
+    def check_product_number(self, t, m):
+        gd = m.groupdict()
+        what = (gd.get("what") or gd.get("what2") or gd.get("what3") or "").strip()
+        p = self.store.find_product(what) if self.store is not None else None
+        if not p:
+            return None
+        price, cost = p["price"], p.get("cost", 0)
+        fee = 0.029 * price + 0.30
+        gm = price - cost
+        net = gm - fee
+        return (f"Checked again, from the product record: {p['name'].split(' (')[0]} sells at {_eur(price)}, cost you set {_eur(cost)} → gross margin {_eur(gm)} ({gm / price * 100:.0f} %); "
+                f"payment fee 2,9 % + € 0,30 = {_eur(fee)} → {_eur(net)} ({net / price * 100:.0f} %) after fees; if that order ships free, minus the carrier (€ 2,90 + € 0,35/unit) → {_eur(net - 3.25)} ({(net - 3.25) / price * 100:.0f} %).\n"
+                f"The only number I can't verify is the cost {_eur(cost)} — it's what was entered, not an invoice. If the real cost is different, say “the {p['name'].split(' (')[0].lower()} cost is actually X” and I correct it and redo every margin.")
+
+    def friend_price(self, t, m):
+        gd = m.groupdict() if m is not None else {}
+        what = (gd.get("what") or "").strip()
+        p = self.store.find_product(what) if (self.store is not None and what) else None
+        if p:
+            price, cost = p["price"], p.get("cost", 0)
+            fair = round(cost * 1.3 + 0.5, 0) - 0.10 if cost else round(price * 0.7, 0) - 0.10
+            fair = max(fair, cost + 1)
+            return (f"For a friend: {_eur(fair)} — that's cost {_eur(cost)} + a little (about 30 %) so it isn't a gift and you're not 'selling' either; "
+                    f"the public price is {_eur(price)} and a 'friends' price around 70 % of it ({_eur(round(price * 0.7, 0) - 0.10)}) is the other common choice.\n"
+                    "Two rules: never below cost (friends multiply), and the price is the same for all friends so nobody feels second-class. "
+                    "It's an offline sale — say “I sold 1 " + p['name'].split(' (')[0].lower() + " to a friend” and I take it off the stock; the money stays outside the shop's ledger (note it for the tax books).")
+        return ("Friends' price rule: cost + about 30 %, rounded to a ,90 — never below cost, and the same for every friend. Cheaper than the shop, not a gift. "
+                "Tell me which product and I give you the number; then say “I sold 1 <product> to a friend” and I fix the stock.")
+
+    def payment_missing(self, t, m):
+        return ("‘I paid but you got nothing’ — check before you ship, kindly but firmly:\n"
+                "1. Look in the payment dashboard (Stripe/PayPal/bank) for the order number, the amount and the date — not in the e-mail inbox. A card payment shows within seconds; a bank transfer takes 1–2 business days (SEPA), 3–5 from abroad.\n"
+                "2. Ask the customer for the receipt/transaction id (a screenshot is not proof — they're easy to fake); compare the amount and the date.\n"
+                "3. Common real causes: transfer still in transit, a typo in the IBAN or reference (money bounces back in ~5 days), a card 'pending' that the bank released, PayPal 'eCheck' (takes days).\n"
+                "4. Common fake: the 'payment confirmation' e-mail from a look-alike address urging you to ship now. Rule: nothing ships until the money is on the account. Say so plainly: “as soon as the payment shows on our side (1–2 business days for transfers) your order ships the same day”.\n"
+                "5. If it's a marketplace/checkout error on your side, tell them the truth and send a fresh payment link.\n"
+                "Say “write the reply about the missing payment” and I draft it in that tone.")
+
+    def when_reach(self, t, m):
+        gd = m.groupdict()
+        amt = _num(gd.get("amt") or "1000")
+        if re.search(r"\d\s*(?:k|mila)\b", t.lower()):
+            amt *= 1000
+        what = (gd.get("what") or "profit").lower()
+        n = self._n() or {}
+        st = self.store
+        day = st.data.get("day", 0) or 1
+        if not n.get("orders"):
+            return f"No sales yet, so no honest date for {_eur(amt)} — after two weeks of practice days I can give one."
+        if what.startswith(("order", "ordini")):
+            have, per_day, label = n["orders"], n["orders"] / day, "orders"
+        elif what.startswith(("customer", "clienti")):
+            have = len({(o.get("customer") or {}).get("email") for o in self._paid()}); per_day = have / day; label = "customers"
+        elif what.startswith(("revenue", "sales", "turnover", "fatturato", "vendite")):
+            have, per_day, label = n["revenue"], n["revenue"] / day, "revenue"
+        elif "month" in what:
+            per_month = n["profit"] / day * 30
+            if per_month >= amt:
+                return f"Already there: at today's pace the shop makes {_eur(per_month)} of profit a month (≥ {_eur(amt)})."
+            months = 0; pm = per_month
+            while pm < amt and months < 36:
+                pm *= 1.25; months += 1
+            return f"{_eur(amt)} a month: today's pace is {_eur(per_month)}/month; growing 25 % a month (daily posts, no breaks) that's about {months} month(s) away. Faster only with more traffic — say “cheapest way to get 10 more sales” for the levers."
+        else:
+            have, per_day, label = n["profit"], n["profit"] / day, "profit"
+        if have >= amt:
+            return f"Already past it: {label} so far is {_eur(have) if label in ('profit', 'revenue') else int(have)} (day {day})."
+        left = amt - have
+        days_flat = left / per_day if per_day else None
+        # with 25 %/month growth
+        d, cum, rate = 0, 0.0, per_day
+        while cum < left and d < 730:
+            d += 1; cum += rate
+            if d % 30 == 0:
+                rate *= 1.25
+        fmt = (lambda v: _eur(v)) if label in ("profit", "revenue") else (lambda v: f"{int(round(v))}")
+        return (f"{fmt(amt)} of {label}: you're at {fmt(have)} after {day} day(s), so {fmt(left)} to go. At today's pace ({fmt(per_day)} a day) that's about {days_flat:.0f} days ({days_flat / 30:.1f} months); "
+                f"if sales grow 25 % a month with daily posts, about {d} days. " +
+                ("A bundle and the past-customers e-mail are the two things that pull that date closer without spending — say “add the bundle”." if label == "profit" else "More visits are the only real lever — say “cheapest way to get 10 more sales”."))
+
+    def supplier_legit(self, t, m):
+        return ("How I check a supplier before your money goes anywhere (say “is this seller ok? <link>” and I do it and hand you a document):\n"
+                "1. Age and footprint: domain older than 2 years (whois), a real company name, address and VAT/registration number you can find in a registry; the same name on Google Maps, LinkedIn, Alibaba/Faire, not only on its own site.\n"
+                "2. Reviews off their site: Trustpilot/Google/Reddit — read the 1–2 stars for the pattern (late, no refunds, different product); 0 reviews anywhere is a flag, so are 200 five-stars in one month.\n"
+                "3. Contact test: write a real question (materials, MOQ, lead time, certificates) — a serious supplier answers specifically within 1–2 days, a scammer answers instantly and vaguely.\n"
+                "4. Payment: card, PayPal or trade assurance — never Western Union, crypto or 'a friend's account'; a first order small enough to lose (€ 50–150).\n"
+                "5. Samples: order one first; check materials, weight, packaging, how long it really took, what customs charged.\n"
+                "6. Photos: reverse-image-search the product pictures — stolen photos = no real product.\n"
+                "7. Price: 60 % below everyone else is not a deal, it's the hook.\n"
+                "Green flags: a printed catalogue with a price list, MOQ and lead time written down, certificates they send without fuss, a phone number someone answers.")
+
+    def refund_mechanics(self, t, m):
+        low = t.lower()
+        paypal = "paypal" in low
+        return ((("PayPal refunds: from the transaction → 'Refund', full or partial, within 180 days; the money returns to the buyer's original method in 3–5 business days. "
+                  "PayPal keeps the fixed part of its fee (€ 0,35) and, since 2019, the percentage fee too — a € 30 refund costs you about € 1,40 in lost fees. Refunds are automatic for disputes you lose.")
+                 if paypal else
+                 ("Stripe refunds: in the dashboard, open the payment → 'Refund', full or partial, any time (a partial refund is fine for 'keep it, here's 30 % back'). "
+                  "The money goes back to the customer's card in 5–10 business days (that's the banks, not you) and Stripe does NOT return its 1,5 %/2,9 % + € 0,25 fee — a € 30 refund costs you about € 1,10 in fees. "
+                  "Stripe takes the refunded amount from your next payout; if the balance is short it debits your bank."))
+                + "\nGood practice: refund within 48 h of deciding — slow refunds become chargebacks (which cost € 15–25 on top). Write the refund in the order notes; if an invoice was issued, book a credit note. "
+                "Tell the customer the two dates: 'refunded today, on your card within 5–10 business days'. Say “refund order <number>” and I prepare the proposal and the message.")
+
+    def margin_vs_markup(self, t, m):
+        p = None
+        try:
+            p = max(self.store.products(), key=lambda x: x["price"] - x.get("cost", 0)) if self.store is not None else None
+        except Exception:
+            pass
+        ex = ""
+        if p:
+            price, cost = p["price"], p.get("cost", 0)
+            ex = f"\nOur {p['name'].split(' (')[0]}: price {_eur(price)}, cost {_eur(cost)} → margin {(price - cost) / price * 100:.0f} %, markup {(price - cost) / cost * 100:.0f} %."
+        return ("Same profit, two yardsticks:\n"
+                "• Margin = profit ÷ selling price. It answers 'what share of what the customer pays do I keep?' — the number for judging the shop (fees and refunds also come as % of price).\n"
+                "• Markup = profit ÷ cost. It answers 'how much did I add on top of what I paid?' — the number for setting a price from a cost (×2,5–4 for small shops).\n"
+                "Example: buy at € 10, sell at € 25 → profit € 15 → margin 60 %, markup 150 %. A 50 % markup is only a 33 % margin — the classic trap." + ex +
+                "\nRule: talk margin when deciding, use markup when pricing.")
+
+    def orders_benchmark(self, t, m):
+        n = self._n() or {}
+        day = self.store.data.get("day", 0) or 1
+        mine = n.get("orders", 0) / day if n.get("orders") else 0
+        return (f"For a one-person shop: 1–3 orders a day is a healthy start (month 1–3), 5 a day is a real side business (~€ 4–6k of sales a month), 10+ a day is a job — and where packing takes 1–2 hours. "
+                f"You're at {mine:.1f} a day — " + ("a good start." if 1 <= mine < 3 else "already a real business." if mine >= 3 else "the first weeks; 1 a day is the first goal.") +
+                "\nWhat matters more than the number: does it come from your own page (repeatable) or from one viral post (luck), and does the average basket grow (bundles, free-shipping threshold).")
+
+    def return_benchmark(self, t, m):
+        rr = None
+        try:
+            rr = self.advice_return_rate() if hasattr(self, "advice_return_rate") else None
+        except Exception:
+            rr = None
+        n = self._n() or {}
+        ref = n.get("refunded", 0)
+        tot = n.get("orders", 0) + ref
+        mine = f"Yours: {ref} refund(s) on {tot} orders = {ref / tot * 100:.1f} %." if tot else "Yours: no returns yet."
+        return ("Return rates by kind of shop: home goods and gifts 2–5 % (good under 3 %), electronics 5–10 %, fashion 20–30 % (size), marketplaces higher than own shops. "
+                f"{mine} Above 5 % on home goods usually means one thing: the photos or the description promise something the product isn't (size, colour, 'ceramic' that's stoneware) — fix the page, not the policy. "
+                "Under 1 % with many orders can also be bad: people don't bother returning cheap disappointing things, they just never come back.")
+
+    GLOSSARY = {
+        "sku": "SKU (stock keeping unit): the code you give each product variant — e.g. MUG-350-BLUE. One SKU per thing you count on the shelf; it's what labels, stock and orders refer to.",
+        "aov": "AOV (average order value): sales ÷ orders — what a customer spends per order. Bundles and a free-shipping threshold raise it; it's the cheapest way to earn more from the same visitors.",
+        "cogs": "COGS (cost of goods sold): what the products you sold cost you — purchase price plus what it took to get them to your shelf. Sales − COGS = gross margin.",
+        "roas": "ROAS (return on ad spend): sales from ads ÷ money spent on ads. 3× means € 3 of sales per € 1 of ads; with a 50 % margin you need about 2× just to break even.",
+        "cpc": "CPC (cost per click): what one click on your ad costs, typically € 0,20–0,80 for small shops. Clicks × conversion = orders, so CPC ÷ conversion ≈ cost per order.",
+        "cpm": "CPM: cost per 1,000 ad views. Useful to compare platforms; what you pay for attention before anyone clicks.",
+        "ctr": "CTR (click-through rate): clicks ÷ views. 1–2 % is normal for ads; higher means the picture/hook works.",
+        "cac": "CAC (customer acquisition cost): total marketing spend ÷ new customers. Must be well under what a customer earns you over time (LTV).",
+        "ltv": "LTV/CLV (customer lifetime value): the profit one customer brings over all their orders. Repeat buyers are why a € 10 CAC can be fine for a € 15 product.",
+        "clv": "LTV/CLV (customer lifetime value): the profit one customer brings over all their orders. Repeat buyers are why a € 10 CAC can be fine for a € 15 product.",
+        "conversion rate": "Conversion rate: orders ÷ visitors × 100. Out of 100 people who open the shop, how many buy — 1–3 % is normal online, so 100 visits ≈ 1–3 orders.",
+        "conversion": "Conversion rate: orders ÷ visitors × 100. Out of 100 people who open the shop, how many buy — 1–3 % is normal online, so 100 visits ≈ 1–3 orders.",
+        "bounce rate": "Bounce rate: the share of visitors who leave after one page. High on a product page = the photo, price or shipping cost didn't convince in 5 seconds.",
+        "churn": "Churn: customers or subscribers you lose over a period. For a shop: newsletter unsubscribes and buyers who never return.",
+        "dropshipping": "Dropshipping: you sell, the supplier ships straight to the customer; you never hold stock. Low risk, low margin (10–25 %), slow delivery, and the customer experience is in someone else's hands.",
+        "dropship": "Dropshipping: you sell, the supplier ships straight to the customer; you never hold stock. Low risk, low margin (10–25 %), slow delivery, and the customer experience is in someone else's hands.",
+        "3pl": "3PL (third-party logistics): a warehouse that stores, packs and ships for you for a fee per order (€ 2–4 + storage). Worth it from ~10 orders a day.",
+        "fulfilment": "Fulfilment: everything between 'order paid' and 'parcel delivered' — picking, packing, labelling, hand-over to the courier, tracking.",
+        "fulfillment": "Fulfilment: everything between 'order paid' and 'parcel delivered' — picking, packing, labelling, hand-over to the courier, tracking.",
+        "landed cost": "Landed cost: the real cost of a product on your shelf — price + shipping to you + customs/VAT on import + payment fees. Margins must be computed on this, not the supplier's price.",
+        "gross margin": "Gross margin: price − cost of the product, usually as % of price. € 14,90 mug with € 5,60 cost → € 9,30 = 62 %. Fees and shipping come out of it later.",
+        "net margin": "Net margin: what's left of the price after the product, shipping, fees and your fixed bills — the real profit share. 10–40 % is the usual range for small shops.",
+        "margin": "Margin: profit as a share of the selling price. € 14,90 mug, € 5,60 cost → margin € 9,30 = 62 %. (Markup is the same profit as a share of the cost: 166 %.)",
+        "markup": "Markup: profit as a share of the cost. Buy at € 5,60, sell at € 14,90 → markup 166 % (margin 62 %). Rule of thumb for small shops: 2,5–4× the landed cost.",
+        "break-even": "Break-even: the point where sales cover all costs — zero profit, zero loss. Fixed costs ÷ margin per order = orders needed; e.g. € 300/month ÷ € 15 = 20 orders a month.",
+        "breakeven": "Break-even: the point where sales cover all costs — zero profit, zero loss. Fixed costs ÷ margin per order = orders needed; e.g. € 300/month ÷ € 15 = 20 orders a month.",
+        "cash flow": "Cash flow: money in vs money out over time — not the same as profit. You can be profitable and still run out of cash because stock is paid months before it sells.",
+        "cashflow": "Cash flow: money in vs money out over time — not the same as profit. You can be profitable and still run out of cash because stock is paid months before it sells.",
+        "inventory turnover": "Inventory turnover: how many times a year you sell through your stock. 6–12 is healthy for small shops; 2 means money asleep on the shelf.",
+        "stock turnover": "Inventory turnover: how many times a year you sell through your stock. 6–12 is healthy for small shops; 2 means money asleep on the shelf.",
+        "lead time": "Lead time: the days between placing a reorder and having it on the shelf. Reorder when stock covers less than lead time + a safety margin.",
+        "moq": "MOQ (minimum order quantity): the smallest batch a supplier sells. Negotiate it down for a first order, or accept a higher unit price for a smaller test batch.",
+        "minimum order quantity": "MOQ (minimum order quantity): the smallest batch a supplier sells. Negotiate it down for a first order, or accept a higher unit price for a smaller test batch.",
+        "white label": "White label: a generic product from a manufacturer that you sell under your brand. Private label is the same with your own tweaks (colour, packaging).",
+        "private label": "Private label: a manufacturer's product made to your spec and sold under your brand — a step up from white label (generic).",
+        "oss": "OSS (One-Stop Shop): the EU VAT scheme — above € 10,000/year of sales to consumers in other EU countries you charge their VAT rate and declare it all in one quarterly return at home.",
+        "vies": "VIES: the EU's VAT-number checker (ec.europa.eu/taxation_customs/vies). A valid number lets you invoice an EU business without VAT (reverse charge).",
+        "incoterms": "Incoterms: who pays and who is responsible at each step of an international shipment. For a shop: DDP = all duties paid, customer gets no surprise; DAP/EXW = customer pays import costs.",
+        "ddp": "DDP (delivered duty paid): the seller pays shipping, customs and import VAT; the customer gets the parcel with no extra bill. The only good option for non-EU customers.",
+        "dap": "DAP (delivered at place): seller ships; the customer pays import duties/VAT on arrival — the classic 'surprise bill' complaint.",
+        "exw": "EXW (ex works): the buyer picks it up at the factory and handles everything. What suppliers quote when the price looks too good.",
+        "fob": "FOB (free on board): the supplier gets goods onto the ship; you pay from there (freight, insurance, customs).",
+        "omnibus": "Omnibus rule (EU, 2022): when you show a discount, the 'before' price must be the lowest price of the previous 30 days. No fake crossings-out; raise prices well before a sale or don't.",
+        "chargeback": "Chargeback: the customer's bank reverses a card payment after a dispute. You get ~7–10 days to send evidence (tracking, delivery proof, messages); lose it and you pay the amount plus a € 15–25 fee.",
+        "reverse charge": "Reverse charge: invoicing an EU business (valid VAT number) without VAT — they account for it in their country. Write 'reverse charge, art. 196 Dir. 2006/112/EC' on the invoice.",
+        "forfettario": "Regime forfettario: Italy's flat-tax scheme for small businesses — up to € 85,000/year, tax 5 % (first 5 years) then 15 % on a fixed 40 % of turnover for online retail, no VAT charged, simple books.",
+        "ateco": "ATECO code: Italy's activity code on your Partita IVA; online retail is 47.91.10. It sets the forfettario coefficient (40 %) and the INPS fund.",
+        "sdi": "SDI (Sistema di Interscambio): the Italian tax agency's e-invoice hub — every business invoice goes through it electronically (XML) and gets a receipt.",
+        "pec": "PEC: certified e-mail, legally like registered post in Italy. Every Partita IVA must have one; official notices arrive there.",
+        "a/b test": "A/B test: show two versions (photo, price, headline) to similar visitors and keep the one that sells more. Needs a few hundred visitors per version to mean anything.",
+        "ab test": "A/B test: show two versions (photo, price, headline) to similar visitors and keep the one that sells more. Needs a few hundred visitors per version to mean anything.",
+        "kpi": "KPI (key performance indicator): the 3–5 numbers you watch every week. For us: orders, conversion, average basket, margin, late shipments.",
+        "seo": "SEO: making your pages show up in Google without paying — clear product names, real descriptions, fast pages, a few articles answering the questions buyers search for. Slow (months) but free.",
+        "sem": "SEM: paid search ads (Google Shopping/Search). You pay per click; works when people already search for what you sell.",
+        "ugc": "UGC (user-generated content): photos/videos your customers make with the product. Converts better than studio shots; ask for it on the parcel card.",
+        "cro": "CRO (conversion rate optimisation): changing the page so more of the same visitors buy — photos, shipping shown early, reviews, fewer steps at checkout.",
+        "hook": "Hook: the first 1–2 seconds of a short video — the line or image that makes people stop scrolling. Most of a video's reach is decided there.",
+        "cta": "CTA (call to action): the one thing you ask at the end — 'link in bio', 'reply with your favourite colour'. One per post, plainly.",
+        "call to action": "CTA (call to action): the one thing you ask at the end — 'link in bio', 'reply with your favourite colour'. One per post, plainly.",
+        "funnel": "Funnel: the path from stranger → visitor → cart → buyer → repeat buyer. Each step loses people; fix the step that leaks most (usually cart → paid: shipping cost surprise).",
+        "retargeting": "Retargeting: ads shown only to people who already visited your shop or left a cart. Cheapest paid ads there are, because they already know you.",
+        "pixel": "Pixel: a small piece of code from Meta/TikTok on your site that tells the platform who visited and bought — needed for retargeting and ad measurement; requires cookie consent in the EU.",
+        "lookalike": "Lookalike audience: the ad platform finds people similar to your buyers. Works from ~100 buyers; before that it's guessing.",
+        "open rate": "Open rate: the share of e-mails opened. 35–50 % is normal for a small shop's own list; the subject line decides it.",
+        "click rate": "Click rate: the share of delivered e-mails where someone clicked a link — 2–5 % normal, 6–10 % great.",
+        "unsubscribe rate": "Unsubscribe rate: who leaves your list per send — keep it under 0,5 %.",
+        "nps": "NPS (net promoter score): 'would you recommend us, 0–10?' — % of 9–10 minus % of 0–6. Above 50 is excellent for a shop; the free version is reading your reviews.",
+        "net promoter score": "NPS (net promoter score): 'would you recommend us, 0–10?' — % of 9–10 minus % of 0–6. Above 50 is excellent for a shop; the free version is reading your reviews.",
+        "omnichannel": "Omnichannel: selling in several places (own site, marketplace, Instagram, a stall) with one stock and one customer view. For a small shop: own site + one marketplace, no more.",
+        "marketplace": "Marketplace: someone else's shop where you list (Amazon, Etsy, eBay). Traffic for a fee (8–15 % + listing costs) and their rules; you don't own the customer.",
+        "pos": "POS (point of sale): the till — the card reader/app you use at a market stall (SumUp, Stripe Terminal). Fees ~1,5–2 %.",
+        "ean": "EAN/GTIN: the 13-digit barcode number a product has worldwide. Needed for Amazon and shops' tills; you buy them from GS1 or use the supplier's.",
+        "gtin": "EAN/GTIN: the 13-digit barcode number a product has worldwide. Needed for Amazon and shops' tills; you buy them from GS1 or use the supplier's.",
+        "barcode": "Barcode/EAN: the 13-digit number a product has worldwide. Needed for Amazon and shops' tills; you buy them from GS1 or use the supplier's.",
+        "hs code": "HS/customs code: the 6–10 digit code that classifies goods at customs and sets the duty rate. On every non-EU shipment's customs form.",
+        "customs code": "HS/customs code: the 6–10 digit code that classifies goods at customs and sets the duty rate. On every non-EU shipment's customs form.",
+        "proof of delivery": "Proof of delivery (POD): the courier's record that the parcel was handed over — signature, photo, GPS. What wins a 'never received' chargeback.",
+        "pod": "Proof of delivery (POD): the courier's record that the parcel was handed over — signature, photo, GPS. What wins a 'never received' chargeback.",
+        "sla": "SLA (service level agreement): a promised standard — e.g. 'replies within 24 h', 'ships in 1 business day'. Promise only what you keep.",
+        "b2b": "B2B: selling to businesses (invoices, VAT numbers, no withdrawal right, bigger orders). B2C: to consumers (14-day withdrawal, 2-year guarantee).",
+        "b2c": "B2C: selling to consumers — 14-day withdrawal right, 2-year legal guarantee, prices shown with VAT. B2B is selling to businesses.",
+        "d2c": "D2C/DTC (direct to consumer): a brand selling from its own site instead of through shops or marketplaces — full margin, but you bring your own traffic.",
+        "dtc": "D2C/DTC (direct to consumer): a brand selling from its own site instead of through shops or marketplaces — full margin, but you bring your own traffic.",
+        "wholesale": "Wholesale: selling in bulk to shops that resell — usually 50 % of the retail price, minimum quantities, invoices, payment terms.",
+        "retail": "Retail: selling single items to the final customer at the full price — what the shop does.",
+        "rrp": "RRP/MSRP: the price the maker recommends. You may sell below it; in the EU a maker can't force you to.",
+        "msrp": "RRP/MSRP: the price the maker recommends. You may sell below it; in the EU a maker can't force you to.",
+        "bundle": "Bundle: two or more products sold together for less than the sum — raises the basket and moves slow stock while keeping most of the margin.",
+        "loss leader": "Loss leader: a product sold at or below cost to bring people in, hoping they buy more. Dangerous for a small shop — only with a bundle or upsell attached.",
+        "anchor price": "Anchor price: a higher price shown first (the 'before' price, a premium version) that makes the real price look reasonable. Legal only if it's true (Omnibus rule).",
+        "charm pricing": "Charm/psychological pricing: € 14,90 instead of € 15 — the left digit rules perception. Use ,90 endings; ,99 looks cheap for gifts.",
+        "psychological pricing": "Charm/psychological pricing: € 14,90 instead of € 15 — the left digit rules perception. Use ,90 endings; ,99 looks cheap for gifts.",
+        "dynamic pricing": "Dynamic pricing: prices that change with demand or time (airlines). Not for a small shop — customers notice and trust drops.",
+        "price elasticity": "Price elasticity: how much sales fall when the price rises. Gifts and unique items are inelastic (a 10 % rise barely dents sales); commodities are elastic.",
+        "sunk cost": "Sunk cost: money already spent that you can't get back — it must not drive decisions. Stock that doesn't sell: clear it, don't keep 'waiting to recover the cost'.",
+        "opportunity cost": "Opportunity cost: what you give up by choosing one thing — € 500 in slow stock is € 500 not in the product that sells.",
+        "fixed cost": "Fixed costs: what you pay whether you sell or not (domain, apps, accountant, INPS). Variable costs move with each order (product, shipping, fees).",
+        "variable cost": "Variable costs: what each order costs (product, box, shipping, fees). Fixed costs stay whether you sell or not (domain, accountant, INPS).",
+        "unit economics": "Unit economics: the profit on ONE order after everything variable — price − product − shipping − fees − box. If one order isn't profitable, volume won't fix it.",
+        "contribution margin": "Contribution margin: price minus all variable costs of an order — what each sale contributes to paying the fixed bills and then profit.",
+        "payback period": "Payback period: how long until a purchase (camera, stock, ads) has earned its cost back. Under a month: do it; over three: think.",
+        "working capital": "Working capital: the money tied up between paying suppliers and getting paid by customers — stock on the shelf plus unpaid invoices. Why growth eats cash.",
+        "invoice": "Invoice (fattura): the legal sales document with your Partita IVA, the buyer's details, items, VAT. In Italy it goes electronically through SDI; consumers get a receipt unless they ask for one.",
+        "pro forma": "Pro forma invoice: a preview of an invoice, not a tax document — used for quotes, prepayment or customs.",
+        "proforma": "Pro forma invoice: a preview of an invoice, not a tax document — used for quotes, prepayment or customs.",
+        "credit note": "Credit note (nota di credito): the document that cancels part or all of an invoice — how a refund is booked when an invoice was issued.",
+        "withdrawal right": "Right of withdrawal (diritto di recesso): EU consumers may return an online purchase within 14 days of delivery without a reason; you refund within 14 days of getting it back. You may charge the return postage if your terms say so.",
+        "diritto di recesso": "Diritto di recesso: EU consumers may return an online purchase within 14 days of delivery without a reason; you refund within 14 days of getting it back. You may charge the return postage if your terms say so.",
+        "legal guarantee": "Legal guarantee (garanzia legale): in the EU consumer goods are covered 2 years against defects; the seller repairs, replaces or refunds. Separate from any maker's warranty.",
+        "garanzia legale": "Garanzia legale: 2 years against defects for consumers in the EU; the seller repairs, replaces or refunds. Separate from the maker's warranty.",
+        "upsell": "Upsell: offering a better/bigger version at checkout; cross-sell: a matching product ('add the wraps for € 12'). Both raise the basket without new visitors.",
+        "cross-sell": "Cross-sell: offering a matching product at checkout ('add the wraps for € 12'). Upsell is the bigger/better version. Both raise the basket without new visitors.",
+        "cross sell": "Cross-sell: offering a matching product at checkout ('add the wraps for € 12'). Upsell is the bigger/better version. Both raise the basket without new visitors.",
+        "mov": "MOV (minimum order value): the smallest order you accept, or the threshold for free shipping — set it just above your average basket to lift it.",
+        "dm": "DM: a direct/private message on Instagram/TikTok. Where half of small-shop customer service happens; answer within the hour.",
+        "reel": "Reel: Instagram's short vertical video (15–90 s). The format that reaches strangers; a photo post reaches followers only.",
+        "carousel": "Carousel: a post with several swipeable images. Good for 'how it's made' or 5 uses of one product; more time on the post helps reach.",
+        "epos": "EPOS/POS: the till — a card reader/app for a market stall (SumUp, Stripe Terminal). Fees ~1,5–2 %.",
+        "tracking number": "Tracking number: the courier's code for one parcel; put it in the shipping e-mail — 80 % of 'where is my order' mails disappear.",
+        "map": "MAP (minimum advertised price): a maker's rule on the lowest price you may advertise — common in the US, not enforceable in the EU for resellers.",
+        "skus": "SKUs (stock keeping units): the codes you give each product variant — e.g. MUG-350-BLUE. One per thing you count on the shelf.",
+    }
+
+    def glossary(self, t, m):
+        gd = m.groupdict()
+        term = (gd.get("term") or gd.get("term2") or "").lower().strip()
+        term = {"fulfilment": "fulfilment", "fulfillment": "fulfilment", "break even": "break-even", "cash flow": "cash flow"}.get(term, term)
+        text = self.GLOSSARY.get(term) or self.GLOSSARY.get(term.replace("-", " ")) or self.GLOSSARY.get(term.replace(" ", "-"))
+        if not text:
+            return None
+        kid = bool(re.search(r"like i'?m (?:5|five|10|ten|a kid|new)", t.lower()))
+        if kid and term in ("conversion", "conversion rate"):
+            n = self._n() or {}
+            return ("Imagine 100 people walk past your lemonade stand and look. If 3 of them buy a lemonade, your conversion rate is 3 %. "
+                    "The shop is the same: out of every 100 people who open it, how many buy. " + (f"Ours: {n['conversion']:.1f} out of 100." if n.get("conversion") else "") +
+                    " Two ways to sell more lemonade: more people walking past (visits) or a nicer sign so more of them stop (conversion).")
+        n = self._n() or {}
+        mine = ""
+        try:
+            if term in ("aov",) and n.get("orders"):
+                mine = f" Ours: {_eur(n['revenue'] / n['orders'])}."
+            elif term in ("conversion", "conversion rate") and n.get("orders"):
+                mine = f" Ours: {n['conversion']:.1f} %."
+            elif term in ("net margin",) and n.get("revenue"):
+                mine = f" Ours so far: {n['profit'] / n['revenue'] * 100:.0f} % before fixed bills."
+            elif term in ("break-even", "breakeven") and n.get("orders"):
+                per = n["profit"] / n["orders"]
+                mine = f" Ours: about {300 / per:.0f} orders a month at {_eur(per)} profit each cover € 300 of fixed bills."
+        except Exception:
+            pass
+        return text + mine
 
     # ---- round 13: notes, product verdicts, horizons, affordability ---------------------------------------------
     def take_note(self, t, m):

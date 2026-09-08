@@ -65,7 +65,10 @@ class Talk:
     COST_CHANGE = re.compile(r"\b(?:the |my |our |il |la )?(?:supplier|fornitore|factory|vendor)\s+(?:raised|increased|upped|lowered|dropped|cut|changed|ha alzato|ha aumentato|ha abbassato)\s+(?:the |il |la )?(?:cost|price|prezzo|costo)\s+(?:of |for |del |della |dei |delle )?(?:the |a |an |il |la |i |le )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:to|at|a)\s*" + _MONEY.replace("(\\d", "(?P<v1>\\d")
                              + r"|\b(?:the |my |our |il |la )?(?:supplier|fornitore|factory|vendor)\s+(?:raised|increased|upped|lowered|dropped|cut|changed|ha alzato|ha aumentato|ha abbassato)\s+(?:the |il |la )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:cost|price|prezzo|costo)\s+(?:to|at|a)\s*" + _MONEY.replace("(\\d", "(?P<v2>\\d")
                              + r"|\b(?:the |il |la )?(?:cost|costo)\s+(?:of |del |della |dei )?(?:the |il |la )?(?P<what3>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:went up|rose|is now|went down|fell|è salito|è sceso|è ora|adesso è)\s+(?:to|a)?\s*" + _MONEY.replace("(\\d", "(?P<v3>\\d")
-                             + r"|\b(?:the |il |la )?(?P<what4>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:now )?(?:costs?|mi costa|ci costa)\s+(?:me |us )?" + _MONEY.replace("(\\d", "(?P<v4>\\d") + r"\s+(?:now|from now on|these days|da oggi|adesso|ora)\b", re.I)
+                             + r"|\b(?:the |il |la )?(?P<what4>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:now )?(?:costs?|mi costa|ci costa)\s+(?:me |us )?" + _MONEY.replace("(\\d", "(?P<v4>\\d") + r"\s+(?:now|from now on|these days|da oggi|adesso|ora)\b"
+                             + r"|\b(?:the |il |la )?(?P<what5>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:cost|costo|purchase price|buy price)\s+is\s+(?:actually|really|in fact|now|wrong[,:]? it'?s|in realtà|veramente)\s*" + _MONEY.replace("(\\d", "(?P<v5>\\d")
+                             + r"|\b(?:actually|in fact|correction[,:]?|in realtà|veramente)\s+(?:the |il |la )?(?P<what6>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:costs?|cost is|mi costa|ci costa|costa)\s+(?:me |us )?" + _MONEY.replace("(\\d", "(?P<v6>\\d")
+                             + r"|\b(?:the )?(?:real|true|correct|actual|right) (?:cost|purchase price) (?:of |for )(?:the |a )?(?P<what7>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+is\s*" + _MONEY.replace("(\\d", "(?P<v7>\\d"), re.I)
     PUSH_Q = re.compile(r"\b(?:which|what|quale|che)\s+(?:product|item|one|prodotto|articolo)\s+(?:should|do|would|can) (?:i|we)\s+(?:push|promote|advertise|feature|boost|focus on|put money behind|spingere|promuovere)|(?:what|which|cosa|che)\b.{0,20}?\b(?:push|promote|spingere|promuovere)\b.{0,20}?\b(?:this week|today|now|next|questa settimana|oggi|adesso)|(?:che|quale) prodotto conviene (?:spingere|promuovere|pubblicizzare)\b|\bwhat(?:'s| is) worth (?:pushing|promoting|advertising)\b", re.I)
     COMPLAINTS_Q = re.compile(r"\b(?:what (?:did|do|have) (?:customers|people|buyers|clients) (?:complain|complained|moan|say is wrong)|(?:any|what|which) complaints?|customer complaints|complaints? (?:so far|this week|today)|what(?:'s| is) (?:going wrong|the most common (?:problem|issue|complaint))|di cosa si lamentano|lamentele|reclami)\b", re.I)
     REORDER_Q = re.compile(r"\b(?:how (?:much|many)|quant[oi])\b.{0,20}?\b(?:stock|units|pieces|pezzi)?\s*(?:should|do|must|devo|dovrei) (?:i|we)? ?(?:order|reorder|buy|restock|ordinare|riordinare|comprare)\b.{0,20}?\b(?:of |for |del |della |dei |delle )?(?:the |il |la |i |le )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\W*$|\b(?:reorder|restock|riordino)\s+(?:quantity|qty|amount|how many)\b.{0,20}?\b(?:for |of |per )?(?:the )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\W*$", re.I)
@@ -118,6 +121,9 @@ class Talk:
     STORE_REVIEW = re.compile(r"\b(?:review the (?:store|shop)|store review|what (?:do you|would you) (?:propose|suggest) (?:for|in) the (?:store|shop)|any proposals|what (?:should|needs to|do) (?:i|we) (?:do|fix) in the (?:store|shop)|cosa proponi per il negozio|controlla il negozio)\b", re.I)
     STORE_ORDERS = re.compile(r"\b(?:(?:open|pending|new|today'?s|latest|recent|last|unshipped|paid) orders|orders to ship|what (?:do i|should i|needs to be|do we) ship|which orders|show (?:me )?(?:the )?orders|ordini (?:da spedire|aperti|recenti|nuovi)|quali ordini)\b", re.I)
     STORE_LABELS = re.compile(r"\b(?:print|prepare|make|generate|create|give me|stampa|prepara|fammi)\b.{0,20}?\b(?:shipping labels?|labels?|packing slips?|etichette|bolle|lettere di vettura)\b|\b(?:shipping labels?|packing slips?|etichette)\b.{0,25}?\b(?:for|of|per)\b.{0,25}?\b(?:orders?|ordini|today|oggi)\b", re.I)
+    OFFLINE_STOCK = re.compile(r"\b(?:i |we |ho |abbiamo )?(?:sold|gave away|gave|handed out|took|used|broke|dropped|venduto|regalato|dato via|rotto)\s+(?P<n>\d{1,3}|a|an|one|two|three|four|five|un|una|due|tre)\s+(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:at|on|to|for|in|as|al|a|per|come|during)\s+(?:the |a |my |our |il |la |un |una )?(?:market|fair|stall|event|street market|christmas market|mercato|mercatino|fiera|friend|friends|neighbou?r|mum|mom|dad|sister|brother|family|colleague|office|amico|amica|gift|present|photo shoot|shoot|sample|test|cash|hand|regalo)\b"
+                               r"|\b(?:give|gave|regala|dai)\s+(?:the |a |an |il |la |un |una )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+to (?:my |a |our |un |una |mia |mio )?(?:friend|mum|mom|dad|sister|brother|neighbou?r|colleague|family|amico|amica|mamma|papà)\b.{0,40}?\b(?:free|gift|regalo|gratis|adjust|update|fix|take it off|off the stock|stock)\b"
+                               r"|\b(?:someone|a customer|customer|the customer|a buyer|un cliente|una cliente)\s+(?:returned|sent back|gave back|ha restituito|ha reso|ha rimandato)\s+(?:the |a |an |il |la |un |una )?(?P<what3>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\b.{0,60}?\b(?:works? fine|works|is fine|it'?s fine|undamaged|intact|unused|like new|good condition|perfect|funziona|intatt[oa]|come nuov[oa]|resell|back on the shelf|restock)\b", re.I)
     STORE_SHIPPED = re.compile(r"^\W*(?:all |everything |tutto )?(?:shipped|sent|handed (?:to|over to) (?:the )?(?:courier|gls|carrier)|spedito|spediti|consegnato al corriere)\b.{0,30}$|^\W*(?:i (?:have |'ve )?)?(?:shipped|sent|posted) (?:all |every |the |today's )?(?:orders|parcels|packages|ordini|pacchi)\b.{0,30}$"
                                r"|^\W*(?:ok |done[,.]? |fatto[,.]? )?(?:i (?:have |'ve |just )?)?(?:shipped|sent|posted|dispatched|mailed) (?:everything|all of them|all of it|them all|the lot|all the orders|all|tutto|tutti)\b.{0,30}$|^\W*(?:all of them|they|everything|all orders|the orders|tutti gli ordini) (?:are|is|were|got|sono) (?:shipped|sent|out|gone|dispatched|on their way|with the courier|partiti|spediti)\b.{0,30}$|^\W*(?:ho spedito tutto|spedito tutto|tutto spedito|sono partiti tutti)\b.{0,30}$|^\W*(?:everything|all) (?:went|is) out (?:today|this morning|with (?:the )?(?:courier|gls))\b.{0,20}$", re.I)
     STORE_NAME_Q = re.compile(r"\b(?:what(?:'s| is) (?:the |my |our )?(?:store|shop) (?:called|name)|what(?:'s| is) the name of (?:the|my|our) (?:store|shop)|come si chiama il (?:negozio|shop))\b", re.I)
@@ -834,8 +840,8 @@ class Talk:
                 return r
         m = self.COST_CHANGE.search(t)
         if m:
-            what = next(g for g in (m.group("what"), m.group("what2"), m.group("what3"), m.group("what4")) if g)
-            value = _num(next(g for g in (m.group("v1"), m.group("v2"), m.group("v3"), m.group("v4")) if g))
+            what = next(g for g in (m.group("what"), m.group("what2"), m.group("what3"), m.group("what4"), m.group("what5"), m.group("what6"), m.group("what7")) if g)
+            value = _num(next(g for g in (m.group("v1"), m.group("v2"), m.group("v3"), m.group("v4"), m.group("v5"), m.group("v6"), m.group("v7")) if g))
             p = self.store.find_product(what)
             if p and value > 0:
                 return {"store_change": {"kind": "cost", "product": p["id"], "value": round(value, 2), "name": p["name"], "old": p.get("cost", 0), "price": p["price"]}}
@@ -978,6 +984,20 @@ class Talk:
                 if p["stock"] == 0:
                     return f"{p['name']} already shows sold out (0 in stock) — the page takes e-mails for the restock. Say “we received N more …” when it's back."
                 return {"store_change": {"kind": "stock", "product": p["id"], "value": 0, "name": p["name"], "old": p["stock"], "text": f"Mark {p['name']} sold out (stock {p['stock']} → 0; the page shows 'sold out' and stops taking orders)"}}
+        m = self.OFFLINE_STOCK.search(t)
+        if m:
+            what = (m.group("what") or m.group("what2") or m.group("what3") or "").strip()
+            p = self.store.find_product(what)
+            if p:
+                n = m.group("n") or "1"
+                n = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "un": 1, "una": 1, "due": 2, "tre": 3}.get(n.lower(), n)
+                n = int(n)
+                back = bool(m.group("what3"))
+                new = p["stock"] + n if back else max(0, p["stock"] - n)
+                why = (f"came back in good condition (stock {p['stock']} → {new}); it goes on the shelf again — if you refunded that customer, say “refund order <number>” so the books match"
+                       if back else f"left the shelf outside the shop (sold offline / given away): stock {p['stock']} → {new}" +
+                       ("; the money isn't in the shop's ledger, so profit here won't show it — note it for the tax books" if re.search(r"sold|venduto|market|mercatino|fiera|cash", low) else "; a gift costs you the purchase price " + _eur(p.get("cost", 0) * n)))
+                return {"store_change": {"kind": "stock", "product": p["id"], "value": new, "name": p["name"], "old": p["stock"], "text": f"{p['name']}: {why}"}}
         m = self.STOCK_CHANGE.search(t)
         if m:
             what = (m.group("what") or m.group("what2") or m.group("what3") or m.group("what4") or "").strip()
