@@ -1594,6 +1594,8 @@ class SelfTalk:
             if k == "notice":
                 d = json.loads(ch) if isinstance(ch, str) else dict(ch)
                 return f"shop notice “{d.get('text', '')[:50]}”" if d.get("text") else "remove the shop notice"
+            if k == "logo":
+                return "logo on the shop header" if ch else "logo off the shop header"
         except Exception:
             pass
         return f"{k} {t} → {str(ch)[:60]}"
@@ -1633,13 +1635,13 @@ class SelfTalk:
         if self.store is None:
             return None
         st = self.store
-        applied = [p for p in st.data.get("proposals", []) if p["status"] == "applied" and p["kind"] in ("price", "stock", "cost", "shipping", "description", "page", "code", "gift_wrap", "notice")]
+        applied = [p for p in st.data.get("proposals", []) if p["status"] == "applied" and p["kind"] in ("price", "stock", "cost", "shipping", "description", "page", "code", "gift_wrap", "notice", "logo")]
         if not applied:
             return "Nothing to undo — no change of price, stock, cost, shipping, text, code, gift wrap or notice has been applied yet (orders shipped/refunded can't be un-done from here)."
         p = applied[-1]
         k, tg, ch = p["kind"], p["target"], p["change"]
         try:
-            if p.get("before") is None and k not in ("code",):
+            if p.get("before") is None and k not in ("code", "logo"):
                 return f"I can't undo that one safely ({self._prop_line(p)}) — it was applied before I kept 'before' values. Tell me the value to set and I propose it."
             before = p["before"]
             if k in ("price", "cost", "stock"):
@@ -1653,6 +1655,8 @@ class SelfTalk:
                     newp = st.propose("code", tg, json.dumps({"pct": before.get("pct", 0), "fixed": before.get("fixed", 0), "min": before.get("min", 0), "max_uses": before.get("max_uses"), "note": before.get("note", "")}), f"undo of {p['id']}: code back on")
             elif k in ("gift_wrap", "notice"):
                 newp = st.propose(k, tg, json.dumps(before), f"undo of {p['id']}: back to the previous setting")
+            elif k == "logo":
+                newp = st.propose("logo", tg, before or "", f"undo of {p['id']}: previous header")
             else:
                 newp = st.propose(k, tg, before, f"undo of {p['id']}: back to the previous text")
             out = st.apply(newp["id"])

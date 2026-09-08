@@ -57,12 +57,26 @@ print("ok")
 '''
 
 
-def theme_for(name, hint=""):
+COLOURS = {"blue": ("#1f5f8b", "#eef5fb"), "blu": ("#1f5f8b", "#eef5fb"), "navy": ("#1b2a49", "#eef1f7"), "green": ("#2f5d3a", "#eef5ef"), "verde": ("#2f5d3a", "#eef5ef"),
+           "red": ("#a32626", "#fbeeee"), "rosso": ("#a32626", "#fbeeee"), "black": ("#111111", "#f2f2f2"), "nero": ("#111111", "#f2f2f2"), "dark": ("#222831", "#eeeff1"),
+           "orange": ("#c65d12", "#fff1e6"), "arancione": ("#c65d12", "#fff1e6"), "pink": ("#c2557a", "#fdf3f8"), "rosa": ("#c2557a", "#fdf3f8"), "purple": ("#5b3a8a", "#f4f0fa"),
+           "violet": ("#5b3a8a", "#f4f0fa"), "viola": ("#5b3a8a", "#f4f0fa"), "brown": ("#5b3a29", "#faf6f0"), "marrone": ("#5b3a29", "#faf6f0"), "teal": ("#0f6b6e", "#eaf6f6"),
+           "gold": ("#9a7b1c", "#fbf7e8"), "oro": ("#9a7b1c", "#fbf7e8"), "yellow": ("#b8860b", "#fffbe6"), "giallo": ("#b8860b", "#fffbe6"), "grey": ("#555555", "#f4f4f4"),
+           "gray": ("#555555", "#f4f4f4"), "grigio": ("#555555", "#f4f4f4"), "terracotta": ("#b4533a", "#fbefe9"), "beige": ("#8a7355", "#f7f2ea")}
+
+
+def theme_for(name, hint="", colour=None):
     txt = f"{name} {hint}"
-    for rx, th in THEMES:
+    th = None
+    for rx, cand in THEMES:
         if rx.search(txt):
-            return th
-    return ("#2f2f4f", "#f4f4f8", "star")
+            th = cand
+            break
+    th = th or ("#2f2f4f", "#f4f4f8", "star")
+    if colour and colour.lower() in COLOURS:
+        a, bg = COLOURS[colour.lower()]
+        th = (a, bg, th[2])
+    return th
 
 
 def _initials(name):
@@ -70,9 +84,9 @@ def _initials(name):
     return "".join(w[0] for w in words[:2]).upper() or name[:1].upper()
 
 
-def logo_svgs(name, tagline="", hint=""):
+def logo_svgs(name, tagline="", hint="", colour=None):
     """→ list of (style, svg_text). Three different styles, same colours, so the owner compares like for like."""
-    accent, bg, icon_key = theme_for(name, hint)
+    accent, bg, icon_key = theme_for(name, hint, colour)
     icon = ICONS[icon_key].format(a=accent, bg=bg)
     n, tg, ini = html.escape(name), html.escape(tagline), html.escape(_initials(name))
     size = 64 if len(name) <= 12 else (48 if len(name) <= 18 else 36)
@@ -101,9 +115,9 @@ def logo_svgs(name, tagline="", hint=""):
     return out
 
 
-def banner_svg(name, headline, sub="", hint="", size=(1080, 1080)):
+def banner_svg(name, headline, sub="", hint="", size=(1080, 1080), colour=None):
     """A square (Instagram) or wide (Facebook) banner: colour block, big headline, shop name small. No photos needed."""
-    accent, bg, icon_key = theme_for(name, hint)
+    accent, bg, icon_key = theme_for(name, hint, colour)
     w, h = size
     icon = ICONS[icon_key].format(a=accent, bg=bg)
     headline = re.sub(r"(€|\$|£)\s+(\d)", "\\1\\2", headline)                # "€ 39" stays together on a line
@@ -173,21 +187,27 @@ def render_png(svg_text, out_path, width, height, timeout=60):
     return None
 
 
-def make_logos(name, tagline="", hint="", out_dir=None):
+def make_logos(name, tagline="", hint="", out_dir=None, colour=None, styles=None):
     """→ list of dicts {style, svg, png} written under <state>/design/logos/."""
     out_dir = pathlib.Path(out_dir) if out_dir else config.STATE_DIR / "design" / "logos"
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:30] or "shop"
+    if colour:
+        slug += "-" + re.sub(r"[^a-z]", "", colour.lower())
     res = []
-    for style, svg in logo_svgs(name, tagline, hint):
+    for style, svg in logo_svgs(name, tagline, hint, colour):
+        if styles and style not in styles:
+            continue
         png = render_png(svg, out_dir / f"{slug}-{style}.png", 800, 260)
         res.append({"style": style, "svg": str((out_dir / f"{slug}-{style}.svg")), "png": str(png) if png else None})
     return res
 
 
-def make_banner(name, headline, sub="", hint="", platform="instagram", out_dir=None):
+def make_banner(name, headline, sub="", hint="", platform="instagram", out_dir=None, colour=None):
     out_dir = pathlib.Path(out_dir) if out_dir else config.STATE_DIR / "design" / "banners"
     size = (1080, 1080) if platform in ("instagram", "ig", "square") else ((1080, 1920) if platform in ("story", "stories", "reel") else (1200, 630))
     slug = re.sub(r"[^a-z0-9]+", "-", headline.lower()).strip("-")[:30] or "banner"
-    svg = banner_svg(name, headline, sub, hint, size)
+    if colour:
+        slug += "-" + re.sub(r"[^a-z]", "", colour.lower())
+    svg = banner_svg(name, headline, sub, hint, size, colour)
     png = render_png(svg, out_dir / f"{slug}-{platform}.png", *size)
     return {"svg": str(out_dir / f"{slug}-{platform}.svg"), "png": str(png) if png else None, "size": size}

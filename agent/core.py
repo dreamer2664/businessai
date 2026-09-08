@@ -1496,22 +1496,44 @@ class Agent:
         name = st.data.get("name", "Green Nest").split(" — ")[0].strip()
         tagline = st.data.get("name", "").split(" — ")[1].strip() if " — " in st.data.get("name", "") else ""
         hint = " ".join(p["name"] for p in st.products())[:300]
+        colour = d.get("colour")
         try:
+            if d["kind"] == "logo_pick":                                          # "I like the badge" → remember it, hand over the files, next steps
+                last = self.talk.last_design or {}
+                res = last.get("files") or []
+                pick = next((r for r in res if r["style"] == d["style"]), None)
+                if not pick:
+                    return "I don't have that option on file any more — say “make a logo” and I draw the three again."
+                if self.memory:
+                    self.memory.set_pref("logo", pick["svg"])
+                    self.memory.note("brand", "logo chosen", f"{d['style']} — {pick['svg']}", [])
+                self.bot.send_document(self.owner_id, pick["svg"], caption=f"Logo — {d['style']} (SVG, scales to any size)")
+                self.talk.last_design = {**last, "chosen": pick["svg"], "style": d["style"]}
+                return (f"👍 {d['style'].capitalize()} it is — saved as the shop's logo (I'll use it on labels, the site and the practice shop header).\n"
+                        f"Files: {pick['png']} (PNG) and {pick['svg']} (SVG, for print).\nNext: “make it blue/black” for a colour version, “make a banner for instagram” for the first post, or “put it on the shop” and I propose the header change.")
             if d["kind"] == "logo":
                 what = d.get("what") or ""
                 if what and not re.search(r"\b(shop|store|site|website|us|negozio|sito|business|brand|" + re.escape(name.lower()) + r")\b", what.lower()):
                     name, tagline = what.title()[:30], ""                     # a logo for something else ("a logo for Bella Pizza")
-                res = design.make_logos(name, tagline, hint=hint)
+                elif d.get("name"):
+                    name, tagline = d["name"], d.get("tagline", "")
+                res = design.make_logos(name, tagline, hint=hint, colour=colour)
                 pngs = [r for r in res if r["png"]]
                 for r in pngs:
-                    self.bot.send_document(self.owner_id, r["png"], caption=f"Logo option — {r['style']}", field="photo")
+                    self.bot.send_document(self.owner_id, r["png"], caption=f"Logo option — {r['style']}" + (f" ({colour})" if colour else ""), field="photo")
                 out_dir = str(pathlib.Path(res[0]["svg"]).parent) if res else ""
-                return (f"🎨 Three logo options for {name}" + (f" — {tagline}" if tagline else "") + f" ({'sent as pictures' if pngs else 'saved as SVG files'}):\n"
+                self.talk.last_design = {"kind": "logo", "name": name, "tagline": tagline, "files": res, "colour": colour}
+                return ((f"🎨 Same three in {colour}" if colour else f"🎨 Three logo options for {name}" + (f" — {tagline}" if tagline else "")) + f" ({'sent as pictures' if pngs else 'saved as SVG files'}):\n"
                         "1. wordmark — just the name, serif, quiet and premium\n2. badge — monogram in a circle + name, works tiny (profile pictures, stamps)\n3. icon — a symbol + name, the most 'shop' of the three\n"
-                        f"Colours come from what you sell. Files (PNG + SVG, scalable for print): {out_dir}\n"
+                        f"{'Colours come from what you sell. ' if not colour else ''}Files (PNG + SVG, scalable for print): {out_dir}\n"
                         "Say “I like the badge”, “make it blue”, or “logo for <another name>”. The SVG opens in Canva/Inkscape if you want to tweak it.")
             plat = d.get("platform") or "instagram"
             text = d.get("text") or ""
+            if d.get("post"):                                                     # "post it" → the usual post draft with Approve / Edit, picture attached
+                last = self.talk.last_design or {}
+                topic = last.get("text") or name
+                threading.Thread(target=self.draft_post, args=("instagram" if plat != "facebook" else "facebook", topic), daemon=True).start()
+                return f"Drafting the {plat} post for “{topic}” — it comes with Approve / Edit / Drop and the picture goes with it."
             if not text:                                                          # no words given → the best live message: notice, code, or top product
                 nt = st.notice().get("text")
                 code = next((c for c in st.codes() if c.get("active")), None)
@@ -1531,11 +1553,14 @@ class Agent:
                     sub = "Ships in 1 business day"
             else:
                 sub = ""
-            res = design.make_banner(name, text, sub, hint=hint, platform=plat)
+            if d.get("sub") is not None and d.get("again"):
+                sub = d.get("sub") or ""
+            res = design.make_banner(name, text, sub, hint=hint, platform=plat, colour=colour)
             if res["png"]:
-                self.bot.send_document(self.owner_id, res["png"], caption=f"{plat} banner {res['size'][0]}×{res['size'][1]}", field="photo")
-            return (f"🖼️ {plat.capitalize()} banner ({res['size'][0]}×{res['size'][1]}) — “{text}”" + (f" / {sub}" if sub else "") + ".\n"
-                    f"Files: {res['png'] or res['svg']}\nSay “change the text to …”, “make it for facebook/story”, or “post it” and I draft the caption for your tap.")
+                self.bot.send_document(self.owner_id, res["png"], caption=f"{plat} banner {res['size'][0]}×{res['size'][1]}" + (f" ({colour})" if colour else ""), field="photo")
+            self.talk.last_design = {"kind": "banner", "platform": plat, "text": text, "sub": sub, "colour": colour, "files": [res]}
+            return (f"🖼️ {plat.capitalize()} banner ({res['size'][0]}×{res['size'][1]}) — “{text}”" + (f" / {sub}" if sub else "") + (f", in {colour}" if colour else "") + ".\n"
+                    f"Files: {res['png'] or res['svg']}\nSay “change the text to …”, “make it for facebook/story”, “make it blue”, or “post it” and I draft the caption for your tap.")
         except Exception as e:
             self.log("design_failed", error=str(e)[:120])
             return f"I couldn't render the design here ({str(e)[:80]}) — the browser I use for pictures may be missing; run sh scripts/install.sh once and ask again."
@@ -1800,6 +1825,17 @@ class Agent:
             self.bot.send(self.owner_id, f"🎁 Gift wrap at {money(price)} as a tick box at checkout (kraft paper + ribbon + card ≈ {money(cost)} per parcel → {money(price - cost)} extra per wrapped order). "
                           "Typically 10–25 % of buyers tick it before Christmas, 5–10 % the rest of the year. You'll need the paper and 2 extra minutes per wrapped parcel.\nAdd it?",
                           buttons=[[("✅ Add it", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
+        if k == "logo":
+            if not ch.get("path"):
+                prop = st.propose("logo", "shop", "", "you asked: logo off the header")
+                self.bot.send(self.owner_id, "🏪 Take the logo off the shop header (the name in text comes back).\nDo it?", buttons=[[("✅ Do it", f"s:ok:{prop['id']}"), ("❌ Keep it", f"s:no:{prop['id']}")]])
+                return None
+            if not os.path.exists(ch["path"]):
+                return "Pick one first — say “make a logo”, then “I like the badge” (or wordmark / icon), then “put it on the shop”."
+            prop = st.propose("logo", "shop", ch["path"], "you asked: put the chosen logo on the shop header")
+            self.bot.send(self.owner_id, f"🏪 Put the chosen logo ({pathlib.Path(ch['path']).stem.split('-')[-1]}) on the practice shop header — every page, replaces the text name. Undo-able.\nDo it?",
+                          buttons=[[("✅ Put it up", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
             return None
         if k == "notice":
             if not ch.get("text"):

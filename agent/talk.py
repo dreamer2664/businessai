@@ -184,6 +184,7 @@ class Talk:
         self.advice = Advice(store=store, inbox=inbox, memory=memory)
         self.selftalk = SelfTalk(store=store, inbox=inbox, memory=memory, mind=mind)
         self.last_reply = None
+        self.last_design = None                                                  # what "make it blue" / "I like the badge" refer to
         self.selftalk.last_reply = lambda: self.last_reply
         self.planner = planner
         self.memory = memory
@@ -995,6 +996,31 @@ class Talk:
                 if p["stock"] == 0:
                     return f"{p['name']} already shows sold out (0 in stock) — the page takes e-mails for the restock. Say “we received N more …” when it's back."
                 return {"store_change": {"kind": "stock", "product": p["id"], "value": 0, "name": p["name"], "old": p["stock"], "text": f"Mark {p['name']} sold out (stock {p['stock']} → 0; the page shows 'sold out' and stops taking orders)"}}
+        d_last = getattr(self, "last_design", None)
+        if d_last:
+            m = re.match(r"^\W*(?:i (?:like|prefer|want|choose|pick|take|'ll take)|let's (?:go with|take|use)|go with|use|keep|choose|take|mi piace|prendo|scelgo|usa|prendiamo)\s+(?:the |number |option |il |la |lo |l')?(?P<pick>wordmark|badge|icon|monogram|circle|symbol|first|second|third|1|2|3|one|two|three|primo|secondo|terzo)\b", t, re.I)
+            if m and d_last.get("kind") == "logo":
+                pick = {"first": "wordmark", "1": "wordmark", "one": "wordmark", "primo": "wordmark", "second": "badge", "2": "badge", "two": "badge", "secondo": "badge", "monogram": "badge", "circle": "badge",
+                        "third": "icon", "3": "icon", "three": "icon", "terzo": "icon", "symbol": "icon"}.get(m.group("pick").lower(), m.group("pick").lower())
+                return {"design": {"kind": "logo_pick", "style": pick}}
+            m = re.search(r"\b(?:make|do|paint|colou?r|try|fai|fallo|falla|prova)\s+(?:it|them|that|one|the (?:logo|banner|badge|icon|wordmark)|lo|la)?\s*(?:in |di |più )?(?P<col>blue|green|red|black|dark|navy|orange|pink|purple|violet|brown|teal|gold|yellow|grey|gray|terracotta|beige|blu|verde|rosso|nero|arancione|rosa|viola|marrone|oro|giallo|grigio)\b", t, re.I)
+            if m:
+                return {"design": {**d_last, "colour": m.group("col").lower(), "again": True}}
+            m = re.search(r"\b(?:change|replace|swap|set|put|use|cambia|metti|scrivi)\s+(?:the )?(?:text|words|headline|title|wording|line|testo|titolo|scritta)\s+(?:to|with|into|in|con|a|:)\s*[\"“']?(?P<text>[^\"”']{3,120})[\"”']?\W*$", t, re.I)
+            if m and d_last.get("kind") == "banner":
+                return {"design": {**d_last, "text": m.group("text").strip(" .,:"), "again": True}}
+            m = re.search(r"\b(?:make|do|same|one|version|now|fallo|falla|stesso)\b.{0,12}?\b(?:for|per|as (?:a|an)|in|come)\s+(?:the )?(?P<plat>instagram|ig|facebook|fb|story|stories|reel|square|quadrato|storia)\b\W*$", t, re.I)
+            if m and d_last.get("kind") == "banner":
+                plat = {"ig": "instagram", "fb": "facebook", "stories": "story", "reel": "story", "storia": "story", "square": "instagram", "quadrato": "instagram"}.get(m.group("plat").lower(), m.group("plat").lower())
+                return {"design": {**d_last, "platform": plat, "again": True}}
+            if re.match(r"^\W*(?:post it|publish it|post that|share it|use it for a post|pubblicalo|postalo)\W*$", t, re.I) and d_last.get("kind") == "banner":
+                return {"design": {**d_last, "post": True}}
+            if re.match(r"^\W*(?:put|use|show|add|mettilo|usalo|mettila)\b.{0,8}?\b(?:it|that|the logo|lo|la)?\b.{0,8}?\b(?:on|in|to|sul|nel|nello|sullo)\s+(?:the |il |lo )?(?:shop|store|site|website|header|practice shop|negozio|sito)\W*$", t, re.I) and d_last.get("kind") == "logo":
+                return {"store_change": {"kind": "logo", "path": d_last.get("chosen") or ""}}
+        if re.match(r"^\W*(?:remove|take|drop|togli|rimuovi)\s+(?:the |il )?logo\b.{0,12}?(?:from |dal |dallo |off )?(?:the )?(?:shop|store|site|header|negozio|sito)?\W*$", t, re.I) and self.store is not None:
+            if self.store.data.get("logo"):
+                return {"store_change": {"kind": "logo", "path": ""}}
+            return "There's no logo on the shop header right now — it shows the name in text. Say “make a logo” → “I like the badge” → “put it on the shop” to add one."
         m = self.LOGO_REQ.search(t)
         if m and not re.search(r"\b(how (?:do|can|should) i|where (?:do|can) i|what (?:is|makes)|cost|price of a|hire|freelanc|fiverr|canva)\b", t, re.I):
             what = (m.groupdict().get("what") or "").strip(" ,.")

@@ -492,6 +492,10 @@ class Store:
                 prop["before"] = dict(gw)
                 gw.update({"active": bool(d.get("active", True)), "price": round(float(d.get("price", gw.get("price", 2.9))), 2), "cost": round(float(d.get("cost", gw.get("cost", 0.8))), 2)})
                 out = f"gift wrap {'on' if gw['active'] else 'off'}" + (f" at {money(gw['price'])} (cost {money(gw['cost'])}) — a tick box at checkout" if gw["active"] else "")
+            elif k == "logo":
+                prop["before"] = self.data.get("logo")
+                self.data["logo"] = ch if (ch and os.path.exists(str(ch))) else None
+                out = "logo on the shop header" if self.data["logo"] else "logo removed from the header (name shown again)"
             elif k == "notice":
                 nt = self.notice()
                 prop["before"] = dict(nt)
@@ -687,6 +691,7 @@ CSS = ("body{font-family:system-ui,sans-serif;margin:0;background:#f7f7f4;color:
        ".price{color:#2f5d3a;font-size:20px;font-weight:600}button,.btn{background:#2f5d3a;color:#fff;border:0;padding:9px 14px;border-radius:6px;cursor:pointer;font-size:15px}"
        "table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #e5e5e5;padding:6px 8px;text-align:left}footer{color:#777;font-size:12px;padding:20px 24px}"
        ".notice{background:#fff3cd;color:#5c4400;padding:10px 24px;border-bottom:1px solid #f0d36b}"
+       ".brand img{background:#fff;border-radius:6px;padding:2px 8px;vertical-align:middle}"
        "input,select,textarea{padding:7px;border:1px solid #bbb;border-radius:6px;font-size:15px}label{display:block;margin:8px 0}.muted{color:#777}.warn{color:#a33}")
 
 
@@ -695,8 +700,11 @@ def page(title, body, store, admin=False):
            if not admin else '<a href="/admin">Orders</a><a href="/admin/products">Products &amp; stock</a><a href="/admin/changes">Changes</a><a href="/">Shop front</a>')
     nt = store.data.get("notice") or {}
     banner = f"<div class=notice>{html.escape(nt['text'])}</div>" if (nt.get("text") and not admin) else ""
+    brand = f"<b>{html.escape(store.data['name'])}</b>"
+    if store.data.get("logo") and not admin:
+        brand = f"<a href='/' class=brand><img src='/logo.svg' alt='{html.escape(store.data['name'])}' height=44></a>"
     return (f"<!doctype html><html><head><meta charset='utf-8'><title>{html.escape(title)} — {html.escape(store.data['name'])}</title><style>{CSS}</style></head>"
-            f"<body><header><b>{html.escape(store.data['name'])}</b> &nbsp; {nav}</header>{banner}<main><h1>{html.escape(title)}</h1>{body}</main>"
+            f"<body><header>{brand} &nbsp; {nav}</header>{banner}<main><h1>{html.escape(title)}</h1>{body}</main>"
             f"<footer>Practice store run by Business AI — nothing here is real: payments are simulated, customers are simulated. "
             f"Free returns within 30 days · help@greennest.example</footer></body></html>")
 
@@ -780,6 +788,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._help(p[1:])
             if p == "/robots.txt":
                 return self._send("User-agent: *\nDisallow: /admin\n", ctype="text/plain")
+            if p == "/logo.svg" and s.data.get("logo") and os.path.exists(s.data["logo"]):
+                return self._send(open(s.data["logo"], "rb").read(), ctype="image/svg+xml")
             if p.startswith("/admin"):
                 if not self._admin_ok():
                     return self._need_auth()
