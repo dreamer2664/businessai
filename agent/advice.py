@@ -35,7 +35,13 @@ class Advice:
         (r"\bhow (?:do|should|can) i (?:pack|package|wrap|ship|protect|imballo|impacchetto)\s+(?:the |our |my |a |an |i |le |il |la )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\s+(?:so|that|to|without|senza|in modo|properly|safely|for shipping)\b|\bpackaging (?:for|of) (?:the |our |my )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\b|\bcome imballo\b", "packaging"),
         (r"\b(?:name|nome|title|call)\b.{0,20}?\b(?:for|per|of|di)\b.{0,15}?\bnewsletter\b|\bnewsletter (?:name|title|nome)\b", "newsletter_name"),
         (r"\b(?:write|draft|make|prepare|send|scrivi|prepara|manda)\b.{0,20}?\b(?:the |a |our |my |la |una )?(?:newsletter|e-?mail (?:campaign|blast)|email to (?:our |the )?customers)\b", "newsletter_write"),
-        (r"\b(?:what|which|best|good|ideal|migliore|quale|a che) (?:time|hour|ora|orario)s?\b.{0,20}?\b(?:post|publish|pubblicare|postare)\b|\bwhen (?:should|do) i post\b|\bquando (?:posto|pubblico)\b", "post_time"),
+        (r"\b(?:what|which|best|good|ideal|migliore|quale|a che) (?:time|hour|ora|orario)s?\b.{0,20}?\b(?:post|posto|publish|pubblicare|postare|pubblico)\b|\bwhen (?:should|do) i post\b|\bquando (?:posto|pubblico)\b|\ba che ora (?:posto|pubblico|devo postare|conviene postare)\b", "post_time"),
+        (r"\b(?:should|do|must) (?:i|we) (?:answer|reply to|respond to|react to|engage with) (?:the |a |every |all |my |our )?(?:bad|negative|1[- ]star|one[- ]star|critical|angry|nasty) reviews?\b|\b(?:answer|reply to|respond to) (?:bad|negative|1[- ]star) reviews?\??\W*$|\bignore (?:bad|negative) reviews\b|\b(?:rispondo|devo rispondere) alle recensioni negative\b", "answer_bad_reviews"),
+        (r"\bcan (?:i|we) sell to (?:companies|businesses|a company|a business|b2b|shops|other shops|retailers|offices|schools|hotels)\b|\bsell(?:ing)? (?:b2b|to businesses|to companies)\b.{0,20}?\b(?:can|allowed|how|ok|possible|worth)\b|\b(?:b2b|wholesale) (?:orders?|sales|customers)\b.{0,20}?\b(?:can|allowed|how|ok|possible|worth|should)\b|\bposso vendere (?:ad|alle|a) aziende\b|\ba company wants to (?:buy|order)\b(?!.{0,40}\b\d{2,5}\b)", "sell_b2b"),
+        (r"\bwhen (?:do|must|should) (?:i|we) pay (?:the )?(?:vat|iva|taxes|tax|imposte)\b|\bvat (?:deadlines?|due|payment dates?|when)\b|\b(?:quando|entro quando) (?:si paga|pago|devo pagare) (?:l'?iva|le tasse|le imposte)\b|\bscadenz[ae] (?:iva|fiscali|delle tasse)\b|\btax (?:deadlines?|calendar|dates)\b", "when_taxes"),
+        (r"\bwhat(?:'s| is) a (?:good|normal|decent|typical|average) (?:e-?mail |newsletter )?(?:open|click|click-?through|unsubscribe|conversion) rate\b|\b(?:open|click) rate\b.{0,20}?\b(?:good|normal|benchmark|should be|typical)\b|\bqual ?[èe] un buon (?:tasso di apertura|open rate)\b", "email_rates"),
+        (r"\bhow many followers (?:do (?:i|we) need|are enough|before|to (?:sell|start|make money|get sales))\b|\b(?:do|does) followers? (?:matter|count|equal sales)\b|\bnot enough followers\b|\bonly \d+ followers\b.{0,30}?\b(?:sell|worth|point|enough)\b|\bquanti follower (?:servono|mi servono|devo avere)\b", "followers_needed"),
+        (r"\bshould i (?:use|show|put) my face\b|\bmy face (?:in|on) (?:the |my )?(?:videos?|posts?|reels?|camera)\b|\b(?:face|camera)[- ]shy\b|\bdon'?t want to (?:be|appear|show my face) (?:on|in) (?:camera|videos?|the videos)\b|\bfaceless (?:videos?|content|brand|account)\b|\bdevo metterci la faccia\b|\bsenza (?:metterci la |mostrare la )?faccia\b", "face_in_videos"),
         (r"\bhow (?:often|many times|frequently|much) (?:should|do|must) (?:i|we) post\b|\bposting (?:frequency|schedule|cadence)\b|\bquante volte (?:devo )?(?:postare|pubblicare)\b|\bogni quanto (?:posto|pubblico)\b", "post_often"),
         (r"\b(?:our|my|the|what(?:'s| is) (?:our|my|the)) (?:return|refund|cancellation) rate\b|\bhow many returns\b|\btasso di res[oi]\b|\bquanti resi\b", "return_rate"),
         (r"\b(?:which|what) countr(?:y|ies) (?:buys?|orders?|is|are) (?:the )?(?:most|best|top)\b|\bwhere (?:do|are) (?:our |the |my )?(?:customers|buyers|orders) (?:from|coming from|come from)\b|\b(?:sales|orders) by country\b|\bda che paes[ei] (?:comprano|arrivano)\b|\bquale paese compra di più\b", "by_country"),
@@ -51,7 +57,7 @@ class Advice:
         (r"\b(?:ordered|wants?|bought|asks? for|ha ordinato|vuole)\s+(?P<n>\d{1,3})\s+(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\b.{0,40}?\b(?:only have|we have|have only|left|in stock|ne (?:abbiamo|restano))\b.{0,20}?\b(?:keep|hold|hold back|save|reserve|tenere|tengo|trattenere)\b|\b(?:keep|hold) (?:one|1|some|a few) back\b|\blast (?:one|piece|unit)\b.{0,40}?\b(?:sell|ship|keep|hold)\b", "stock_hold"),
         (r"\b(?:what do you think|your (?:opinion|take|view|honest opinion)|how (?:do you|would you) (?:rate|judge)|che ne pensi|come (?:ti sembra|lo vedi|va secondo te))\b.{0,20}?\b(?:the |our |my |il |del |lo )?(?:shop|store|business|negozio|numbers|results|so far|finora)\b|\bhonest (?:review|opinion) of the (?:shop|store)\b", "shop_opinion"),
         (r"\b(?:thinking (?:of|about)|considering|planning to|should i|would it be (?:smart|good|a good idea) to|what about|conviene|pensavo di|vorrei)\b.{0,15}?\b(?:add|adding|sell|selling|stock|stocking|introduce|introducing|aggiungere|vendere)\b.{0,10}?\b(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\b.{0,30}?\b(?:good idea|worth it|smart|yes or no|\?|buona idea)", "add_product_idea"),
-        (r"\bshould (?:i|we) (?:raise|increase|lower|drop|cut|reduce) (?:the |our |my )?prices?\b|\b(?:raise|increase|lower|cut) (?:the |our |my )?prices\??\W*$|\b(?:alzo|abbasso|aumento) i prezzi\b|\bare (?:our|my) prices (?:too )?(?:high|low|right|ok)\b", "raise_prices"),
+        (r"\bshould (?:i|we) (?:raise|increase|lower|drop|cut|reduce) (?:the |our |my )?prices?\b|\b(?:raise|increase|lower|cut) (?:the |our |my )?prices\??\W*$|\b(?:alzo|abbasso|aumento|dovrei alzare|dovrei abbassare|devo alzare|devo abbassare|conviene alzare|conviene abbassare|alziamo|abbassiamo) i prezzi\b|\bare (?:our|my) prices (?:too )?(?:high|low|right|ok)\b", "raise_prices"),
         (r"\b(?:tell me a joke|make me laugh|raccontami una barzelletta|a joke)\b", "joke"),
         (r"^\W*(?:i'?m bored|i am bored|mi annoio|bored)\W*$", "bored"),
         (r"\b(?:what(?:'s| is) the weather|weather (?:like |forecast |in |for |at |tomorrow|today|next week)|will it rain|is it (?:going to )?rain|che tempo fa|previsioni (?:meteo|del tempo)|meteo)\b", "weather"),
@@ -86,6 +92,63 @@ class Advice:
                 if r:
                     return r
         return None
+
+    # ---- round 14 answers ---------------------------------------------------------------------
+    def answer_bad_reviews(self, t, m):
+        return ("Yes — answer every bad review, within 24 hours, and write it for the next reader, not for the angry one. The person reading your reply is a future customer deciding whether you're trustworthy.\n"
+                "The shape (3 sentences, no more):\n"
+                "1. Sorry + the specific thing (“Sorry the mug arrived chipped”) — never “sorry you feel that way”.\n"
+                "2. What you did or offered (“we sent a replacement the same day / refunded in full”) — proof you fix things.\n"
+                "3. A door (“write to help@… and I'll sort it personally”) — take it private.\n"
+                "Never: argue, explain the courier's fault, mention other happy customers, copy-paste the same reply, offer money publicly (invites more 1-stars). "
+                "If the review is fake or off-topic, reply once politely and report it to the platform. "
+                "Paste me the review and I draft the reply in this shape — it goes out only after your tap.")
+
+    def sell_b2b(self, t, m):
+        return ("Yes, you can sell to companies — and it's good business: bigger baskets, fewer returns. What changes:\n"
+                "• Invoice: a business buyer needs a proper invoice with their Partita IVA / VAT number (in Italy an electronic invoice through SDI; for EU companies with a valid VAT number the sale is VAT-free 'reverse charge' — check the number on VIES).\n"
+                "• Terms: payment by bank transfer before shipping until you know them (or 30-day terms only for repeat, small amounts); a written quote with quantities, unit price, shipping, delivery date.\n"
+                "• Price: a volume discount is normal — 10 % from 10 pieces, 15–20 % from 50; never below 35 % margin, and shipping charged at cost.\n"
+                "• Consumer rules don't apply: no 14-day withdrawal right for businesses; you can agree 'no returns except defects'.\n"
+                "• Stock: confirm you can deliver before quoting — say “a company wants 40 mugs” and I check stock and write the quote.\n"
+                "Where to find them: offices (welcome kits), hotels/B&Bs, eco-minded shops that want to resell (then it's wholesale: about 50 % of retail).")
+
+    def when_taxes(self, t, m):
+        return ("When the money goes out (Italy, forfettario — the normal start for a small shop):\n"
+                "• VAT: in forfettario you don't charge or pay Italian VAT on sales — nothing monthly or quarterly. (Only if you leave forfettario: VAT quarterly, by the 16th of May/August/November and 16 March for Q4.)\n"
+                "• Income tax (imposta sostitutiva 5 %): with the tax return — balance by 30 June, plus two advances: 40 % on 30 June and 60 % on 30 November of the following year's tax.\n"
+                "• INPS Gestione Commercianti: four fixed instalments — 16 May, 20 August, 16 November, 16 February — about € 1,150 each (€ 4,611.64/year; 35 % less if you ask for the forfettario reduction), plus a % on income above the minimum, with the tax return.\n"
+                "• EU sales above € 10,000/year to consumers in other EU countries: OSS return quarterly, by the end of the month after the quarter.\n"
+                "• Every year: Camera di Commercio fee (~€ 53–120) by 30 June.\n"
+                "Rule: move 15 % of every sale to a separate 'taxes' account the day it lands — then the deadlines are boring. A commercialista sends you each F24 to pay; you just click. "
+                "Say “how much tax on 3000 euro of sales?” for the amounts.")
+
+    def email_rates(self, t, m):
+        return ("E-mail numbers to expect for a small shop's own list (people who bought or signed up — not a bought list):\n"
+                "• Open rate: 35–50 % is normal for a small, real list; under 25 % means bad subject lines or a tired list. (Apple hides real opens, so treat it as a rough signal.)\n"
+                "• Click rate: 2–5 % of delivered; a great product mail 6–10 %.\n"
+                "• Orders: 0,5–2 % of delivered — 200 subscribers → 1–4 orders per mail. That's why the list beats social: 100 subscribers are worth ~1,000 followers.\n"
+                "• Unsubscribes: under 0,5 % per send; more = you mailed too often or off-topic.\n"
+                "• Cadence: 2–4 mails a month, one useful thing each (a tip, a new photo, a restock) — not only discounts.\n"
+                "Say “write the newsletter” and I draft one; after each send tell me the numbers and I keep a running table.")
+
+    def followers_needed(self, t, m):
+        n = self._numbers() if hasattr(self, "_numbers") else {}
+        return ("Fewer than you think — followers don't buy, viewers do. What matters is reach per post and how many of those click through.\n"
+                "• 0–500 followers: sales come from the videos themselves (the algorithm shows them to strangers) plus people you already know — 1–3 orders a week is realistic with a good short video a day.\n"
+                "• ~1,000 engaged: a post reaches 300–800 people; at 1–2 % click and 3 % conversion that's ~1 order per post — a real trickle.\n"
+                "• ~5,000 engaged: you can launch a product and sell a small batch in a weekend.\n"
+                "• What beats followers: an e-mail list (100 subscribers ≈ 1,000 followers in sales) and reviews on the product page.\n"
+                "So: don't chase the number; post one short useful video a day, put the link in bio and on every parcel card, and count orders, not followers. "
+                "Say “what should I post today?” and I pick the post.")
+
+    def face_in_videos(self, t, m):
+        return ("You don't have to — but hands and voice help a lot, face is optional.\n"
+                "• Faceless works for a product brand: hands unboxing, packing an order, the product in use on a table, top-down shots, text on screen, your voice or a calm music track. Many small home-goods brands never show a face.\n"
+                "• What a face adds: trust and repeat viewers (+20–40 % watch time in most tests) — worth it once a week for a 'behind the shop' clip: you at the packing table, 10 seconds, no talking to camera needed.\n"
+                "• A middle way: your voice over hands-only footage — personal, no camera anxiety.\n"
+                "Rule: consistency beats charisma. One format you can repeat every day (packing a real order, 15 s, same corner, same light) wins over a great video once a month. "
+                "Say “give me 3 post ideas for the mug” and I write faceless ones.")
 
     # ---- helpers ------------------------------------------------------------------------------
     def _product(self, what):
@@ -392,7 +455,7 @@ class Advice:
         thin = [p["name"].split(" (")[0] + f" ({m * 100:.0f} %)" for p, m in rows if m < 0.5]
         fat = [p["name"].split(" (")[0] + f" ({m * 100:.0f} %)" for p, m in rows if m >= 0.6]
         conv = n["conversion"]
-        up = bool(re.search(r"\b(raise|increase|alzo|aumento)\b", t.lower()))
+        up = bool(re.search(r"\b(raise|increase|alzo|aumento|alzare|aumentare|alziamo)\b", t.lower()))
         if up:
             return (("Raise prices? " + ("Yes, on the thin ones: " + ", ".join(thin) + " — under 50 % after fees one refund eats three sales. " if thin else "Not across the board — margins are fine. ") +
                      (f"Conversion is {conv:.1f} %, " + ("so demand is there: a 5–10 % rise on the best seller won't hurt. " if conv >= 2 else "already low: raising now would hurt; fix the page first. " if n["orders"] else "no data yet. ")) +
