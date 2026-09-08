@@ -9,6 +9,7 @@ import base64
 import datetime as _dt
 import html
 import json
+import os
 import re
 import time
 
@@ -144,6 +145,14 @@ def _data_uri(img):
     return f"data:{mime};base64," + base64.b64encode(img).decode()
 
 
+def register(kind, title, path, options=0, sources=0):
+    """Put a file made elsewhere (a website zip, a screenshot, course notes) into the library index so /library shows it."""
+    LIB_DIR.mkdir(parents=True, exist_ok=True)
+    with open(INDEX, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"t": _dt.datetime.now().isoformat(timespec="seconds"), "kind": kind, "title": title, "file": str(path),
+                            "options": options, "sources": sources}, ensure_ascii=False) + "\n")
+
+
 def recent(n=10):
     if not INDEX.exists():
         return []
@@ -155,7 +164,10 @@ def list_text(n=10):
     rows = recent(n)
     if not rows:
         return "My library is empty. Ask me for research, a seller check or a comparison and the document lands here."
-    return "My library (latest first):\n" + "\n".join(f"• {r['t'][:16].replace('T', ' ')} · {r['kind']} · {r['title'][:60]} ({r['options']} options, {r['sources']} sources) — {r['file']}" for r in rows)
+    def line(r):
+        extra = f" ({r['options']} options, {r['sources']} sources)" if r.get("options") or r.get("sources") else ""
+        return f"• {r['t'][:16].replace('T', ' ')} · {r['kind']} · {r['title'][:60]}{extra} — {os.path.basename(str(r['file']))}"
+    return "My library (latest first):\n" + "\n".join(line(r) for r in rows)
 
 
 def path_of(name):

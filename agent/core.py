@@ -8,6 +8,7 @@ Usage:  python3 -m agent.core            # run
         python3 -m agent.core --once     # process pending updates, then exit
 """
 import datetime as _dt
+import html
 import json
 import os
 import re
@@ -158,7 +159,11 @@ class Agent:
     def _save_state(self):
         self.state_file.write_text(json.dumps(self.state))
 
-    def log(self, kind, **fields):
+    def log(self, *args, **fields):
+        """log("event", field=…). A field literally named 'kind' is kept as 'kind_' so no caller can crash the logger."""
+        kind = args[0] if args else fields.pop("event", "event")
+        if "kind" in fields:
+            fields["kind_"] = fields.pop("kind")
         rec = {"t": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"), "kind": kind}
         rec.update(fields)
         line = config.redact(json.dumps(rec, ensure_ascii=False))
@@ -986,6 +991,33 @@ class Agent:
             self.log("stage_started", port=port)
         return self.stage[1]
 
+    def _placeholder_photo(self, topic):
+        """A simple product-card image for rehearsals: PIL when present, else a screenshot of an HTML card in my browser."""
+        path = config.STATE_DIR / "rehearsal_photo.jpg"
+        try:
+            from PIL import Image, ImageDraw
+            im = Image.new("RGB", (800, 600), (236, 228, 214))
+            ImageDraw.Draw(im).text((40, 280), topic[:40], fill=(60, 60, 60))
+            im.save(path, quality=80)
+            return str(path)
+        except Exception:
+            pass
+        try:
+            card = config.STATE_DIR / "rehearsal_card.html"
+            card.write_text(f"<html><body style='margin:0;width:800px;height:600px;background:#ece4d6;display:flex;align-items:center;justify-content:center;"
+                            f"font:32px system-ui;color:#333'>{html.escape(topic[:60])}</body></html>")
+            def shot():
+                with self.tasks._session() as b:
+                    b.page.set_viewport_size({"width": 800, "height": 600})
+                    b.open("file://" + str(card))
+                    b.page.screenshot(path=str(path), type="jpeg", quality=80)
+                    b.page.set_viewport_size({"width": 1280, "height": 800})
+            self.tasks.on_hands(shot, timeout=60)
+            return str(path)
+        except Exception as e:
+            self.log("placeholder_photo_failed", error=str(e)[:80])
+            return None
+
     def run_rehearsal(self, topic, tell=True):
         """Draft (Social checks) → publish on the stage with a product photo → read comments → reply drafts. Quiet-time safe."""
         if self.busy:
@@ -1006,11 +1038,7 @@ class Agent:
             except Exception:
                 photo = None
             if not photo:
-                from PIL import Image, ImageDraw
-                photo = str(config.STATE_DIR / "rehearsal_photo.jpg")
-                im = Image.new("RGB", (800, 600), (236, 228, 214))
-                ImageDraw.Draw(im).text((40, 280), topic[:40], fill=(60, 60, 60))
-                im.save(photo, quality=80)
+                photo = self._placeholder_photo(topic)
             rep = self.rehearsal.post(url, d["text"], image=photo, file_for_owner=tell)
             self.rehearsals_done += 1
             line = self.rehearsal.report_text(rep)

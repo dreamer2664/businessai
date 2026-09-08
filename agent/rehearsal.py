@@ -128,7 +128,7 @@ class Rehearsal:
                     if not self._open_composer(b):
                         break
                     continue
-                if attempt_text[:40] in page or urllib.parse.urlparse(b.page.url).path.startswith("/p/"):
+                if re.sub(r"\s+", " ", attempt_text)[:40] in re.sub(r"\s+", " ", page) or urllib.parse.urlparse(b.page.url).path.startswith("/p/"):
                     rep["ok"] = True
                     rep["post_url"] = b.page.url
                     rep["text"] = attempt_text
@@ -214,7 +214,8 @@ class Rehearsal:
                 return False
             b.click(btn["n"])
             time.sleep(0.5)
-            ok = text[:40] in b.extract_text()
+            norm = lambda x: re.sub(r"\s+", " ", x).strip()
+            ok = norm(text)[:40] in norm(b.extract_text())
         self.T._release_page()
         self.log("rehearsal_reply", ok=ok)
         return ok

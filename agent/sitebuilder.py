@@ -273,6 +273,11 @@ class SiteBuilder:
             for fn in d.glob("*.html"):
                 z.write(fn, fn.name)
         self.log("site_built", name=b["name"], pages=len(pages), dir=str(d))
+        try:
+            from . import library
+            library.register("website", f"{b['name']} ({b['kind']}, {b.get('city') or '?'})", d / f"{slug}.zip", options=len(pages))
+        except Exception:
+            pass
         return {"dir": d, "index": d / "index.html", "pages": [fn for fn, _ in pages] + ["privacy.html"], "copy": c, "slug": slug, "zip": d / f"{slug}.zip"}
 
     # ---- checking my own work ----------------------------------------------------------------------------------
@@ -353,5 +358,5 @@ class SiteBuilder:
                 time.sleep(2)
         else:
             return f"auto-training skipped: could not fetch a place ({str(last)[:80]})", None, None
-        self.log("site_train_place", name=place["name"], kind=place["kind"], city=place["city"], country=place["country"])
+        self.log("site_train_place", name=place["name"], business=place["kind"], city=place["city"], country=place["country"])
         return self.build_for(place)
