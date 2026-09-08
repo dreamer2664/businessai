@@ -978,6 +978,8 @@ class Agent:
             if direct.get("mail_code"):
                 threading.Thread(target=self.fetch_mail_code, args=(direct.get("hint") or "",), daemon=True).start()
                 return f"Looking in my Gmail for a fresh verification code{' from ' + direct['hint'] if direct.get('hint') else ''} — I'll paste it here as soon as it lands (I check for about 2 minutes)."
+            if direct.get("domain"):                                                 # "is greennest.it free?" → RDAP lookup, no browser
+                return self.domain_check(direct["domain"])
             if direct.get("store_cmd"):                                              # "open the practice store", "print the labels", "all shipped"
                 return self.store_plain(direct["store_cmd"])
             if direct.get("store_change"):                                           # "lower the price of the lamp to 35" → proposal + Apply button
@@ -1455,6 +1457,83 @@ class Agent:
             return "\n".join(f"{p['name']} · {money(p['price'])} (cost {money(p.get('cost', 0))}) · stock {p['stock']}" for p in st.products())
         return "Store commands: /store [open|close|day [n]|review|numbers|orders|products|admin|reset]"
 
+    def domain_check(self, dom):
+        """Is a domain taken? .it → the Registro .it whois (port 43, authoritative: 'Status: AVAILABLE'); other TLDs → RDAP
+        (IANA bootstrap → registry; 404 = free, 200 = registered). Free, no browser, no sign-up."""
+        import socket, urllib.request, urllib.error
+        tld = dom.rsplit(".", 1)[-1]
+        base = dom.split(".")[0]
+        variants = ", ".join(f"{base}{x}" for x in (("shop." + tld, "store." + tld, ".shop", ".eu") if tld != "eu" else ("shop.eu", ".com", ".shop")))
+        taken_line = lambda extra="": f"{dom} is taken{extra}.\nTry a variant: {variants} — say “is <name> free?” and I check it."
+        free_line = (f"{dom} looks free (no record at the registry). Register it before you announce the name — € 5–15 a year at any registrar"
+                     + (" (for .it: EU address + codice fiscale/partita IVA)" if tld == "it" else "") + f". Also check the Instagram and TikTok handle @{base} before deciding.")
+        if tld == "it":
+            try:
+                sock = socket.create_connection(("whois.nic.it", 43), timeout=15)
+                sock.sendall((dom + "\r\n").encode())
+                out = b""
+                while True:
+                    c = sock.recv(4096)
+                    if not c:
+                        break
+                    out += c
+                sock.close()
+                txt = out.decode("utf-8", "replace")
+                self.log("domain_check", domain=dom, taken="AVAILABLE" not in txt)
+                if re.search(r"Status:\s*AVAILABLE", txt):
+                    return free_line
+                if re.search(r"Status:\s*(ok|active|inactive|pendingDelete|pendingTransfer|clientHold|redemption|noRegistrar)|Created:", txt, re.I):
+                    cr = re.search(r"Created:\s*(\S+)", txt)
+                    ex = re.search(r"Expire Date:\s*(\S+)", txt)
+                    return taken_line((f" — registered {cr.group(1)}" if cr else "") + (f", expires {ex.group(1)}" if ex else ""))
+                if re.search(r"UNASSIGNABLE|not allowed|reserved", txt, re.I):
+                    return f"{dom} can't be registered (reserved by the registry). Try {variants}."
+            except Exception as e:
+                self.log("domain_whois_failed", error=str(e)[:80])
+        try:
+            url = None
+            try:
+                with urllib.request.urlopen(urllib.request.Request("https://data.iana.org/rdap/dns.json", headers={"User-Agent": "businessai/1.0"}), timeout=15) as r:
+                    boot = json.loads(r.read().decode())
+                for tlds, urls in boot.get("services", []):
+                    if tld in tlds and urls:
+                        url = urls[0].rstrip("/") + f"/domain/{dom}"
+                        break
+            except Exception:
+                pass
+            url = url or f"https://rdap.org/domain/{dom}"
+            req = urllib.request.Request(url, headers={"Accept": "application/rdap+json", "User-Agent": "businessai/1.0"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                body = json.loads(r.read().decode("utf-8", "replace"))
+            ev = {e.get("eventAction"): e.get("eventDate", "")[:10] for e in body.get("events", []) if isinstance(e, dict)}
+            reg = next((x.get("vcardArray", [None, []])[1] for x in body.get("entities", []) if "registrar" in (x.get("roles") or [])), None)
+            reg_name = next((v[3] for v in (reg or []) if isinstance(v, list) and v and v[0] == "fn"), "")
+            self.log("domain_check", domain=dom, taken=True)
+            return taken_line((f" — registered {ev['registration']}" if ev.get("registration") else "") + (f", expires {ev['expiration']}" if ev.get("expiration") else "") + (f", registrar {reg_name}" if reg_name else ""))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                self.log("domain_check", domain=dom, taken=False)
+                return free_line
+            return f"I couldn't check {dom} (registry answered {e.code}) — try again in a minute or look it up at a registrar."
+        except Exception as e:
+            return f"I couldn't reach the registry for {dom} ({type(e).__name__}) — I need the network for this; try again in a minute."
+
+    def reminders_due(self):
+        """Dated to-dos: ping once when the time comes (from the poll loop, at most once a minute)."""
+        try:
+            now = _dt.datetime.now().isoformat(timespec="minutes")
+            hit = []
+            for x in self.memory.todo.get("items", []):
+                if x.get("status") == "open" and x.get("due") and not x.get("pinged") and x["due"] <= now:
+                    x["pinged"] = True
+                    hit.append(x)
+            if hit:
+                self.memory._save()
+                for x in hit:
+                    self.bot.send(self.owner_id, f"⏰ Reminder: {re.sub(r' \(⏰ .*\)$', '', x['text'])}\n(say “done {x['id']}” when it's handled)")
+        except Exception as e:
+            self.log("reminders_failed", error=str(e)[:80])
+
     def store_plain(self, cmd):
         """The practice store in plain words: open/close/stock/orders/day/review come from store_command; labels and 'all shipped' are new."""
         st = self.store
@@ -1840,6 +1919,9 @@ class Agent:
             self.planner.tick()
             self.eyes.tick()
             self.clock_tick()
+            if time.time() - getattr(self, "_last_remind", 0) > 60 and self.owner_id:
+                self._last_remind = time.time()
+                self.reminders_due()
             self.idle_work()
             for u in updates:
                 self.state["offset"] = u["update_id"] + 1
