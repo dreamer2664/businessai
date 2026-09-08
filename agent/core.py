@@ -34,6 +34,9 @@ from .telegram import Bot, TelegramError
 from .store import money
 from .google import Google, GoogleError
 from . import library
+from .brief import Brief
+from .pace import Pace
+from .sellers import SellerCheck
 
 
 def money_list(orders):
@@ -92,6 +95,11 @@ class Agent:
         self.channels = Channels(inbox=self.inbox, log=self.log)
         self.google = Google(log=self.log)
         self.google_reconnect_told = 0
+        self.pace = Pace(log=self.log)
+        self.briefer = Brief(planner=self.planner, log=self.log)
+        self.sellers = SellerCheck(self.tasks, planner=self.planner, log=self.log, viewer=self.viewer, pace=self.pace, eyes=self.eyes)
+        self.active_brief = None            # the plan being worked on (shown in /status)
+        self.last_brief = None              # last plan proposed, for "go" / "change step 2 …"
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
         self.operator = Operator(self.planner, eyes=self.eyes, tasks=self.tasks, desktop=self.desktop, log=self.log,
                                  notify=self.notify, ask_owner=lambda q, opts: self.ask(q, opts, timeout=900), viewer=self.viewer)
@@ -332,6 +340,25 @@ class Agent:
                 if m:
                     self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n❌ dropped — nothing published")
             self.log("post_decision", id=pid, action=action)
+        elif data.startswith("b:"):
+            act = data[2:]
+            m0 = cq.get("message") or {}
+            chat_id, mid = (m0.get("chat") or {}).get("id", self.owner_id), m0.get("message_id")
+            self.bot.answer_callback(cq["id"], "Ok")
+            b, self.last_brief = self.last_brief, None
+            if not b:
+                self.bot.clear_buttons(chat_id, mid, new_text="(that plan is gone — just ask again)")
+            elif act == "go":
+                self.bot.clear_buttons(chat_id, mid, new_text="▶ Going.")
+                r = self.execute(b)
+                if r:
+                    self.bot.send(chat_id, r)
+            elif act == "edit":
+                self.last_brief = b
+                self.bot.clear_buttons(chat_id, mid, new_text="✏️ Tell me what to change (e.g. 'only Italian sellers', 'max 30 €', 'skip social media', 'take your time') — or 'go'.")
+            else:
+                self.bot.clear_buttons(chat_id, mid, new_text="✖ Cancelled.")
+            return
         elif data.startswith("s:"):
             _, action, pid = data.split(":", 2)
             m = cq.get("message") or {}
@@ -687,26 +714,119 @@ class Agent:
                 return "Rebuilding my learned pack — I'll tell you when it's done."
             rec = self.learner.recent(8)
             return self.learner.status() + ("\n\nLatest facts:\n" + "\n".join(f"• {f['text']}" for f in rec) if rec else "")
-        # ---- plain language: work out what the owner wants --------------------
-        it = self.planner.intent(text) if self.planner.installed() else {"kind": "ask", "topic": text}
-        self.log("intent", intent=it["kind"], topic=it["topic"])
+        # ---- plain language: understand → plan → do --------------------------------
         if self.planner.last_error and not getattr(self, "warned_llm", False):
             self.warned_llm = True
             self.notify(f"⚠️ My thinking model isn't running: {self.planner.last_error}\nI'll keep working in simple mode (worse understanding and answers) until it is fixed. /status shows the state.")
-        if it["kind"] == "chat":
+        return self.understand(text)
+
+    # ---- milestone 13: understand → plan → do -------------------------------------------
+    GO_WORDS = re.compile(r"^(go|ok go|yes go|do it|go ahead|start|proceed|vai|procedi|sì vai|yes|yep|ok|okay|sure)\W*$", re.I)
+
+    def understand(self, text):
+        """Every plain message: build a brief (goal, pace, deliverable, steps). Short jobs start at once with the plan
+        shown; long ones (documents, sites) show the plan first with Go / Change / Cancel buttons."""
+        low = text.strip().lower()
+        if self.last_brief and self.GO_WORDS.match(low):
+            b, self.last_brief = self.last_brief, None
+            return self.execute(b)
+        if self.last_brief and re.match(r"^(no|cancel|stop|forget it|nah|annulla|lascia)\W*$", low):
+            self.last_brief = None
+            return "Okay, dropped."
+        if self.last_brief and len(low.split()) <= 12 and not low.startswith("/"):
+            b = self.last_brief
+            b = self.briefer.amend(b, text)
+            self.last_brief = b
+            self.bot.send(self.owner_id, Brief.text(b) + "\n\nShall I go?", buttons=[[("▶ Go", "b:go"), ("✏️ Change", "b:edit"), ("✖ Cancel", "b:no")]])
+            return None
+        it = self.planner.intent(text) if self.planner.installed() else None       # cheap regexes inside, model for the middle
+        b = self.briefer.make(text)
+        if it and it["kind"] in ("watch", "summarize", "visit") and b["kind"] in ("ask", "research", "visit", "watch", "summarize"):
+            b["kind"], b["topic"] = it["kind"], it["topic"]                                        # URL rules are reliable
+        self.log("intent", intent=b["kind"], topic=b["topic"][:80])
+        if b["kind"] == "chat":
             try:
-                return self.planner.reply(text) if self.planner.installed() else "Hi! Ask me anything about the store."
+                return self.planner.reply(text) if self.planner.installed() else "Hi! Tell me what you need — a search, a seller check, a document, a website…"
             except Exception:
-                return "Hi! Ask me anything about the store."
-        if it["kind"] in ("research", "compare", "summarize", "visit", "watch"):
-            return self.start_task(it["kind"], it["topic"])
-        # a question: answer from what I know; if I know nothing useful, go and look
-        ans = self.tasks.ask(text)
-        if ans and not re.search(r"\b(does not|doesn't|do not|don't) (contain|answer|mention|provide|include)\b|no evidence|not enough (evidence|information)", ans, re.I):
-            return ans
-        if not self.brain.ready and not self.planner.installed():
-            return "My knowledge brain and thinking model aren't installed here yet — run: sh scripts/get_brain.sh && sh scripts/get_model.sh"
-        return self.start_task("research", it["topic"], prefix="I don't know that well enough from my own knowledge — ")
+                return "Hi! Tell me what you need."
+        if b["kind"] == "ask":
+            self.pace.set(b["pace"], b["goal"])
+            ans = self.tasks.ask(text)
+            if ans and not re.search(r"\b(does not|doesn't|do not|don't) (contain|answer|mention|provide|include)\b|no evidence|not enough (evidence|information)", ans, re.I):
+                self.pace.finish()
+                return ans
+            if not self.brain.ready and not self.planner.installed():
+                return "My knowledge brain and thinking model aren't installed here yet — run: sh scripts/get_brain.sh && sh scripts/get_model.sh"
+            b["kind"] = "research"
+            return self.execute(b, prefix="I don't know that well enough from my own knowledge, so I'll look it up. ")
+        big = b["deliverable"] in ("document", "website") or b["kind"] in ("seller_check", "build_site") or b.get("questions")
+        if big and not (b["pace"]["pace"] == "quick" and not b.get("questions")):
+            self.last_brief = b
+            self.bot.send(self.owner_id, Brief.text(b) + "\n\nShall I go? (you can also write changes, e.g. 'only Italian sellers, max 30 €')",
+                          buttons=[[("▶ Go", "b:go"), ("✏️ Change", "b:edit"), ("✖ Cancel", "b:no")]])
+            return None
+        return self.execute(b)
+
+    def execute(self, b, prefix=""):
+        if self.busy:
+            return f"I'm still busy with: {self.busy}. Ask me again in a minute (or /cancel it)."
+        self.pace.set(b["pace"], b["goal"])
+        self.active_brief = b
+        self.viewer.show_plan(b["goal"], b["steps"], self.pace)
+        kind, topic = b["kind"], b["topic"]
+        head = Brief.text(b) if not prefix else prefix + Brief.text(b)
+        if kind == "seller_check":
+            threading.Thread(target=self.run_seller_check, args=(b,), daemon=True).start()
+            return head + "\n\nStarting — you'll get the document here (and in my Drive if it's connected)."
+        if kind in ("research", "compare", "summarize", "visit", "watch"):
+            threading.Thread(target=self.run_task, args=(f"{kind} {topic}", b), daemon=True).start()
+            return head
+        if kind == "build_site":
+            return head + "\n\n(Website building is the next thing I'm learning — not ready yet.)"
+        if kind == "post":
+            plat, t2 = self.social.parse(topic)
+            threading.Thread(target=self.draft_post, args=(plat, t2 or topic), daemon=True).start()
+            return head
+        return self.start_task("research", topic)
+
+    def run_seller_check(self, b):
+        self.busy = f"seller check: {b['topic'][:40]}"
+        try:
+            note = "Note: branded replicas are counterfeit, so these are genuine or unbranded options. " if b.get("counterfeit") else ""
+            path, summary, options = self.tasks.on_hands(self.sellers.run, b["topic"], 4, True, note, timeout=1500)
+            if not path:
+                self.bot.send(self.owner_id, summary)
+                return
+            link = ""
+            if self.google.connected():
+                try:
+                    up = self.google.upload(path, folder="Research", convert_to_doc=True)
+                    link = f"\n📄 Google Doc: {up['link']}"
+                except Exception as e:
+                    self.log("drive_upload_failed", error=str(e)[:120])
+                    link = f"\n(Drive upload failed: {str(e)[:80]} — the file is attached instead)"
+            self.bot.send(self.owner_id, f"✅ Done. {summary}{link}")
+            self.bot.send_document(self.owner_id, str(path), caption="The full document — open it in any browser (pictures, links, verdicts).")
+            self.memory.note("sellers", b["topic"], summary, [o["url"] for o in options])
+            # ---- offer to add the good ones to the shop --------------------------------
+            good = [o for o in options if o.get("grade") == "good" and o["facts"].get("_price")]
+            if good and self.store.server:
+                o = good[0]
+                price = round(o["facts"]["_price"] * 2.5, 2)
+                prop = self.store.propose("product", o["seller"], json.dumps({"name": f"{b['topic'].title()} ({o['seller']})", "cost": o["facts"]["_price"], "price": price,
+                                                                             "short": o.get("verdict", ""), "supplier": o["url"], "ship": o["facts"].get("Delivery time", "")}),
+                                          f"best option from the seller check of {b['topic']}")
+                self.bot.send(self.owner_id, f"🛒 The shop is open — want me to add {o['seller']}'s {b['topic']} to it? Cost {o['facts'].get('Price')} → I'd list it at € {price:.2f} "
+                                             f"(2.5×), shipping {o['facts'].get('Delivery time', 'as the supplier states')}, description from the listing.",
+                              buttons=[[("✅ Add to shop", f"s:ok:{prop['id']}"), ("❌ No", f"s:no:{prop['id']}")]])
+        except Exception as e:
+            self.log("seller_check_failed", error=traceback.format_exc()[-400:])
+            self.bot.send(self.owner_id, f"The seller check failed: {type(e).__name__}: {str(e)[:160]}")
+        finally:
+            self.busy = None
+            self.pace.finish()
+            self.viewer.plan_done()
+            self.active_brief = None
 
     def start_do(self, arg):
         """/do [desktop] [<url> |] <goal> — the operator works the screen step by step."""
@@ -851,12 +971,16 @@ class Agent:
                "research": f"looking into '{arg}' — report in about a minute."}[kind]
         return (prefix + msg) if prefix else msg[0].upper() + msg[1:]
 
-    def run_task(self, command):
+    def run_task(self, command, brief=None):
         self.busy = command[:60]
         try:
             out = self.tasks.run(command)
         finally:
             self.busy = None
+            if brief is not None:
+                self.pace.finish()
+                self.viewer.plan_done()
+                self.active_brief = None
         self.log("out", text=out[:300])
         self.bot.send(self.owner_id, out)
 
@@ -981,6 +1105,7 @@ class Agent:
                 f"channels: {', '.join(c.describe().split(' (')[0] for c in self.channels.active()) or 'none connected (/channels)'}\n"
                 f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
                 f"{self.google.status()}\n"
+                f"{self.pace.text()}" + (f" · plan: {self.active_brief['goal'][:60]} (step {self.viewer.plan['step'] + 1 if self.viewer.plan else '?'}/{len(self.active_brief['steps'])})" if self.active_brief else "") + "\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")

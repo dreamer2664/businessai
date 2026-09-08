@@ -331,6 +331,16 @@ class Store:
             elif k == "page":
                 self.data["pages"][t] = str(ch)[:4000]
                 out = f"page '{t}' updated"
+            elif k == "product":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                pid = re.sub(r"[^a-z0-9]+", "-", d["name"].lower()).strip("-")[:40]
+                if self.product(pid):
+                    pid += "-2"
+                self.data["products"].append({"id": pid, "name": d["name"][:80], "price": round(float(d["price"]), 2), "cost": round(float(d.get("cost", 0)), 2),
+                                              "stock": int(d.get("stock", 10)), "options": {}, "short": str(d.get("short", ""))[:300],
+                                              "details": [x for x in (f"Supplier: {d['supplier']}" if d.get("supplier") else "", f"Shipping: {d['ship']}" if d.get("ship") else "") if x],
+                                              "weight_g": int(d.get("weight_g", 300))})
+                out = f"added product '{d['name'][:60]}' at {money(float(d['price']))}"
             elif k in ("ship", "refund", "cancel"):
                 ok = self.set_status(int(t), {"ship": "shipped", "refund": "refunded", "cancel": "cancelled"}[k], note=f"applied by {by}")
                 if not ok:

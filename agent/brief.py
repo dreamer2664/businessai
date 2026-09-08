@@ -113,6 +113,13 @@ def _rule_brief(text, pace):
     counterfeit = bool(re.search(r"\b(reps?|replicas?|fakes?|knock-?offs?|dupes?)\b", low)) and bool(re.search(r"\b(nike|adidas|gucci|louis|prada|rolex|jordan|yeezy|balenciaga|supreme|dior|chanel|apple)\b", low))
     goal = text.strip().rstrip(".!?")
     kind, deliverable = "ask", "answer"
+    url = re.search(r"https?://\S+", text)
+    if url and re.search(r"youtube\.com/watch|youtu\.be/|youtube\.com/shorts", url.group(0)):
+        steps = ["Open the video and read the captions", "Note the concrete ideas and figures", "Send you the list"]
+        return {"goal": goal, "deliverable": "list", "kind": "watch", "steps": steps, "questions": [], "counterfeit": False, "topic": url.group(0)}
+    if url and len(re.sub(r"https?://\S+", "", low).split()) <= 3 or (url and re.search(r"\b(summari[sz]e|read|riassumi|tl;?dr|what does it say)\b", low)):
+        steps = ["Open the page and read it fully", "Keep the key points with figures", "Write the summary"]
+        return {"goal": goal, "deliverable": "answer", "kind": "summarize", "steps": steps, "questions": [], "counterfeit": False, "topic": url.group(0)}
     if re.search(r"\b(find|look for|search|cerca|trova)\b.*\b(seller|sellers|shop|shops|store|stores|supplier|suppliers|listing|listings|options?|deals?|cheap|good)\b", low) \
             or re.search(r"\b(reliable|trustworthy|legit|reviews?|complaints?)\b", low):
         kind, deliverable = "seller_check", "document"
@@ -135,6 +142,7 @@ def _rule_brief(text, pace):
     if re.search(r"\b(doc|document|google docs?|walk me through|with (links|pictures|images))\b", low) and kind not in ("chat", "post", "build_site"):
         deliverable = "document"
     product = topic_of(text)
+    product = re.sub(r"^(compare|comparison of|confronta|research|find out|look into|watch|summari[sz]e)\s+", "", product).strip() or product
     if counterfeit:
         goal = f"{goal} — note: branded replicas are counterfeit, so I research genuine/unbranded options instead"
         product = re.sub(r"\b(reps?|replicas?|fakes?|knock-?offs?|dupes?)( of| for)?\b", "", product).strip()
@@ -196,6 +204,41 @@ class Brief:
         self.log("brief", task=b["kind"], deliverable=b["deliverable"], pace=pace["pace"], deadline=pace["deadline_min"], budget=pace["budget_min"], steps=len(b["steps"]))
         return b
 
+    def amend(self, b, change):
+        """Apply an owner's change request to a pending plan (constraints, pace, dropped steps)."""
+        low = change.lower().strip(" .!")
+        b = dict(b); b["steps"] = list(b["steps"]); b.setdefault("constraints", [])
+        pace = parse_pace(change)
+        if pace["pace"] != "normal" or pace["deadline_min"] or pace["budget_min"]:
+            b["pace"] = pace
+        m = re.search(r"\b(?:max|under|below|less than|massimo|sotto|entro)\s*(?:€|eur)?\s*(\d+)\s*(?:€|eur|euro)?", low)
+        if m:
+            b["constraints"] = [c for c in b["constraints"] if not c.startswith("max")] + [f"max € {m.group(1)}"]
+        m = re.search(r"\b(?:only|solo|just)\s+([a-z]+(?: [a-z]+)?)\s+(sellers?|shops?|stores?|suppliers?|venditori)\b", low)
+        if m:
+            b["constraints"].append(f"only {m.group(1)} {m.group(2)}")
+        m = re.search(r"\b(?:from|in|da|ship(?:ping|s)? from)\s+(italy|italia|europe|europa|eu|germany|spain|france|uk|usa|china)\b", low)
+        if m:
+            b["constraints"].append(f"ships from {m.group(1)}")
+        if re.search(r"\b(skip|no|without|senza)\b.*\b(social|instagram|facebook)", low):
+            b["steps"] = [st for st in b["steps"] if not re.search(r"social", st, re.I)]
+            b["constraints"].append("no social media check")
+        if re.search(r"\b(skip|no|without|senza)\b.*\b(reviews?|recensioni)", low):
+            b["steps"] = [st for st in b["steps"] if not re.search(r"review", st, re.I)]
+        m = re.search(r"\b(?:drop|remove|skip|togli|salta)\s+(?:step\s+)?(\d)\b", low)
+        if m and 1 <= int(m.group(1)) <= len(b["steps"]):
+            b["steps"].pop(int(m.group(1)) - 1)
+        m = re.search(r"\b(\d)\s+(?:options?|sellers?|results?|candidates?)\b", low)
+        if m:
+            b["n"] = max(1, min(8, int(m.group(1))))
+            b["constraints"].append(f"{b['n']} options")
+        if not (m or b["constraints"] or pace["pace"] != "normal") and len(low.split()) >= 2:
+            b["constraints"].append(change.strip())                       # keep the owner's words as a constraint anyway
+        if b["constraints"]:
+            b["topic"] = re.sub(r" \(.*\)$", "", b["topic"]) + " (" + "; ".join(dict.fromkeys(b["constraints"])) + ")"
+        self.log("brief_amended", constraints=len(b["constraints"]))
+        return b
+
     @staticmethod
     def text(b):
         """Render for Telegram: what I understood, the pace, the plan."""
@@ -208,6 +251,8 @@ class Brief:
         out = [f"📋 What I understood: {b['goal']}", f"{pace_line}", f"📦 I'll hand you: {dict(answer='an answer', list='a list', document='a document with links and pictures', file='a file', website='a website', post='a post to approve', reply='a reply to approve')[b['deliverable']]}"]
         if b["steps"]:
             out.append("My plan:\n" + "\n".join(f"{i + 1}. {s}" for i, s in enumerate(b["steps"])))
+        if b.get("constraints"):
+            out.append("Your conditions: " + "; ".join(dict.fromkeys(b["constraints"])))
         if b.get("questions"):
             out.append("Before I start: " + " ".join(b["questions"]))
         if b.get("counterfeit"):

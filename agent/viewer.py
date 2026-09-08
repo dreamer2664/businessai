@@ -35,20 +35,37 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>Business AI �
  aside{overflow:auto;padding:8px 10px;border-left:1px solid #333}
  .ev{padding:4px 0;border-bottom:1px solid #222}.ev time{color:#777;margin-right:6px;font-size:12px}
  button{background:#333;color:#ddd;border:1px solid #555;border-radius:4px;padding:3px 8px;cursor:pointer}
+ #plan{background:#161616;border-bottom:1px solid #333;padding:8px 10px;font-size:13px;display:none}
+ #plan .goal{color:#fff;font-weight:600}#plan ol{margin:6px 0 0 18px;padding:0}#plan li{padding:1px 0;color:#999}
+ #plan li.doing{color:#ffd166}#plan li.done{color:#6c6;text-decoration:line-through}
+ #timer{float:right;font-variant-numeric:tabular-nums;font-size:22px;font-weight:700;padding:0 6px;border-radius:6px}
+ #timer.ok{color:#6c6}#timer.warn{color:#ffd166}#timer.late{color:#f66;animation:blink 1s step-end infinite}#timer.slow{color:#9ad;font-size:15px}
+ @keyframes blink{50%{opacity:.4}}
  @media(max-width:700px){main{grid-template-columns:1fr;grid-template-rows:55vh 1fr}aside{border-left:0;border-top:1px solid #333}}
 </style></head><body>
 <header><b>Business AI — live</b><span id="task">…</span><span id="badge" class="badge idle">starting</span>
 <span id="url"></span><button onclick="toggle()" id="tg">show what it reads</button></header>
-<main><div id="left"><img id="shot" alt="(no screenshot yet — the browser opens when a task starts)"><pre id="text"></pre></div>
+<main><div id="left" style="flex-direction:column"><div id="plan"></div><img id="shot" alt="(no screenshot yet — the browser opens when a task starts)"><pre id="text"></pre></div>
 <aside id="events"></aside></main>
 <script>
 let showText=false,lastShot=null;
 function toggle(){showText=!showText;text.style.display=showText?'block':'none';shot.style.display=showText?'none':'block';
  tg.textContent=showText?'show the screen':'show what it reads';}
+function mmss(sec){const a=Math.abs(sec),h=Math.floor(a/3600),m=Math.floor(a%3600/60),s=a%60;
+ return (sec<0?'-':'')+(h?h+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+function renderPlan(p){const el=document.getElementById('plan');if(!p||!p.goal){el.style.display='none';return;}el.style.display='block';
+ let t='';const now=Date.now()/1000;
+ if(p.deadline){const left=Math.round(p.deadline-now);t='<span id="timer" class="'+(left<0?'late':left<180?'warn':'ok')+'" title="owner wants it in '+p.deadline_min+' min">⏰ '+mmss(left)+(left<0?' late':'')+'</span>';}
+ else if(p.budget_until){const left=Math.round(p.budget_until-now);t='<span id="timer" class="slow">🐢 owner away · '+mmss(Math.max(0,left))+' left</span>';}
+ let h=t+'<div class=goal>'+esc(p.goal)+'</div>';
+ if(p.steps&&p.steps.length){h+='<ol>';p.steps.forEach((s,i)=>{const c=i<p.step?'done':i===p.step?'doing':'';h+='<li class="'+c+'">'+(c==='doing'?'▶ ':'')+esc(s)+'</li>';});h+='</ol>';}
+ if(p.note){h+='<div style="color:#bbb;margin-top:4px">'+esc(p.note)+'</div>';}
+ el.innerHTML=h;}
+function esc(x){return String(x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 async function tick(){try{const s=await (await fetch('state.json',{cache:'no-store'})).json();
  task.textContent=s.task?('Task: '+s.task):'(no task running)';
  badge.textContent=s.idle?'browser closed':s.status;badge.className='badge '+(s.idle?'idle':s.status);
- url.textContent=s.title?(s.title+' — '+s.url):'';
+ url.textContent=s.title?(s.title+' — '+s.url):'';renderPlan(s.plan);
  const ev=document.getElementById('events');ev.innerHTML='';
  for(const e of s.events){const d=document.createElement('div');d.className='ev';const t=document.createElement('time');t.textContent=e.t;
   d.appendChild(t);d.appendChild(document.createTextNode(e.text));ev.appendChild(d);}
@@ -63,6 +80,14 @@ def humanize(kind, f):
     g = lambda k, d="": f.get(k, d)
     return {
         "task_start": lambda: f"▶ Task: {g('cmd')} {g('arg')}",
+        "plan": lambda: f"📋 New plan: {g('goal')} ({g('n')} steps)",
+        "plan_step": lambda: f"▶ Step {g('n')}: {g('text')}",
+        "pace_set": lambda: f"⏱ Pace {g('mode')}" + (f" — owner wants it in {g('deadline_min')} min" if g('deadline_min') else "") + (f" — owner away for {g('budget_min')} min" if g('budget_min') else ""),
+        "pace_late": lambda: "⏰ Past the time the owner asked for — finishing as fast as I can",
+        "brief": lambda: f"🧠 Understood: {g('task')} → {g('deliverable')} ({g('steps')} steps, pace {g('pace')})",
+        "doc_saved": lambda: f"📄 Document written: {g('title')} ({g('options')} options)",
+        "drive_upload": lambda: f"☁️ Uploaded to my Drive: {g('name')}",
+        "seller_check": lambda: f"🔎 Checking seller: {g('name')}",
         "task_done": lambda: f"✔ Done in {int(g('ms', 0)) / 1000:.0f} s — report of {g('chars')} characters sent",
         "browser_open": lambda: f"Opened {g('url')} ({int(g('ms', 0)) / 1000:.1f} s)",
         "browser_click": lambda: f"Clicked [{g('n')}] '{g('label')}'" + (" → a new tab opened" if g("new_tab") else ""),
@@ -94,6 +119,7 @@ class Viewer:
         self.shot, self.shot_time = None, 0
         self.url = self.title = self.text = ""
         self.status, self.tabs, self.task = "idle", 0, None
+        self.plan = None                      # {"goal", "steps", "step", "deadline", "deadline_min", "budget_until", "note"}
         self.browser_open = False
         self.events = collections.deque(maxlen=200)
         self._seen = 0
@@ -120,7 +146,31 @@ class Viewer:
 
     def state(self):
         return {"url": self.url, "title": self.title, "status": self.status, "tabs": self.tabs, "task": self.task,
-                "shot_time": self.shot_time, "idle": not self.browser_open, "events": list(self.events)[:60]}
+                "plan": self.plan, "shot_time": self.shot_time, "idle": not self.browser_open, "events": list(self.events)[:60]}
+
+    # ---- the plan panel (milestone 13) ----------------------------------------
+    def show_plan(self, goal, steps, pace=None, note=""):
+        p = {"goal": goal, "steps": list(steps), "step": 0, "note": note, "deadline": None, "deadline_min": None, "budget_until": None}
+        if pace is not None:
+            p["deadline"], p["budget_until"] = pace.deadline, pace.budget_until
+            p["deadline_min"] = pace.deadline_min
+        self.plan = p
+        self.note("plan", {"goal": goal, "n": len(p["steps"])})
+
+    def plan_step(self, i, note=""):
+        if self.plan:
+            self.plan["step"] = i
+            if note:
+                self.plan["note"] = note
+            self.note("plan_step", {"n": i + 1, "text": self.plan["steps"][i] if 0 <= i < len(self.plan["steps"]) else note})
+
+    def plan_done(self, note="done"):
+        if self.plan:
+            self.plan["step"] = len(self.plan["steps"])
+            self.plan["note"] = note
+
+    def clear_plan(self):
+        self.plan = None
 
     # ---- http --------------------------------------------------------------
     def start(self):

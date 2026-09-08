@@ -19,6 +19,7 @@ class Pace:
         self.goal = ""
         self.started = 0.0
         self.deadline = None          # epoch seconds when the owner wants it
+        self.deadline_min = None      # what the owner asked for ("in 10 minutes")
         self.budget_until = None      # epoch seconds until which the owner is away (slow mode)
         self.last_remind = 0.0
         self.late_told = False
@@ -31,6 +32,7 @@ class Pace:
         self.goal = goal[:80]
         self.started = time.time()
         if brief_pace.get("deadline_min"):
+            self.deadline_min = int(brief_pace["deadline_min"])
             self.deadline = self.started + 60 * brief_pace["deadline_min"]
         if brief_pace.get("budget_min"):
             self.budget_until = self.started + 60 * brief_pace["budget_min"]
@@ -64,7 +66,7 @@ class Pace:
         bits.append(f"elapsed {el // 60} min")
         r = self.remaining()
         if r is not None:
-            bits.append(f"⏰ owner wants it in {int((self.deadline - self.started) // 60)} min — " + (f"{r // 60} min left" if r >= 0 else f"{-r // 60} min LATE"))
+            bits.append(f"⏰ owner wants it in {self.deadline_min} min — " + (f"{r // 60} min left" if r >= 0 else f"{-r // 60} min LATE"))
         b = self.budget_left()
         if b is not None:
             bits.append(f"🐢 owner away — {b // 3600} h {b % 3600 // 60} min of quiet time left" if b > 0 else "owner may be back — wrap up")
@@ -83,10 +85,10 @@ class Pace:
                 self.late_told = True
                 self.last_remind = now
                 self.log("pace_late", late_s=-r)
-                return f"⏰ I'm past the {int((self.deadline - self.started) // 60)} minutes you wanted — finishing as fast as I can (no corners cut on the checks)."
+                return f"⏰ I'm past the {self.deadline_min} minutes you wanted — finishing as fast as I can (no corners cut on the checks)."
             if now - self.last_remind >= REMIND_EVERY and 0 <= r <= 3 * 60:
                 self.last_remind = now
-                return f"⏰ {max(1, r // 60)} min left of the {int((self.deadline - self.started) // 60)} you gave me — wrapping up."
+                return f"⏰ {max(1, r // 60)} min left of the {self.deadline_min} you gave me — wrapping up."
         return ""
 
     def hurry(self):
