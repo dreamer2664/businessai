@@ -32,6 +32,8 @@ from .desktop import Desktop
 from .operator import Operator
 from .telegram import Bot, TelegramError
 from .store import money
+from .google import Google, GoogleError
+from . import library
 
 
 def money_list(orders):
@@ -56,6 +58,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /shop <address> — I read your own shop's help, shipping, returns and contact pages and answer customers with their exact words (re-read by itself every week) · /shop — what I know from them · /shop forget
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
 /do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do <page1> <page2> | which is cheaper? (compare several pages) · /do <page> | fill in the form: name = …, email = …, message = … (I type, you send) · /do desktop <goal> — same on my own screen. Any click that costs money, publishes, signs in or deletes waits for your tap.
+/google — my own Google account (Drive library + reading my own mailbox for sign-up codes): /google connect · /google test · /google ls
 /screen · /watch on|off — see my browser · /status · /selftest
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
@@ -87,6 +90,8 @@ class Agent:
         self.inbox = Inbox(planner=self.planner, brain=self.brain, memory=self.memory, log=self.log, shopfacts=self.shopfacts, store=self.store)
         self.social = Social(planner=self.planner, inbox=self.inbox, memory=self.memory, log=self.log)
         self.channels = Channels(inbox=self.inbox, log=self.log)
+        self.google = Google(log=self.log)
+        self.google_reconnect_told = 0
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
         self.operator = Operator(self.planner, eyes=self.eyes, tasks=self.tasks, desktop=self.desktop, log=self.log,
                                  notify=self.notify, ask_owner=lambda q, opts: self.ask(q, opts, timeout=900), viewer=self.viewer)
@@ -672,6 +677,10 @@ class Agent:
             had = self.editing or self.editing_post
             self.editing = self.editing_post = None
             return "Okay, edit cancelled — the draft is still waiting with its buttons." if had else "Nothing to cancel."
+        if low.startswith("/google") or re.fullmatch(r"(please )?(connect|link|reconnect|set ?up) (to )?(my |your )?google( drive| account)?( please)?", low.strip(" .!")):
+            return self.google_command(text[7:].strip() if low.startswith("/google") else "connect")
+        if low.startswith("http://localhost") and "code=" in low:
+            return self.google.finish_with_url(text)
         if low.startswith("/learned"):
             if "rebuild" in low:
                 threading.Thread(target=lambda: self.notify(self.learner.build(force=True)), daemon=True).start()
@@ -857,6 +866,7 @@ class Agent:
         if self.busy or now - self.last_idle_check < 60:
             return
         self.last_idle_check = now
+        self.google_check()
         if self.channels.due():
             threading.Thread(target=self.poll_channels, daemon=True).start()
             return
@@ -906,6 +916,60 @@ class Agent:
         finally:
             self.busy = None
 
+    def google_command(self, arg):
+        arg = (arg or "").lower().strip()
+        g = self.google
+        if arg in ("connect", "reconnect", "link"):
+            if not g.has_client():
+                return ("I can't connect yet: my Google key file is missing. On my machine put the OAuth client JSON from Google Cloud at "
+                        ".secrets/google_client.json (Google Auth Platform → Clients → Desktop app → Download JSON), then say 'connect google' again.")
+            try:
+                url = g.connect_link(prefer_port=8097)
+            except Exception as e:
+                return f"Couldn't start the Google connection: {e}"
+            return ("Open this link in a browser where you're logged in as my account (busynessai001@gmail.com), click Advanced → Go to businessai → "
+                    "tick everything → Continue:\n" + url +
+                    "\n\nIf the last page fails to load (it points at localhost on my machine), just paste that page's address here and I'll finish it myself.")
+        if arg in ("ls", "list", "library", "files"):
+            if not g.connected():
+                return g.status()
+            try:
+                files = g.list_library()
+            except Exception as e:
+                return f"Drive didn't answer: {e}"
+            if not files:
+                return f"My Drive library is empty so far — {g.folder_link()}"
+            return "My Drive library (latest first):\n" + "\n".join(f"• {f['name'][:60]} — {f.get('webViewLink', '')}" for f in files[:15]) + f"\n\nFolder: {g.folder_link()}"
+        if arg in ("mail", "inbox"):
+            if not g.connected():
+                return g.status()
+            try:
+                ms = g.recent_mail("newer_than:7d", 5)
+            except Exception as e:
+                return f"Gmail didn't answer: {e}"
+            return "My mailbox, latest 5:\n" + ("\n".join(f"• {m['date'][:16]} · {m['from'][:35]} · {m['subject'][:50]}" for m in ms) or "(empty)")
+        if arg.startswith("test"):
+            if not g.connected():
+                return g.status()
+            try:
+                doc = library.Doc("Google connection test", "written by Business AI to check its Drive library", kind="test")
+                doc.summary("If you can read this in Google Drive, my library works: documents I write land here as editable Google Docs.")
+                path = doc.save("google-test")
+                up = g.upload(path, convert_to_doc=True)
+                ms = g.recent_mail("newer_than:30d", 1)
+                return f"✅ Drive works — test document: {up['link']}\n✅ Gmail works — I can read my mailbox ({len(ms)} recent message{'s' if len(ms) != 1 else ''}).\nFolder: {g.folder_link()}"
+            except Exception as e:
+                return f"❌ Google test failed: {e}"
+        lib = library.list_text(5)
+        return f"{g.status()}\n\n{lib}\n\n/google connect · /google test · /google ls (Drive files) · /google mail (my mailbox)"
+
+    def google_check(self):
+        """Called from the idle loop: if Google dropped the 7-day token, ask the owner once a day for a re-tap."""
+        g = self.google
+        if g.needs_reconnect and time.time() - self.google_reconnect_told > 86400:
+            self.google_reconnect_told = time.time()
+            self.notify("🔑 Google cut my Drive/Gmail connection (it does that every 7 days for private apps). " + self.google_command("connect"))
+
     def status_text(self):
         up = int(time.time() - self.started)
         return (f"Business AI {VERSION}\n"
@@ -916,6 +980,7 @@ class Agent:
                 f"practice store: {'open at ' + self.store_url() + ' · day ' + str(self.store.data['day']) + ' · ' + str(len(self.store.data['orders'])) + ' orders' if self.store.server else 'closed (/store open)'}\n"
                 f"channels: {', '.join(c.describe().split(' (')[0] for c in self.channels.active()) or 'none connected (/channels)'}\n"
                 f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
+                f"{self.google.status()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")
