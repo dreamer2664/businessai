@@ -54,8 +54,10 @@ linked to that Page) plus a Meta developer app — about 20 minutes, once:
 1. developers.facebook.com → *My Apps* → *Create App* → type **Business** → give it a name.
 2. In the app add the product **Messenger**; under *Messenger → Instagram settings / Messenger API settings* connect your Page.
 3. Open *Tools → Graph API Explorer*: choose your app, click **Generate Access Token**, tick the permissions
-   `pages_show_list`, `pages_messaging`, `pages_read_engagement`, `pages_manage_metadata` (+ `instagram_basic`,
-   `instagram_manage_messages` for Instagram) and log in.
+   `pages_show_list`, `pages_messaging`, `pages_read_engagement`, `pages_manage_metadata`, **`pages_manage_posts`** (so that an
+   approved Facebook post — with the banner the agent made — is published for you after your tap) (+ `instagram_basic`,
+   `instagram_manage_messages` for Instagram) and log in. Instagram posts stay copy-paste for now: Meta only accepts pictures from a
+   public web address.
 4. Still in the Explorer, choose your Page in the *User or Page* dropdown → you get a **Page access token**. Make it long-lived
    (Access Token Debugger → *Extend Access Token*), otherwise it expires after an hour or so.
 5. The Page id is on your Page's *About* page (or `me?fields=id` in the Explorer). For Instagram, the business account id:

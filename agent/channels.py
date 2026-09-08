@@ -32,6 +32,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from email.header import decode_header, make_header
 from email.message import EmailMessage
 
@@ -303,6 +304,38 @@ class MetaChannel:
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read().decode())
+
+    def publish(self, text, photo_path=None):
+        """Publish a post on the Facebook Page (official Graph API): a photo post when a picture is given, else a text post.
+        Needs pages_manage_posts on the Page token. → (ok, info). Instagram publishing needs a public image URL, so it is
+        not attempted here — the caller tells the owner what to do."""
+        if not self.configured():
+            return False, "facebook: not set up (META_PAGE_ID and META_PAGE_TOKEN)"
+        try:
+            if photo_path and os.path.exists(photo_path):
+                boundary = "----bai" + uuid.uuid4().hex
+                fields = {"caption": text, "access_token": self.token}
+                body = b""
+                for k, v in fields.items():
+                    body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n").encode()
+                data = open(photo_path, "rb").read()
+                ctype = "image/png" if photo_path.lower().endswith(".png") else "image/jpeg"
+                body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"source\"; filename=\"{os.path.basename(photo_path)}\"\r\nContent-Type: {ctype}\r\n\r\n").encode() + data + b"\r\n"
+                body += f"--{boundary}--\r\n".encode()
+                req = urllib.request.Request(f"{self.api}/{self.page_id}/photos", data=body, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, method="POST")
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    d = json.loads(r.read().decode())
+                pid = d.get("post_id") or d.get("id", "")
+            else:
+                d = self._post(f"{self.page_id}/feed", {"message": text})
+                pid = d.get("id", "")
+            self.log("post_published", id=pid)
+            return True, f"published on the Facebook page (post {pid})"
+        except urllib.error.HTTPError as e:
+            self.last_error = config.redact(self._explain(e))[:200]
+            return False, f"facebook refused the post: {self.last_error}"
+        except Exception as e:
+            return False, f"facebook: {str(e)[:120]}"
 
     def fetch_new(self, known_ids, limit=25):
         """Latest customer messages from the Page's conversations (Messenger and, when linked, Instagram)."""

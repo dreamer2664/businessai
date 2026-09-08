@@ -371,7 +371,16 @@ class Agent:
                 self.bot.answer_callback(cq["id"], "Approved")
                 if m:
                     self.bot.clear_buttons(m["chat"]["id"], m["message_id"], new_text=(m.get("text") or "")[:3800] + "\n\n✅ approved")
-                self.bot.send(self.owner_id, f"📋 {d['platform']} post — long-press to copy and publish it yourself (I can't post for you yet):\n\n{d['text']}")
+                photo = d.get("photo")
+                if d["platform"] == "facebook" and self.channels.meta.configured():           # the real thing, official API, only after the tap
+                    ok, info = self.channels.meta.publish(d["text"], photo)
+                    self.log("post_publish", ok=ok, info=info)
+                    self.bot.send(self.owner_id, ("✅ " if ok else "⚠️ ") + info + ("" if ok else f"\n\nHere is the text to publish by hand:\n\n{d['text']}"))
+                elif d["platform"] == "instagram" and self.channels.meta.configured():
+                    self.bot.send(self.owner_id, "📋 Instagram: Meta only accepts pictures from a public web address, and the shop has none yet — so this one is copy-paste: "
+                                                 f"long-press the text, post the picture I sent from your gallery.\n\n{d['text']}")
+                else:
+                    self.bot.send(self.owner_id, f"📋 {d['platform']} post — long-press to copy and publish it yourself (connect the Page with /channels and I post for you):\n\n{d['text']}")
             elif action == "edit":
                 self.editing_post = pid
                 self.bot.answer_callback(cq["id"], "Type your version")
@@ -540,11 +549,17 @@ class Agent:
         self.busy = f"drafting a {platform} post"
         try:
             d = self.social.draft(platform, topic)
+            try:
+                ld = self.talk.last_design or {}
+                if ld.get("kind") == "banner" and ld.get("text") == topic and ld.get("files") and ld["files"][0].get("png"):
+                    d["photo"] = ld["files"][0]["png"]
+            except Exception:
+                pass
             pid = str(int(time.time() * 1000) % 10 ** 8)
             self.posts[pid] = d
             flags = ("\n⚠️ " + "; ".join(d["checks"])) if d["checks"] else ""
             note = f"\nℹ️ {d['note']}" if d.get("note") else ""
-            body = f"📣 {platform} post · {d['chars']} characters\nabout: {topic[:120]}\n\n— my draft —\n{d['text']}{flags}{note}"
+            body = f"📣 {platform} post · {d['chars']} characters\nabout: {topic[:120]}" + ("\n🖼️ with the banner I made" if d.get("photo") else "") + f"\n\n— my draft —\n{d['text']}{flags}{note}"
             ok_label = "⚠️ Approve anyway" if d["checks"] else "✅ Approve"
             self.bot.send(self.owner_id, body, buttons=[[(ok_label, f"p:ok:{pid}"), ("✏️ Edit", f"p:edit:{pid}")],
                                                         [("🔁 Try again", f"p:redo:{pid}"), ("❌ Drop", f"p:no:{pid}")]])
