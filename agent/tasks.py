@@ -80,9 +80,10 @@ class Tasks:
         else:
             self.on_hands(b.park, timeout=15)
 
-    def __init__(self, log=None, notify=None, brain=None, viewer=None, planner=None, memory=None, eyes=None):
+    def __init__(self, log=None, notify=None, brain=None, viewer=None, planner=None, memory=None, eyes=None, pace=None):
         self.log = log or (lambda kind, **f: None)
         self.eyes = eyes
+        self.pace = pace                      # the job clock: 'stop' and 'hurry up' are honoured inside the page loops
         self.notify = notify or (lambda text: None)
         self.brain = brain
         self.viewer = viewer
@@ -165,7 +166,12 @@ class Tasks:
                 results = b.search_results(topic, 12)
             except BrowserError as e:
                 return "\n".join(report + [f"(web search failed: {e})"])
+            stopped = False
             for r in results:
+                if self._stopped():
+                    stopped = True; break
+                if self._hurried() and len(opened) >= max(1, n_pages - 1):
+                    break
                 if len(opened) >= n_pages or FORUM.search(r["url"]):
                     continue
                 try:
@@ -193,7 +199,7 @@ class Tasks:
         else:
             for title, url, ks in opened:
                 report.append(f"\n{title}\n{url}\n" + "\n".join(f"• {s}" for s in ks))
-        report.append(f"({len(opened)} pages read in {time.time() - t0:.0f}s)")
+        report.append(f"({len(opened)} pages read in {time.time() - t0:.0f}s" + (" — stopped early as you asked" if stopped else "") + ")")
         out = "\n".join(report)
         if self.memory and opened:
             self.memory.note("research", topic, brief or out, [u for _, u, _ in opened])
@@ -289,12 +295,16 @@ class Tasks:
             queries = [f"{product} dropshipping supplier", f"{product} wholesale supplier Europe"]
             seen = set()
             for q in queries:
+                if self._stopped() or (self._hurried() and rows):
+                    break
                 try:
                     results = b.search_results(q, 10)
                 except BrowserError:
                     continue
                 for r in results:
-                    if r["url"] in seen or FORUM.search(r["url"]) or len(rows) >= n_pages * 2:
+                    if self._stopped():
+                        break
+                    if r["url"] in seen or FORUM.search(r["url"]) or len(rows) >= (n_pages if self._hurried() else n_pages * 2):
                         continue
                     seen.add(r["url"])
                     try:
@@ -557,6 +567,15 @@ class Tasks:
         out = self.research(angle)
         self.memory.studied(goal["id"], angle)
         return angle, out
+
+    def _stopped(self):
+        """True when the owner said stop mid-job — long loops check this between pages."""
+        p = self.pace
+        return bool(p and hasattr(p, "should_stop") and p.should_stop())
+
+    def _hurried(self):
+        p = self.pace
+        return bool(p and hasattr(p, "hurry") and p.hurry())
 
     # ---- dispatcher ----------------------------------------------------
     want_doc = False          # set by the agent per job: the owner asked for a document (links + pictures), not a chat dump

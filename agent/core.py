@@ -99,8 +99,9 @@ class Agent:
         self.planner = Planner(log=self.log)
         self.memory = Memory()
         self.eyes = Eyes(log=self.log, planner=self.planner)
+        self.pace = Pace(log=self.log)
         self.tasks = Tasks(log=self.log, notify=self.notify, brain=self.brain, viewer=self.viewer, eyes=self.eyes,
-                           planner=self.planner, memory=self.memory)
+                           planner=self.planner, memory=self.memory, pace=self.pace)
         self.learner = Learner(planner=self.planner, memory=self.memory, log=self.log)
         self.shopfacts = ShopFacts(tasks=self.tasks, log=self.log)
         self.store = practice_store.Store(log=self.log)          # the practice shop (milestone 11); served only when /store open
@@ -109,7 +110,6 @@ class Agent:
         self.channels = Channels(inbox=self.inbox, log=self.log)
         self.google = Google(log=self.log)
         self.google_reconnect_told = 0
-        self.pace = Pace(log=self.log)
         self.briefer = Brief(planner=self.planner, log=self.log)
         self.accounts = Accounts(google=self.google, log=self.log, notify=self.notify, ask=self.ask)
         self.accounts.eyes = self.eyes
