@@ -171,9 +171,13 @@ class Store:
     def products(self):
         return self.data["products"]
 
+    IT_WORDS = {"tazza": "mug", "tazze": "mug", "tazzina": "mug", "lampada": "lamp", "lampade": "lamp", "spazzolino": "toothbrush", "spazzolini": "toothbrush", "cover": "case", "custodia": "case",
+                "custodie": "case", "sughero": "cork", "bambù": "bamboo", "bambu": "bamboo", "cera": "beeswax", "pellicole": "wraps", "involucri": "wraps", "panni": "wraps", "scrivania": "desk", "telefono": "phone", "cellulare": "phone"}
+
     def find_product(self, text):
-        """Best product for free text ('the lamp', 'cork case') — name words."""
+        """Best product for free text ('the lamp', 'cork case', 'le tazze') — name words, Italian words mapped."""
         low = re.sub(r"\W+", " ", text.lower())
+        low = " ".join(self.IT_WORDS.get(w, w) for w in low.split())
         best, score = None, 0
         for p in self.products():
             words = [w for w in re.findall(r"[a-z0-9]{3,}", p["name"].lower()) if w not in ("set", "pcs", "with")]
