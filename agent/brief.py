@@ -59,6 +59,10 @@ def topic_of(text):
     """The thing the request is about, without pace words, politeness and filler: 'hey, real quick find me some good
     cheap reps for nike slippers, i'm out for 3 hours' → 'reps for nike slippers'."""
     urls = re.findall(r"https?://\S+|\b[a-z0-9.-]+\.(?:com|it|de|fr|es|net|org|co|io|be|tv|me)(?:/\S*)?", text, re.I)
+    text = re.sub(r"\s*\([^()]{8,160}\)", "", text)                        # bracketed conditions are kept separately
+    _site = r"(?:vinted|subito|ebay|amazon|etsy|wallapop|depop|aliexpress|temu|facebook marketplace|zalando|kleinanzeigen|leboncoin)(?:\.(?:it|com|de|fr|es|co\.uk))?"
+    text = re.sub(r"\s+\b(?:on|su|from|da)\s+" + _site + r"(?:\s*(?:,|and|e|or|o)\s*" + _site + r")*\b", " ", text, flags=re.I)
+    text = re.sub(r"\b(and )?(report|get) back to me\b.*$|\band (write|make|send|hand) me\b.*$|\bi want (links|images|pictures|photos)\b.*$", "", text, flags=re.I)
     low = " " + text.lower().strip() + " "
     for i, u in enumerate(urls):                                          # protect links from the punctuation split
         low = low.replace(u.lower(), f" URL{i} ")
@@ -70,6 +74,8 @@ def topic_of(text):
     best = ""
     for p in parts:
         q = re.sub(_LEAD, "", p + " ").strip()
+        q = re.sub(r"^(look up|look for|search for|search|find|cerca|trova|trovami|cercami)\s+(me\s+)?(the\s+)?", "", q)
+        q = re.sub(r"\s+(on|su)\s+(vinted|subito(?:\.it)?|ebay(?:\.it)?|amazon(?:\.it)?|etsy|wallapop|depop|aliexpress|temu|facebook marketplace|zalando|kleinanzeigen|leboncoin)(\s*(,|and|e|or|o)\s*(vinted|subito(?:\.it)?|ebay(?:\.it)?|amazon(?:\.it)?|etsy|wallapop|depop|aliexpress|temu|facebook marketplace|zalando|kleinanzeigen|leboncoin))*\b", " ", q)
         q = re.sub(r"\b(some|a few|a couple of|good|cheap|reliable|trustworthy|best|nice|great|decent|quality|really|very|please|me|us)\b", " ", q)
         q = re.sub(r"\b(i'?m|i am|i will|i'?ll)\b.*$", "", q)
         q = re.sub(r"\s{2,}", " ", q).strip(" ,.-—")
@@ -142,7 +148,7 @@ def _rule_brief(text, pace):
         kind, deliverable = "summarize", "answer"
     elif re.search(r"\b(open|go to|visit|check)\b.*\b(youtube|amazon|etsy|ebay|vinted|instagram|tiktok|google maps|\.com|\.it)\b", low):
         kind, deliverable = "visit", "answer"
-    elif re.search(r"\b(look up|look for|find( me)?|search( for)?|cerca|trova|trovami|cercami)\b.{0,80}\b(cheapest|cheap|best price|lowest|deals?|under \d|below \d|listings?|for sale|second[- ]hand|used|usat[oi]|economic[oi]|più economic[oi]|meno car[oi])\b", low) \
+    elif re.search(r"\b(look up|look for|find( me)?|search( for)?|cerca|trova|trovami|cercami)\b.{0,80}\b(cheapest|cheap|best price|lowest|deals?|under \d|below \d|listings?|for sale|second[- ]hand|used|usat[oi]|econom\w+|meno car[oi]|prezzo più basso|offerte?)\b", low) \
             or re.search(r"\b(cheapest|best price|lowest price)\b.{0,60}\b(on|su)\s+(vinted|subito|ebay|amazon|etsy|wallapop|depop|aliexpress|temu|facebook marketplace|marketplace)\b", low):
         kind, deliverable = "research", "document" if re.search(r"\b(options?|list|links?|pictures?|images?|photos?|doc|document|report|walk me through|drive)\b", low) else "answer"
     elif re.search(r"\b(research|find out|look into|learn about|how does|how do|what is the best way)\b", low):
@@ -158,6 +164,7 @@ def _rule_brief(text, pace):
     conds = [c.strip(" .;,") for c in re.findall(r"\(([^()]{8,160})\)", text)]
     conds += [m.strip(" .;,") for m in re.findall(r"(?:^|[.;,]\s*)((?:it |they |[a-z.]+ )?(?:has to|have to|must|needs? to|should|only if|no |not just|without|excluding|deve|devono|solo se|senza)\b[^.;()]{4,120})", text, flags=re.I)]
     conds += [m.strip(" .;,") for m in re.findall(r"\b(i want [^.;()]{4,80})", text, flags=re.I)]
+    conds += [m.strip(" .;,") for m in re.findall(r"\b((?:solo|soltanto|only)\s+(?:con|with|if|se)\s+[^.;()]{3,60})", text, flags=re.I)]
     seen, conditions = set(), []
     for c in conds:
         k = c.lower()
@@ -187,7 +194,9 @@ def _rule_brief(text, pace):
                          "If the store is open, offer to add " + ("it" if link else "the good ones") + " to the shop with price and shipping"],
         "compare": [f"Find 3–5 sources for {product or 'the options'}", "Extract price, shipping, terms, ratings from each",
                     "Put them side by side and pick a winner with the reason", "Write the comparison with links"],
-        "research": [f"Read 3–5 solid pages about {product or 'the topic'}", "Keep the facts and figures with their sources",
+        "research": ([f"Search {' and '.join(sites)} for {product or 'the topic'} — listings with shipping, cheapest first" if sites else f"Read 3–5 solid pages about {product or 'the topic'}"]
+                     + (["Open the best listings: price, shipping, condition, seller rating, photos"] if sites else [])
+                     + ["Keep the facts and figures with their sources"]) + [
                      "Write a short report" + (" with links and pictures" if deliverable == "document" else "")],
         "build_site": ["Collect the brief: name, place, what they do, opening hours, contact", "Write the copy for home / about / services / contact",
                        "Build the pages (mobile-friendly, contact form, map link)", "Check every page in the browser and fix what looks wrong",
@@ -236,7 +245,8 @@ class Brief:
     def amend(self, b, change):
         """Apply an owner's change request to a pending plan (constraints, pace, dropped steps)."""
         low = change.lower().strip(" .!")
-        b = dict(b); b["steps"] = list(b["steps"]); b.setdefault("constraints", [])
+        b = dict(b); b["steps"] = list(b["steps"]); b["constraints"] = list(b.get("constraints") or [])
+        before = len(b["constraints"])
         pace = parse_pace(change)
         if pace["pace"] != "normal" or pace["deadline_min"] or pace["budget_min"]:
             b["pace"] = pace
@@ -261,10 +271,11 @@ class Brief:
         if m:
             b["n"] = max(1, min(8, int(m.group(1))))
             b["constraints"].append(f"{b['n']} options")
-        if not (m or b["constraints"] or pace["pace"] != "normal") and len(low.split()) >= 2:
+        if not (m or len(b["constraints"]) > before or pace["pace"] != "normal" or pace["deadline_min"] or pace["budget_min"]) and len(low.split()) >= 2:
             b["constraints"].append(change.strip())                       # keep the owner's words as a constraint anyway
-        if b["constraints"]:
+        if len(b["constraints"]) > before:
             b["topic"] = re.sub(r" \(.*\)$", "", b["topic"]) + " (" + "; ".join(dict.fromkeys(b["constraints"])) + ")"
+            b["goal"] = re.sub(r" — .*$", "", b["goal"]) + " — " + "; ".join(dict.fromkeys(b["constraints"]))
         self.log("brief_amended", constraints=len(b["constraints"]))
         return b
 
