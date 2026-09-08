@@ -466,12 +466,25 @@ class Agent:
             return
         self.busy = "looking at a picture"
         try:
+            from .sellers import photo_is_graphic, photo_verdict, EYES_QUESTION
             d = self.eyes.describe(data)
-            ans = self.eyes.look(data, question) if question else ""
+            cond_q = re.search(r"\b(new|unused|never worn|like new|mint|nuovo|mai usat\w*)\b", question or "", re.I)
+            ans = ""
+            if question and not cond_q:                                   # the condition question is answered by the check below, grounded
+                ans = self.eyes.look(data, question + " Answer in one or two sentences, only from what is visible in the picture.", max_tokens=90)
+                ans = " ".join(ans.split("\n")[:2]).strip()[:300]
             words = self.eyes.text(data, limit=600) if self.eyes.ocr else ""
             out = f"👁 {d['title'] or 'Picture'} — {d['summary']}"
             if d["warnings"]:
                 out += "\n⚠️ " + ", ".join(d["warnings"])
+            # a product photo (listing, parcel, item a customer sent): condition check like on a listing
+            if not photo_is_graphic(data) and (cond_q or re.search(r"\b(product|item|listing|parcel|package|damage|broken|condition|worn|used|second[- ]hand|vinted|ebay|subito)\b", (question or "") + " " + d.get("summary", ""), re.I)):
+                seen = self.eyes.look(data, EYES_QUESTION, max_tokens=70)
+                flag = photo_verdict(seen, cond_q.group(0) if cond_q else "")
+                if flag:
+                    out += f"\n\n{flag}" + (" — that contradicts “" + cond_q.group(0) + "”. I'd ask the seller for more photos or skip it." if cond_q else "")
+                elif seen:
+                    out += f"\n\nCondition: {seen.strip()[:200]}" + (" — consistent with “" + cond_q.group(0) + "”." if cond_q else "")
             if ans:
                 out += f"\n\nYour question: {ans}"
             if words:
