@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import traceback
+from pathlib import Path
 
 from . import brain, config
 from .tasks import Tasks
@@ -40,6 +41,7 @@ from .sellers import SellerCheck
 from .accounts import Accounts
 from .study import Study
 from .sitebuilder import SiteBuilder, KINDS as SITE_KINDS
+from .rehearsal import Rehearsal
 
 
 def money_list(orders):
@@ -65,6 +67,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
 /do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do <page1> <page2> | which is cheaper? (compare several pages) · /do <page> | fill in the form: name = …, email = …, message = … (I type, you send) · /do desktop <goal> — same on my own screen. Any click that costs money, publishes, signs in or deletes waits for your tap.
 /google — my own Google account (Drive library + reading my own mailbox for sign-up codes): /google connect · /google test · /google ls
+"rehearse posting about <topic>" — a dry run on my own practice network: log in, publish with photo, learn the limits, answer comments (nothing public) · /rehearse map — what I learned about each interface
 "build a website for <a place>" — I write the copy, build the pages, check them in my browser and send you the files · "start auto training on website building" — I practise on random real places from the map (watch it live) · "stop training"
 /ideas — business ideas I jotted from short videos (/ideas <topic> = go watch some now) · /study [topic] — find and keep a good PDF in my library
 /accounts — the site accounts I created with my own e-mail (I sign up when a task needs it and tell you in one line; never money sites)
@@ -114,6 +117,9 @@ class Agent:
         self.sites = SiteBuilder(planner=self.planner, tasks=self.tasks, google=self.google, log=self.log, viewer=self.viewer, eyes=self.eyes)
         self.site_training = False          # "start auto training on website building" → loop until "stop"
         self.sites_built = 0
+        self.rehearsal = Rehearsal(self.tasks, accounts=self.accounts, social=self.social, inbox=self.inbox, log=self.log, viewer=self.viewer, eyes=self.eyes)
+        self.stage = None                   # the rehearsal network (tests/social/server.py) once started
+        self.rehearsals_done = 0
         self.active_brief = None            # the plan being worked on (shown in /status)
         self.last_brief = None              # last plan proposed, for "go" / "change step 2 …"
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
@@ -523,6 +529,9 @@ class Agent:
                 self.store.note_reply(d.get("order_no"), rec.get("from", ""), final_text)
             except Exception as e:
                 self.log("store_note_error", error=str(e)[:120])
+        elif ch == "social" and rec.get("post_url") and self.rehearsal.is_stage(rec["post_url"]):
+            ok = self.rehearsal.reply(rec["post_url"], final_text)
+            self.bot.send(self.owner_id, ("🎭 Reply posted under the rehearsal post (practice network only)." if ok else "🎭 I could not place the reply under the rehearsal post — noted for the next rehearsal."))
         elif ch in REAL_CHANNELS:
             ok, info = self.channels.send(rec, final_text)
             if ok:
@@ -735,6 +744,14 @@ class Agent:
         if re.search(r"^(stop|basta|enough)\b.*\b(train|training|allenamento|websites?)?", low) and self.site_training:
             self.site_training = False
             return f"Okay — stopping website training after the current one ({self.sites_built} built)."
+        if low.startswith("/rehearse") or re.search(r"\b(rehears\w*|dry[- ]?run|practi[cs]e)\b.*\b(post\w*|social|instagram|facebook|tiktok|publishing)\b", low) \
+                or re.search(r"\b(post\w*|social)\b.*\b(rehears\w*|dry[- ]?run|practi[cs]e)\b", low):
+            arg = re.sub(r"^/rehearse\s*", "", text.strip(), flags=re.I)
+            if arg.lower() in ("map", "status", "what did you learn", "learned"):
+                return "🎭 What I know about posting interfaces:\n" + self.rehearsal.map_text()
+            topic = re.sub(r"\b(rehearse|rehearsal|dry run|practice|practise|posting|a post|post|on|social media|social)\b", " ", arg, flags=re.I).strip(" ,.:") or "our newest product"
+            threading.Thread(target=self.run_rehearsal, args=(topic, True), daemon=True).start()
+            return "🎭 Rehearsing: I draft a post, log into my practice network with my own account, publish it there with a photo, read the platform's reaction, then answer the comments. One report line when done."
         if low.startswith("/ideas"):
             arg = text[6:].strip()
             if arg:
@@ -920,6 +937,66 @@ class Agent:
                     break
                 time.sleep(1)
         self.bot.send(self.owner_id, f"🏁 Website training stopped — {self.sites_built} site(s) built this session; all in my library" + (" and Drive → Websites." if self.google.connected() else "."))
+
+    # ---- social rehearsal (milestone 18) --------------------------------------------------------
+    def stage_url(self):
+        """Start the rehearsal network on this machine (once) and return its address."""
+        if self.stage is None:
+            import importlib.util
+            path = Path(__file__).resolve().parent.parent / "tests" / "social" / "server.py"
+            spec = importlib.util.spec_from_file_location("postly", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            port = int(os.environ.get("BAI_STAGE_PORT", "8096"))
+            srv = mod.serve(port)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            self.stage = (srv, f"http://127.0.0.1:{port}/")
+            self.log("stage_started", port=port)
+        return self.stage[1]
+
+    def run_rehearsal(self, topic, tell=True):
+        """Draft (Social checks) → publish on the stage with a product photo → read comments → reply drafts. Quiet-time safe."""
+        if self.busy:
+            if tell:
+                self.notify(f"I'm busy ({self.busy}) — the rehearsal comes right after.")
+            while self.busy:
+                time.sleep(3)
+        self.busy = "rehearsing a social post"
+        try:
+            url = self.stage_url()
+            d = self.social.draft("instagram", topic)
+            photo = None
+            try:
+                prod = self.store.find_product(topic)
+                img = (prod or {}).get("image")
+                if img and Path(img).exists():
+                    photo = img
+            except Exception:
+                photo = None
+            if not photo:
+                from PIL import Image, ImageDraw
+                photo = str(config.STATE_DIR / "rehearsal_photo.jpg")
+                im = Image.new("RGB", (800, 600), (236, 228, 214))
+                ImageDraw.Draw(im).text((40, 280), topic[:40], fill=(60, 60, 60))
+                im.save(photo, quality=80)
+            rep = self.rehearsal.post(url, d["text"], image=photo, file_for_owner=tell)
+            self.rehearsals_done += 1
+            line = self.rehearsal.report_text(rep)
+            self.memory.note("rehearsal", f"posting on {rep.get('site', 'stage')}", line, [])
+            self.log("rehearsal", ok=rep.get("ok"), attempts=rep.get("attempts"), site=rep.get("site"))
+            if tell:
+                self.bot.send(self.owner_id, line + ("\n(the post lives only on my practice network — nothing public)" if rep.get("ok") else ""))
+            followup = bool(tell and rep.get("ok") and rep.get("replies"))
+        except Exception as e:
+            self.log("rehearsal_failed", error=traceback.format_exc()[-300:])
+            if tell:
+                self.bot.send(self.owner_id, f"The rehearsal broke: {type(e).__name__}: {str(e)[:120]}")
+            return f"rehearsal failed: {str(e)[:80]}"
+        finally:
+            self.busy = None
+        if followup:
+            self.process_inbox()                                              # the comment replies go through the normal Approve / Edit / Reject gate
+        return line
 
     def _run_ideas(self, query, b, urls=None):
         self.busy = "ideas from videos"
@@ -1170,7 +1247,10 @@ class Agent:
     def run_quiet(self):
         self.busy = "self-training (quiet time)"
         try:
-            out = self.study.quiet_session(self.quiet_sessions)
+            if self.quiet_sessions % 4 == 3 and self.rehearsals_done < 2:
+                out = "🎭 " + self.run_rehearsal("one of our products", tell=False)
+            else:
+                out = self.study.quiet_session(self.quiet_sessions)
             self.quiet_sessions += 1
             self.log("quiet_session", n=self.quiet_sessions, out=out[:120])
             if out.startswith(("📚", "💡", "🧠")) and self.owner_id:

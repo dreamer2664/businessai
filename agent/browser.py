@@ -456,10 +456,22 @@ class Browser:
                 return it
         return {}
 
+    STAGE_HOSTS = {"127.0.0.1", "localhost", "0.0.0.0"}
+
+    def _is_stage(self):
+        """Pages served by the agent itself (practice shop, rehearsal network, test sites) are a stage: nothing there is real,
+        so the post/submit gate does not apply. Real sites keep the gate."""
+        try:
+            host = urllib.parse.urlparse(self.page.url).hostname or ""
+        except Exception:
+            return False
+        return host in self.STAGE_HOSTS or self.page.url.startswith("file://")
+
     def click(self, n):
         it = self._item(n)
         lab = (it.get("label") or "").lower()
-        if not self.allow_actions and re.search(r"\b(buy|pay|checkout|place order|purchase|submit|post|publish|send|delete|confirm|subscribe|order now)\b", lab):
+        if not self.allow_actions and re.search(r"\b(buy|pay|checkout|place order|purchase|submit|post|publish|send|delete|confirm|subscribe|order now)\b", lab) \
+                and not self._is_stage():
             raise BrowserError(f"refusing to click '{it.get('label')}' — actions that buy/pay/post/submit need owner approval")
         el = self._el(n)
         before = len(self._ctx.pages)

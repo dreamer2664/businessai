@@ -15,6 +15,7 @@ Everything here drives the Browser through the numbered-item API (b.read/click/t
 import json
 import os
 import re
+import urllib.parse
 import time
 
 from . import config
@@ -126,8 +127,9 @@ class Accounts:
     SUBMIT_WORDS = re.compile(r"^(sign ?up|create (?:my )?account|register|registrati|crea account|continue|continua|next|avanti|submit|join|get started|agree (?:and|&) (?:continue|join)|log ?in|sign ?in|accedi|verify|verifica|confirm|conferma)$", re.I)
     CODE_WORDS = re.compile(r"\b(verification code|codice di verifica|enter (?:the )?code|inserisci il codice|we sent (?:you )?(?:a|an) (?:code|e-?mail)|check your (?:e-?mail|inbox)|confirm your e-?mail|6-digit|one-time)\b", re.I)
 
-    def ensure_account(self, b, url, why="", allow_signup=True):
-        """Make sure the agent is logged in on the site of `url`. Returns (ok, note)."""
+    def ensure_account(self, b, url, why="", allow_signup=True, quiet=None):
+        """Make sure the agent is logged in on the site of `url`. Returns (ok, note). quiet: no owner line (default: quiet on my own stages)."""
+        self._quiet = bool(quiet)                      # callers that own the site (my rehearsal stage) pass quiet=True
         if not self.id.ready():
             return False, "I have no account credentials of my own (BAI_ACCOUNT_EMAIL/PASSWORD missing)."
         if NEVER_SIGN_UP.search(url):
@@ -142,7 +144,8 @@ class Accounts:
         if not allow_signup:
             return False, "no account there and sign-up not allowed for this task"
         if not a:
-            self.notify(f"🆕 I'm creating an account on {self.site_of(url)} with my own e-mail ({self.id.email}){' — ' + why if why else ''}. Say 'stop' if you don't want that.")
+            if not getattr(self, "_quiet", False):
+                self.notify(f"🆕 I'm creating an account on {self.site_of(url)} with my own e-mail ({self.id.email}){' — ' + why if why else ''}. Say 'stop' if you don't want that.")
         return self.signup(b, url)
 
     def _fill_visible_form(self, b, max_fields=8):
