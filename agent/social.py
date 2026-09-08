@@ -79,12 +79,26 @@ class Social:
         m = re.match(r"(?:(?:on|for)\s+)?(instagram|insta|ig|facebook|fb|tiktok|x|twitter|linkedin|pinterest)\b[:,\s]*(.*)", a, re.I | re.S)
         if m:
             plat = {"insta": "instagram", "ig": "instagram", "fb": "facebook", "twitter": "x"}.get(m.group(1).lower(), m.group(1).lower())
-            return plat, m.group(2).strip()
-        m = re.search(r"\b(?:on|for)\s+(instagram|insta|ig|facebook|fb|tiktok|x|twitter|linkedin|pinterest)\b", a, re.I)
+            return plat, Social.topic_words(m.group(2).strip())
+        m = re.search(r"\b(?:on|for|su|per)\s+(instagram|insta|ig|facebook|fb|tiktok|x|twitter|linkedin|pinterest)\b", a, re.I)
+        if not m:                                                          # "a tiktok post about our mugs", "instagram caption for the lamp"
+            m = re.search(r"\b(instagram|insta|ig|facebook|fb|tiktok|twitter|linkedin|pinterest)\b(?=\s+(?:post|caption|reel|story|stories|carousel|pin|tweet|video|didascalia))", a, re.I)
         if m:
             plat = {"insta": "instagram", "ig": "instagram", "fb": "facebook", "twitter": "x"}.get(m.group(1).lower(), m.group(1).lower())
-            return plat, (a[:m.start()] + a[m.end():]).strip(" ,.")
-        return "instagram", a
+            rest = (a[:m.start()] + a[m.end():]).strip(" ,.")
+            return plat, Social.topic_words(rest)
+        return "instagram", Social.topic_words(a)
+
+    @staticmethod
+    def topic_words(text):
+        """'make a tiktok post about our mugs' → 'our mugs'; 'write me a post for facebook about the new lamp, quick' → 'the new lamp'."""
+        t = re.sub(r"\b(quick|quickly|asap|right now|now|please|per favore|subito|veloce)\b", " ", text, flags=re.I)
+        lead = (r"^\W*(?:(?:can you|could you|please|puoi|potresti)\b\s*)?(?:(?:make|write|draft|create|prepare|post|publish|do|give me|scrivi|scrivimi|prepara|fai|fammi|crea)\b\s*)?"
+                r"(?:(?:me|us)\b\s*)?(?:(?:a|an|the|one|un|una)\b\s*)?(?:(?:short|quick|nice|good|new|breve)\b\s*)?(?:social\s+)?(?:media\s+)?"
+                r"(?:(?:post|caption|tweet|reel|story|stories|carousel|pin|video|didascalia)\b\s*[:\-–—]?\s*)?(?:(?:about|on|for|sulla|sullo|sugli|sulle|sul|sui|su|per|di)\b\s*)?")
+        t = re.sub(lead, " ", t, count=1, flags=re.I)
+        t = re.sub(r"\s{2,}", " ", t).strip(" ,.:;-–—\"'“”")
+        return t or text.strip()
 
     # ---- drafting --------------------------------------------------------------------
     def draft(self, platform, topic):

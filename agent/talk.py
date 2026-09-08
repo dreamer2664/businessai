@@ -554,7 +554,9 @@ class Talk:
                 "• Build a full website for a business — “build a website for <place>” (and train on random real places)\n"
                 "• Price things — “how much should I charge for X that costs me Y?”\n"
                 "• Keep your to-do list — “add … to my list”, “my to-do list”, “done 2” — and tell you the time in a supplier's city\n"
-                "• Give you my take — “shopify vs woocommerce?”, “is 9 € shipping to Germany normal?”\n"
+                "• Give you my take — “shopify vs woocommerce?”, “is 9 € shipping to Germany normal?”, “should I offer free shipping?”, “a customer left a 1-star review, what do I do?”, “which courier is cheapest?”\n"
+                "• Run the practice shop with you in plain words — “open the practice store”, “what's in stock?”, “lower the price of the lamp to 35”, “add a new product: …”, “print the shipping labels”, “all shipped”\n"
+                "• Social bits — “what hashtags for eco products?”, “3 tiktok video ideas for the cork case”\n"
                 "• Study on my own when you're away (PDFs, business videos → my Drive library)" + shop + "\n"
                 "Pace words work: “make it quick, 10 minutes” or “I'm at work 5 hours, take it slow”. Say “stop” or “what are you doing?” any time.")
 

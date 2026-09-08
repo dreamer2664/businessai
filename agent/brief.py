@@ -131,6 +131,9 @@ def _rule_brief(text, pace):
         kind, deliverable = "compare", "document"
     elif re.search(r"\b(build|make|create)\b.*\b(website|web site|landing page|site)\b", low):
         kind, deliverable = "build_site", "website"
+    elif re.search(r"\b(make|write|draft|create|prepare|post|publish|scrivi|prepara|fai)\b.{0,30}\b(post|caption|tweet|reel|story|stories|carousel|pin|didascalia)\b", low) \
+            or (re.search(r"\b(post|caption|tweet|reel|story|carousel)\b", low) and re.search(r"\b(on|for|about|su|per)\s+(instagram|insta|ig|facebook|fb|tiktok|x|twitter|linkedin|pinterest)\b", low)):
+        kind, deliverable = "post", "post"                                   # "make a tiktok post about our mugs" is a post, not a video to watch
     elif re.search(r"\b(watch|video|youtube|youtu\.be)\b", low) or (re.search(r"\btiktok\b", low) and not re.search(r"\b(trending|trends?|popular|viral|what'?s hot|selling)\b", low)):
         kind, deliverable = "watch", "list"
     elif re.search(r"\b(trending|trends?|popular right now|viral|what'?s hot|best[- ]sellers?)\b", low):
@@ -141,7 +144,7 @@ def _rule_brief(text, pace):
         kind, deliverable = "visit", "answer"
     elif re.search(r"\b(research|find out|look into|learn about|how does|how do|what is the best way)\b", low):
         kind, deliverable = "research", "document" if re.search(r"\b(options?|list|links?|pictures?|images?|photos?|doc|document|walk me through)\b", low) else "answer"
-    elif re.search(r"\b(post|caption|tweet|reel)\b", low):
+    elif re.search(r"\b(post|caption|tweet|reel|story for|stories for)\b", low):
         kind, deliverable = "post", "post"
     elif re.search(r"\b(hi|hello|hey|thanks|thank you|good (morning|evening|night)|ciao|grazie)\b", low) and len(low.split()) <= 6:
         kind, deliverable = "chat", "answer"

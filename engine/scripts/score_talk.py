@@ -189,12 +189,19 @@ r = A.respond("what hashtags should I use for eco products?")
 check("hashtags → three sizes, eco family, brand tag, rules", r and "#ecofriendly" in r and "#smallbusiness" in r and "#<yourshopname>" in r and "8–10 on Instagram" in r, (r or "")[:100])
 r = A.respond("write 3 tiktok video ideas for the cork phone case")
 check("'3 tiktok video ideas for the cork phone case' → 3 ideas from the product facts, not a video-watching job", r and "3 TikTok ideas for Phone Case Cork" in r and "1. " in r and "3. " in r and "cork" in r.lower() and "Hook" in r, (r or "")[:100])
+from agent.social import Social
+check("'make a tiktok post about our mugs' → tiktok + 'our mugs' (post, not a video to watch)", Social.parse("make a tiktok post about our mugs") == ("tiktok", "our mugs") and Social.parse("write me a post for facebook about the new lamp, quick") == ("facebook", "the new lamp") and A.briefer.make("make a tiktok post about our mugs")["kind"] == "post")
 check("store words are NOT stolen from real jobs", A.talk.reply("what is dead stock?") is None and A.talk.reply("find suppliers of linen aprons") is None and A.talk.reply("compare couriers for my shop, write me a document") is None and A.talk.reply("watch https://youtu.be/DNdBJ5tgyjI for video ideas") is None)
 r = A.respond("close the practice store")
 check("'close the practice store' → closed", r and "closed" in r and not A.store.server, (r or "")[:80])
 
 # while busy: quick things are answered live, real requests are queued
 import threading
+for _ in range(120):                                              # the shop-read thread from 'open the practice store' must be over first
+    if not A.busy:
+        break
+    time.sleep(0.5)
+A.mind.queue.clear()
 gate = threading.Event()
 A.tasks.run = lambda c: (gate.wait(20), "fake report")[1]
 r = A.respond("research the best packaging for candles, write me a document, quick")

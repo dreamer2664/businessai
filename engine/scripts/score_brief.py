@@ -44,6 +44,10 @@ CASES = [
      dict(kind_in=("research", "compare"), deliverable="document", pace="slow", budget_min=480)),
     ("ciao! trovami dei fornitori affidabili di tazze in ceramica, con calma", dict(pace="slow", kind="seller_check")),
     ("post on instagram that we have a summer sale", dict(kind="post")),
+    ("make a tiktok post about our mugs", dict(kind="post", deliverable="post")),
+    ("write a tiktok caption for the lamp", dict(kind="post")),
+    ("draft an instagram story for the launch", dict(kind="post")),
+    ("watch this tiktok about dropshipping", dict(kind="watch")),
     ("is this seller ok? https://www.vinted.it/member/12345", dict(kind_in=("seller_check", "visit", "summarize"))),
 ]
 for msg, exp in CASES:
