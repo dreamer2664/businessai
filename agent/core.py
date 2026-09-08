@@ -115,6 +115,7 @@ class Agent:
         self.accounts.eyes = self.eyes
         self.sellers = SellerCheck(self.tasks, planner=self.planner, log=self.log, viewer=self.viewer, pace=self.pace, eyes=self.eyes)
         self.sellers.accounts = self.accounts
+        self.tasks.accounts = self.accounts                  # CAPTCHA solvers + one-tap owner fallback for essential pages
         self.study = Study(self.tasks, planner=self.planner, google=self.google, memory=self.memory, log=self.log, notify=self.notify, viewer=self.viewer)
         self.quiet_sessions = 0
         self.last_quiet = 0
@@ -1465,7 +1466,7 @@ class Agent:
                 f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
                 f"{self.google.status()} · {self.accounts.id.describe()} · {len(self.accounts.data['accounts'])} site account(s)\n"
                 f"{self.pace.text()}" + (f" · plan: {self.active_brief['goal'][:60]} (step {self.viewer.plan['step'] + 1 if self.viewer.plan else '?'}/{len(self.active_brief['steps'])})" if self.active_brief else "") + "\n"
-                f"thinking: {self.mind.stats_text()}\n"
+                f"thinking: {self.mind.stats_text()}" + (f" · security checks: {self.tasks.captcha_stats['passed']} passed by myself, {self.tasks.captcha_stats['skipped']} skipped, {self.tasks.captcha_stats['owner']} handed to you" if self.tasks.captcha_stats["tried"] else "") + "\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")

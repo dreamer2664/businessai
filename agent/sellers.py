@@ -244,6 +244,8 @@ class SellerCheck:
         """Open a listing and pull grounded facts + the main picture (+ what the eyes see, if available)."""
         b.open(url)
         st = b.status()
+        if st == "captcha" and hasattr(self.T, "pass_wall") and self.T.pass_wall(b, url):
+            st = b.status()
         if st != "ok":
             return {"url": url, "wall": st}
         try:

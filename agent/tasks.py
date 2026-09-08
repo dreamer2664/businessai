@@ -177,6 +177,8 @@ class Tasks:
                 try:
                     b.open(r["url"])
                     st = b.status()
+                    if st == "captcha" and self.pass_wall(b, r["url"]):
+                        st = b.status()
                     if st != "ok":
                         self.log("task_wall", url=r["url"], wall=st); continue
                     text = b.extract_text()
@@ -259,8 +261,10 @@ class Tasks:
                 text = b.download_text(url); title = url
             else:
                 b.open(url)
+                if b.status() == "captcha":
+                    self.pass_wall(b, url, essential=True)
                 if b.status() != "ok":
-                    return f"{url}: page shows a {b.status()} wall — I stopped (I don't pass CAPTCHAs/logins)."
+                    return f"{url}: page shows a {b.status()} wall I couldn't get past" + (" (I tried the checkbox and asked you)." if b.status() == "captcha" else " (I never log in by myself).")
                 title = b.page.title(); text = b.extract_text()
         self._release_page()
         heads = [h for h in (clean(l).strip("# ").strip() for l in text.split("\n") if l.startswith("#")) if 3 < len(h) < 80][:12]
@@ -309,6 +313,8 @@ class Tasks:
                     seen.add(r["url"])
                     try:
                         b.open(r["url"])
+                        if b.status() == "captcha":
+                            self.pass_wall(b, r["url"])
                         if b.status() != "ok":
                             continue
                         text = b.extract_text()
@@ -445,9 +451,11 @@ class Tasks:
             except BrowserError as e:
                 return f"I couldn't open {url}: {e}"
             st = b.status()
+            if st == "captcha" and self.pass_wall(b, url, essential=True):
+                st = b.status()
             title, final = b.page.title(), b.page.url
             if st != "ok":
-                return f"I opened {final} but it shows a {st} wall, so I stopped (I never pass CAPTCHAs or log in). Screenshot: /screen"
+                return (f"I opened {final} but it shows a {st} wall I couldn't get past" + (" (I never log in by myself)" if st == "login" else " — I tried the checkbox and asked you") + ". Screenshot: /screen")
             text = clean(b.extract_text())
             if len(text) < 300:
                 b.scroll("down", 2)
@@ -567,6 +575,43 @@ class Tasks:
         out = self.research(angle)
         self.memory.studied(goal["id"], angle)
         return angle, out
+
+    # ---- walls: try, then try something else (milestone 15) ---------------------------------
+    accounts = None           # set by the agent: Accounts has solve_captcha / captcha_fallback
+    captcha_stats = {"tried": 0, "passed": 0, "skipped": 0, "owner": 0}
+
+    def pass_wall(self, b, url, essential=False, site=None):
+        """A page shows a CAPTCHA/bot check. Try the simple solvers (checkbox, frame checkbox, text-in-image with the eyes,
+        press-and-hold); if that fails and the page is essential (the owner asked for THIS page) ask the owner for one tap;
+        otherwise skip it and let the caller use another page. Returns True when the page is now readable."""
+        site = site or (urllib.parse.urlparse(url).netloc or url)[:60]
+        self.captcha_stats["tried"] += 1
+        acc = self.accounts
+        try:
+            if acc is not None and hasattr(acc, "solve_captcha"):
+                self.log("captcha_try", site=site)
+                if acc.solve_captcha(b, site, eyes=self.eyes):
+                    self.captcha_stats["passed"] += 1
+                    self.notify(f"🧩 Passed the security check on {site} by myself.")
+                    return True
+        except Exception as e:
+            self.log("captcha_try_error", site=site, error=str(e)[:80])
+        if essential and acc is not None and hasattr(acc, "captcha_fallback"):
+            self.captcha_stats["owner"] += 1
+            try:
+                if acc.captcha_fallback(site, url, timeout=180):
+                    try:
+                        b.page.reload(timeout=15000)
+                        time.sleep(1.5)
+                    except Exception:
+                        pass
+                    if b.status() == "ok":
+                        return True
+            except Exception as e:
+                self.log("captcha_fallback_error", site=site, error=str(e)[:80])
+        self.captcha_stats["skipped"] += 1
+        self.log("captcha_skipped", site=site, essential=essential)
+        return False
 
     def _stopped(self):
         """True when the owner said stop mid-job — long loops check this between pages."""
