@@ -1020,6 +1020,10 @@ class Agent:
                 return self.domain_check(direct["domain"])
             if direct.get("weather"):                                                # "what's the weather in bergamo" → Open-Meteo (free, no key)
                 return self.weather(direct["weather"], direct.get("when", "now"))
+            if direct.get("proposal"):                                                # a selftalk-made proposal (returns window…) → Apply / Leave it buttons
+                pid = direct["proposal"]
+                self.bot.send(self.owner_id, direct.get("text", "Apply it?"), buttons=[[("✅ Apply", f"s:ok:{pid}"), ("❌ Leave it", f"s:no:{pid}")]])
+                return None
             if direct.get("redo"):                                                    # "and the mug?", "ok do it" → the implied request, run as if typed
                 cmd = direct["redo"]
                 if not getattr(self, "_redo_depth", 0):

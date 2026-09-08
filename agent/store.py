@@ -383,6 +383,7 @@ class Store:
                 if not p:
                     return "Product not found."
                 old = p["price"]
+                prop["before"] = old
                 p["price"] = round(float(ch), 2)
                 out = f"{p['name']}: price {money(old)} → {money(p['price'])}"
             elif k == "stock":
@@ -390,6 +391,7 @@ class Store:
                 if not p:
                     return "Product not found."
                 old = p["stock"]
+                prop["before"] = old
                 p["stock"] = int(ch)
                 out = f"{p['name']}: stock {old} → {p['stock']}"
             elif k == "cost":
@@ -397,6 +399,7 @@ class Store:
                 if not p:
                     return "Product not found."
                 old = p.get("cost", 0)
+                prop["before"] = old
                 p["cost"] = round(float(ch), 2)
                 out = f"{p['name']}: cost {money(old)} → {money(p['cost'])}"
             elif k == "description":
@@ -406,10 +409,13 @@ class Store:
                 p["short"] = str(ch)[:300]
                 out = f"{p['name']}: description updated"
             elif k == "page":
+                prop["before"] = self.data["pages"].get(t, "")
                 self.data["pages"][t] = str(ch)[:4000]
                 out = f"page '{t}' updated"
             elif k == "shipping":
                 d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                prev = next((list(r) for r in self.ship_rules() if r[0] == t), None)
+                prop["before"] = prev
                 row = self.set_shipping(t, d.get("cost"), d.get("free_over", None) if "free_over" in d else None)
                 out = f"shipping {t}: {money(row[1])}" + (f", free over {money(row[2])}" if row[2] else "") + " — live at checkout and on the shipping page"
             elif k == "product":

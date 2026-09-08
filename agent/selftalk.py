@@ -13,6 +13,7 @@
 No model, no browsing. SelfTalk(store, inbox, memory, mind, pace, tasks_stats).reply(text) → str or None.
 """
 import datetime as _dt
+import json
 import re
 
 
@@ -36,6 +37,21 @@ class SelfTalk:
         self.last_reply = lambda: None         # talk sets this: () → (question, answer) of the last thing I said
 
     RULES = [
+        (r"^\W*(?:ok[,.]? |yes[,.]? |sure[,.]? |fine[,.]? |va bene[,.]? |sì[,.]? )?(?:approve|apply|accept|confirm|go ahead with|approva|applica|accetta|conferma)\s*(?:it|that|this|the (?:last|latest) (?:one|proposal)|the proposal|quello|quella|questo|questa|la proposta)?\W*$|^\W*(?:approved|applied|accepted|confirmed|approvato|approvata)\W*$", "approve_last"),
+        (r"^\W*(?:no[,.]? |nah[,.]? |non? [,.]?)?(?:reject|decline|refuse|leave it|leave that|don'?t (?:do|apply|change) (?:it|that|this)|skip (?:it|that)|forget (?:it|that)|rifiuta|lascia stare|lascia perdere|non (?:farlo|applicarlo))\s*(?:it|that|this|the (?:last|latest) (?:one|proposal)|the proposal|quello|quella|la proposta)?\W*$|^\W*(?:rejected|declined|rifiutato|rifiutata)\W*$", "reject_last"),
+        (r"^\W*(?:undo|revert|roll ?back|take (?:it|that) back|put it back|annulla|ripristina|torna indietro)\s*(?:it|that|this|the last (?:one|change)|the change|that change|l'?ultima modifica|quello|quella)?\W*$", "undo_last"),
+        (r"^\W*(?:what(?:'s| is) (?:still )?(?:pending|open|waiting|outstanding|unresolved)|(?:any|anything) (?:pending|open|waiting)|open (?:proposals|items)|pending (?:proposals|items|things)|what (?:needs|is waiting for) (?:my )?(?:tap|approval|decision|ok)|what (?:do i|should i) (?:need to )?(?:approve|decide)|cosa (?:c'è|è) in sospeso|cosa devo approvare|proposte aperte)\W*$", "pending"),
+        (r"\b(?:show|see|repeat|resend|send (?:me )?again|what was|read me|remind me of) (?:me )?(?:the |your |that )?(?:last|latest|previous|most recent) (?:proposal|suggestion|proposta|change you proposed)\b|\bthe last proposal\??\W*$|\bl'?ultima proposta\W*$", "last_proposal"),
+        (r"\bwhat (?:did|have) i (?:approve|apply|accept|reject|decline|decide|approved|applied|rejected)\b(?: today| this week| yesterday| so far)?|\bwhat (?:changed|changes were made|did you change|was changed|did we change)\b(?: in the shop| today| this week)?\W*$|\b(?:changes|change log|changelog|history) (?:today|this week|so far)\b|\bcosa ho approvato\b|\bcosa è cambiato\b", "decisions_log"),
+        (r"\bhow many (?:proposals|suggestions|changes|things) (?:did|have) you (?:make|made|propose|proposed|suggest|suggested)\b|\bhow many (?:proposals|of (?:them|those|your proposals)) (?:did|have) i (?:reject|rejected|approve|approved|accept|accepted|apply|applied|say no to|turn down)\b|\bhow many did i (?:reject|approve|accept|apply|say no to|turn down)\b|\bproposal (?:stats|statistics|count|numbers)\b|\byour (?:hit|approval|acceptance) rate\b|\bquante proposte\b", "proposal_stats"),
+        (r"^\W*(?:move|shift|push|postpone|reschedule|change|sposta|rimanda) (?:that|the|this|my|it|quel|il|la) ?(?:reminder|to-?do|task|it|promemoria)?\s*(?:to|for|until|till|a|al)\s+(?P<when>tomorrow|domani|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|next week|la settimana prossima|next month|\d{1,2}[/.]\d{1,2}|\d{1,2} (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*)(?:\s+(?:at|alle)\s+(?P<time>\d{1,2}(?:[:.]\d{2})?))?\W*$", "move_reminder"),
+        (r"^\W*(?:cancel|delete|remove|drop|forget|scrap|kill|cancella|elimina|togli|rimuovi) (?:that|the|this|my|it|quel|il|la|questo|quella) ?(?:last )?(?:reminder|promemoria)\W*$|^\W*(?:cancel|delete|remove|drop|forget|scrap|cancella|elimina|togli|rimuovi) (?:the |that |this |my |il |la |quel )?(?:to-?do|task|item|entry|reminder|promemoria|voce)?\s*(?:about|on|for|regarding|called|saying|su|per|del|della|sul|sulla)\s+(?P<what>.{3,60}?)\W*$|^\W*(?:cancel|delete|remove|drop|forget|cancella|elimina|togli|rimuovi) (?:to-?do |task |item |number |#)?(?P<n>\d{1,3})\W*$", "delete_todo"),
+        (r"^\W*(?:mark|tick|set) (?:everything|all|them all|all of them|all items|the whole list|tutto|tutti) (?:as )?(?:done|complete|completed|finished|fatto|fatti)\W*$|^\W*(?:everything|all|all of it|all of them|the whole list|tutto|tutti)(?:'s| is| are)? (?:done|finished|complete|completed|fatto|fatti)\W*$|^\W*(?:done with (?:everything|all of it|the list|all)|all done|tutto fatto)\W*$", "all_done"),
+        (r"^\W*(?:clear|empty|wipe|reset|delete|erase|svuota|cancella|pulisci|azzera) (?:my |the |our |la |il |tutta la )?(?:to-?do|todo|task)? ?(?:list|lista|list of to-?dos)\W*$|^\W*(?:delete|remove|clear) (?:all|every) (?:my |the )?(?:to-?dos|tasks|items|reminders)\W*$", "clear_list"),
+        (r"\bwhat (?:does|do) (?:the |our |my )?(?P<page>shipping|delivery|returns?|refunds?|faq|about|contact|privacy|terms) (?:page|policy|pages|section|text)(?: on the (?:site|shop|store))? (?:say|says|read|state|contain|look like)\b|\b(?:read|show|give|send) (?:me )?(?:the |our |my )?(?P<page2>shipping|delivery|returns?|refunds?|faq|about|contact|privacy|terms) (?:page|policy|text|wording)\b|\bcosa (?:dice|c'è scritto (?:nel|sulla|nella)) (?:la )?pagina (?P<page3>spedizioni|resi|faq|contatti|privacy|termini)\b|\bleggimi (?:la )?(?:pagina |politica )?(?:dei |delle |di )?(?P<page4>spedizioni|resi|rimborsi|faq)\b", "read_page"),
+        (r"\b(?:change|set|make|update|move|put|extend|shorten|cambia|metti|porta|allunga|accorcia) (?:the |our |my |il |la |i )?(?:returns?|resi|reso|refund|withdrawal|recesso) (?:window|period|policy|time|days|term|deadline|periodo|termine|finestra)?\s*(?:to|at|a|di|from \d+ to)\s*(?P<n>\d{1,3})\s*(?:days?|giorni|d)\b|\b(?P<n2>\d{1,3})[- ]day returns?\b.{0,20}?\b(?:instead|from now|make it|set|switch)\b|\breturns? (?:within|entro) (?P<n3>\d{1,3}) (?:days|giorni) (?:instead of|invece di|from now on|d'ora in poi)\b", "returns_window"),
+        (r"\b(?:which|what|who) (?:customers?|orders?|buyers?|people|clienti|ordini)\b.{0,20}?\b(?:waiting|wait|waited|been waiting|are waiting|is waiting|aspettano|in attesa)\b.{0,20}?\b(?:longest|most|long|the longest|più a lungo|da più tempo)\b|\bwho(?:'s| is| has) (?:been )?waiting (?:the )?longest\b|\boldest (?:unshipped|open|waiting|pending) orders?\b|\blongest[- ]waiting (?:customers?|orders?)\b|\bchi aspetta da più (?:tempo|giorni)\b", "waiting_longest"),
+        (r"\bhow much (?:did|has|was) (?:order|the order|ordine|l'?ordine)\s*#?\s*(?P<n>\d{4,6})\s*(?:pay|paid|cost|come to|total|worth|pagato|costava)?\b|\b(?:order|ordine)\s*#?\s*(?P<n2>\d{4,6})\b.{0,25}?\b(?:total|amount|value|how much|worth|paid|price|totale|importo|quanto)\b|\b(?:total|amount|value|totale|importo) (?:of|for|di|dell'?ordine)\s*(?:order )?#?\s*(?P<n3>\d{4,6})\b|\bwhat(?:'s| is| was) (?:in|on) (?:order|ordine)\s*#?\s*(?P<n4>\d{4,6})\b|\b(?:who|whose|chi)\b.{0,15}?\b(?:order|ordine)\s*#?\s*(?P<n5>\d{4,6})\b|\b(?:tell me about|show me|details of|dettagli) (?:order|ordine)\s*#?\s*(?P<n6>\d{4,6})\b", "order_lookup"),
         (r"\bwhat (?:happens|would happen|will happen|if) (?:if )?(?:i|we) (?:do|did) nothing\b|\bif (?:i|we) (?:do|did) nothing (?:for|this|next|all)\b|\bwhat if (?:i|we) (?:ignore|skip|leave) (?:it|the shop|everything) (?:for )?(?:a|this|one|the) (?:week|month|day)\b|\bse non faccio (?:niente|nulla)\b|\bwhat happens if (?:i|we) (?:stop|pause|take a break)\b", "do_nothing"),
         (r"\b(?:i'?m|i am|we'?re|we are|sono|vado|parto) (?:going |away )?(?:on|in) (?:holiday|holidays|vacation|vacanza|ferie)\b|\b(?:holiday|vacation|vacanza|ferie) (?:for|per|next|from|dal|da)\b|\b(?:i'?ll be|i will be|i'?m) (?:away|off|gone|out of town|abroad|unreachable|offline) (?:for|from|until|next|the whole|tutta|per) \b|\bgoing away for (?:a |two |three |\d+ )?(?:days?|weeks?|month)\b|\bsarò via\b|\bnon ci sono per\b", "holiday_plan"),
         (r"\bcan you (?:run|handle|manage|watch|mind|look after) (?:the |my |our )?(?:shop|store|business|things|it) (?:while|when) (?:i|we) (?:sleep|am asleep|'m asleep|are asleep|work|'m at work|am at work|'m away|are out)\b|\bwhile i sleep\b|\b(?:at|during the) night\b.{0,30}?\b(?:you|shop|orders|customers)\b.{0,20}?\?|\bdo you (?:work|run|sleep) (?:at night|24/7|all the time|nonstop|overnight)\b|\bmentre dormo\b|\blavori (?:anche )?di notte\b", "while_sleep"),
@@ -1535,6 +1551,328 @@ class SelfTalk:
         return (f"Pep talk, with facts (I don't do the empty kind): {n['orders']} orders in {day} day(s). " + ("; ".join(good) + ". " if good else "") +
                 "Everything that's not working is a traffic problem, and traffic is the one problem that gives in to plain stubbornness — a post a day, for weeks. "
                 "You don't need a better idea; you need the same idea for 60 more days. I'll take the numbers, the drafts and the labels; you take the camera. Say “what should I post today?” — that's today's whole job.")
+
+    # ---- round 16: proposals, reminders and lists in plain words --------------------------------------------------
+    def _last_open(self):
+        props = [p for p in self.store.data.get("proposals", []) if p["status"] == "open"] if self.store is not None else []
+        return props[-1] if props else None
+
+    def _prop_line(self, p):
+        st = self.store
+        k, t, ch = p["kind"], p["target"], p["change"]
+        try:
+            if k in ("price", "stock", "cost"):
+                pr = st.product(t)
+                name = pr["name"].split(" (")[0] if pr else t
+                if p.get("before") is not None:
+                    cur = _eur(float(p["before"])) if k != "stock" else str(int(p["before"]))
+                else:
+                    cur = {"price": _eur(pr["price"]), "stock": str(pr["stock"]), "cost": _eur(pr.get("cost", 0))}[k] if pr else "?"
+                new = _eur(float(ch)) if k != "stock" else str(int(ch))
+                return f"{k} of {name}: {cur} → {new}"
+            if k in ("ship", "cancel", "refund"):
+                return f"{k} order #{t}"
+            if k == "shipping":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                return f"shipping {t}: " + ", ".join(f"{a} {b}" for a, b in d.items())
+            if k == "product":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                return f"new product “{d.get('name', '?')}” at {_eur(float(d.get('price', 0)))}"
+            if k == "page":
+                return f"page '{t}' rewrite ({len(str(ch))} chars)"
+            if k == "description":
+                pr = st.product(t)
+                return f"new description for {pr['name'].split(' (')[0] if pr else t}"
+        except Exception:
+            pass
+        return f"{k} {t} → {str(ch)[:60]}"
+
+    def approve_last(self, t, m):
+        if self.store is None:
+            return None
+        p = self._last_open()
+        if not p:
+            return "Nothing is waiting for a tap — no open proposal. Say “what's pending?” any time, or “review the shop” and I look for things to propose."
+        out = self.store.apply(p["id"])
+        self._log_decision("applied", p, out)
+        left = len([x for x in self.store.data["proposals"] if x["status"] == "open"])
+        return f"✅ Applied: {out}." + (f" {left} more still open — say “what's pending?”." if left else " Nothing else open.") + " (Say “undo that” within the hour if it was a slip.)"
+
+    def reject_last(self, t, m):
+        if self.store is None:
+            return None
+        p = self._last_open()
+        if not p:
+            return "Nothing open to reject — the list is clean."
+        self.store.reject(p["id"])
+        self._log_decision("rejected", p, self._prop_line(p))
+        why = ""
+        if p["kind"] == "price":
+            why = " I'll hold back on price proposals for that product."
+        return f"❌ Left as it is: {self._prop_line(p)}.{why} " + ("Nothing else open." if not self._last_open() else "One more is open — say “what's pending?”.")
+
+    def _log_decision(self, action, p, line):
+        try:
+            self.store.data.setdefault("decisions", []).append({"t": _dt.datetime.now().isoformat(timespec="minutes"), "action": action, "kind": p["kind"], "target": p["target"], "line": str(line)[:160], "id": p["id"]})
+            self.store.save()
+        except Exception:
+            pass
+
+    def undo_last(self, t, m):
+        if self.store is None:
+            return None
+        st = self.store
+        applied = [p for p in st.data.get("proposals", []) if p["status"] == "applied" and p["kind"] in ("price", "stock", "cost", "shipping", "description", "page")]
+        if not applied:
+            return "Nothing to undo — no change of price, stock, cost, shipping or text has been applied yet (orders shipped/refunded can't be un-done from here)."
+        p = applied[-1]
+        k, tg, ch = p["kind"], p["target"], p["change"]
+        try:
+            if p.get("before") is None:
+                return f"I can't undo that one safely ({self._prop_line(p)}) — it was applied before I kept 'before' values. Tell me the value to set and I propose it."
+            before = p["before"]
+            if k in ("price", "cost", "stock"):
+                newp = st.propose(k, tg, before if k != "stock" else int(before), f"undo of {p['id']}: back to the previous value")
+            elif k == "shipping":
+                newp = st.propose("shipping", tg, json.dumps({"cost": before[1], "free_over": before[2]}), f"undo of {p['id']}: back to the previous shipping row")
+            else:
+                newp = st.propose(k, tg, before, f"undo of {p['id']}: back to the previous text")
+            out = st.apply(newp["id"])
+            p["status"] = "undone"
+            st.save()
+            self._log_decision("undone", p, out)
+            return f"↩️ Undone: {out}. (The change and the undo both stay in the log.)"
+        except Exception as e:
+            return f"Undo failed on my side ({str(e)[:60]}) — tell me the value to set and I propose it."
+
+    def pending(self, t, m):
+        out = []
+        try:
+            props = [p for p in self.store.data.get("proposals", []) if p["status"] == "open"] if self.store is not None else []
+            if props:
+                out.append(f"Open proposals ({len(props)}) — newest last; “approve that” takes the last one:")
+                out += [f"• {self._prop_line(p)}" for p in props[-8:]]
+        except Exception:
+            pass
+        try:
+            drafts = self.inbox.items("new") if self.inbox is not None else []
+            if drafts:
+                out.append(f"Customer drafts waiting: {len(drafts)} — say “show me the drafts”.")
+        except Exception:
+            pass
+        try:
+            due = [x for x in (self.memory.open_items() if self.memory else []) if x.get("due")]
+            if due:
+                out.append("Reminders: " + "; ".join(f"{x['text'][:50]}" for x in due[:3]))
+        except Exception:
+            pass
+        return "\n".join(out) if out else "Nothing pending — no open proposal, no draft waiting, no reminder due. Enjoy it."
+
+    def last_proposal(self, t, m):
+        if self.store is None:
+            return None
+        props = self.store.data.get("proposals", [])
+        if not props:
+            return "I haven't proposed anything yet."
+        p = props[-1]
+        state = {"open": "still open — “approve that” or “reject it”", "applied": "already applied", "rejected": "you left it as it was", "undone": "undone", "failed": "failed to apply"}.get(p["status"], p["status"])
+        return f"Last proposal: {self._prop_line(p)} — {state}. Why I proposed it: {p.get('why', '')[:200]}"
+
+    def decisions_log(self, t, m):
+        if self.store is None:
+            return None
+        low = t.lower()
+        days = 1 if re.search(r"\btoday|oggi\b", low) else 7 if re.search(r"\bweek|settimana\b", low) else 30
+        cutoff = (_dt.datetime.now() - _dt.timedelta(days=days)).isoformat(timespec="minutes")
+        want = "rejected" if re.search(r"\breject|declin|say no|rifiut", low) else "applied" if re.search(r"\bapprov|appl|accept|confirm|change", low) else None
+        rows = []
+        for p in self.store.data.get("proposals", []):
+            if p["status"] in ("applied", "rejected", "undone") and (p.get("applied_at") or p.get("t", ""))[:16] >= cutoff[:16]:
+                if want is None or p["status"] == want or (want == "applied" and p["status"] == "undone"):
+                    rows.append(p)
+        label = {1: "today", 7: "this week", 30: "in the last 30 days"}[days]
+        if not rows:
+            return f"No {want or 'approved or rejected'} proposals {label}." + (" The shop is unchanged." if want != "rejected" else "")
+        return (f"{'Approved' if want == 'applied' else 'Rejected' if want == 'rejected' else 'Decided'} {label} ({len(rows)}):\n" +
+                "\n".join(f"• {'↩️' if str(p.get('why', '')).startswith('undo of') else '✅' if p['status'] == 'applied' else '✅→↩️ (then undone)' if p['status'] == 'undone' else '❌'} {self._prop_line(p)}" for p in rows[-10:]))
+
+    def proposal_stats(self, t, m):
+        if self.store is None:
+            return None
+        low = t.lower()
+        days = 7 if re.search(r"\bweek|settimana\b", low) else 1 if re.search(r"\btoday|oggi\b", low) else None
+        props = self.store.data.get("proposals", [])
+        if days:
+            cutoff = (_dt.datetime.now() - _dt.timedelta(days=days)).isoformat(timespec="minutes")
+            props = [p for p in props if p.get("t", "")[:16] >= cutoff[:16]]
+        if not props:
+            return "No proposals " + ("this week" if days == 7 else "today" if days == 1 else "yet") + "."
+        n = len(props); a = sum(p["status"] == "applied" for p in props); r = sum(p["status"] == "rejected" for p in props); o = sum(p["status"] == "open" for p in props)
+        kinds = {}
+        for p in props:
+            kinds[p["kind"]] = kinds.get(p["kind"], 0) + 1
+        by_kind = ", ".join(f"{k} ×{v}" for k, v in sorted(kinds.items(), key=lambda x: -x[1]))
+        rate = f"{a / (a + r) * 100:.0f} % of the decided ones approved" if a + r else "none decided yet"
+        if re.search(r"\breject|say no|turn down|rifiut", low):
+            rk = {}
+            for p in props:
+                if p["status"] == "rejected":
+                    rk[p["kind"]] = rk.get(p["kind"], 0) + 1
+            return f"You rejected {r} of {n} proposal(s)" + (f" ({', '.join(f'{k} ×{v}' for k, v in rk.items())})" if rk else "") + f"; {a} approved, {o} still open. " + ("I propose rejected kinds less often — say “stop proposing price changes” to switch one off entirely." if r else "")
+        return f"{n} proposal(s)" + (" this week" if days == 7 else " today" if days == 1 else " so far") + f": {a} approved, {r} rejected, {o} open — {rate}. By kind: {by_kind}."
+
+    def _last_reminder(self):
+        items = [x for x in (self.memory.open_items() if self.memory else []) if x.get("due")]
+        return items[-1] if items else None
+
+    def move_reminder(self, t, m):
+        if self.memory is None:
+            return None
+        x = self._last_reminder()
+        if not x:
+            return "There's no reminder to move — say “remind me friday to call the accountant” first."
+        when = (m.group("when") or "").lower()
+        tm = m.group("time")
+        now = _dt.datetime.now()
+        days_en = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        days_it = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
+        old = _dt.datetime.fromisoformat(x["due"]) if x.get("due") else now.replace(hour=9, minute=0)
+        if when in ("tomorrow", "domani"):
+            day = (now + _dt.timedelta(days=1)).date()
+        elif when in ("today", "tonight"):
+            day = now.date()
+        elif when in days_en or when in days_it:
+            wd = days_en.index(when) if when in days_en else days_it.index(when)
+            delta = (wd - now.weekday()) % 7 or 7
+            day = (now + _dt.timedelta(days=delta)).date()
+        elif when in ("next week", "la settimana prossima"):
+            day = (now + _dt.timedelta(days=(7 - now.weekday()))).date()
+        elif when == "next month":
+            day = (now.replace(day=1) + _dt.timedelta(days=32)).replace(day=1).date()
+        else:
+            mm = re.match(r"(\d{1,2})[/.](\d{1,2})", when)
+            if mm:
+                day = _dt.date(now.year, int(mm.group(2)), int(mm.group(1)))
+                if day < now.date():
+                    day = day.replace(year=now.year + 1)
+            else:
+                mm = re.match(r"(\d{1,2}) ([a-z]{3})", when)
+                months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+                day = _dt.date(now.year, months.index(mm.group(2)) + 1, int(mm.group(1))) if mm else old.date()
+        hour, minute = old.hour, old.minute
+        if tm:
+            hh = re.split(r"[:.]", tm)
+            hour, minute = int(hh[0]), int(hh[1]) if len(hh) > 1 else 0
+        due = _dt.datetime.combine(day, _dt.time(hour, minute))
+        x["due"] = due.isoformat(timespec="minutes")
+        x["text"] = re.sub(r"\s*\(⏰ [^)]*\)", "", x["text"]) + f" (⏰ {due:%a %d %b %H:%M})"
+        self.memory._save()
+        return f"Moved: “{re.sub(r'\s*\(⏰ [^)]*\)', '', x['text'])}” now rings {due:%A %d %B at %H:%M}."
+
+    def delete_todo(self, t, m):
+        if self.memory is None:
+            return None
+        gd = m.groupdict()
+        items = self.memory.open_items()
+        x = None
+        if gd.get("n"):
+            x = next((i for i in items if i["id"] == int(gd["n"])), None)
+        elif gd.get("what"):
+            words = [w for w in re.findall(r"[a-zà-ú]{4,}", gd["what"].lower()) if w not in ("with", "that", "this", "about", "the")]
+            x = next((i for i in items if words and sum(w in i["text"].lower() for w in words) >= max(1, len(words) - 1)), None)
+        else:
+            x = self._last_reminder() or (items[-1] if items else None)
+        if not x:
+            return "I couldn't find that on the list — say “what's on my list?” and then “delete 3”."
+        x["status"], x["deleted_t"] = "deleted", _dt.datetime.now().isoformat(timespec="minutes")
+        self.memory._save()
+        left = len(self.memory.open_items())
+        return f"Removed: {re.sub(r'\s*\(⏰ [^)]*\)', '', x['text'])}." + (f" {left} left." if left else " The list is empty.")
+
+    def all_done(self, t, m):
+        if self.memory is None:
+            return None
+        items = self.memory.open_items()
+        if not items:
+            return "The list was already empty."
+        for x in items:
+            self.memory.done(x["id"])
+        return f"Ticked off all {len(items)}: " + "; ".join(re.sub(r'\s*\(⏰ [^)]*\)', '', x["text"])[:40] for x in items[:6]) + (" …" if len(items) > 6 else "") + ". Clean slate."
+
+    def clear_list(self, t, m):
+        if self.memory is None:
+            return None
+        items = self.memory.open_items()
+        if not items:
+            return "The list is already empty."
+        for x in items:
+            x["status"], x["deleted_t"] = "deleted", _dt.datetime.now().isoformat(timespec="minutes")
+        self.memory._save()
+        return f"Cleared {len(items)} item(s) (not ticked as done — just removed). Say “what's on my list?” to check."
+
+    def read_page(self, t, m):
+        if self.store is None:
+            return None
+        gd = m.groupdict()
+        key = (gd.get("page") or gd.get("page2") or gd.get("page3") or gd.get("page4") or "").lower()
+        key = {"delivery": "shipping", "spedizioni": "shipping", "return": "returns", "resi": "returns", "refund": "returns", "refunds": "returns", "rimborsi": "returns", "contatti": "contact", "termini": "terms"}.get(key, key)
+        pages = self.store.data.get("pages", {})
+        txt = pages.get(key)
+        if not txt:
+            return f"There's no '{key}' page in the practice shop — the pages are: {', '.join(pages.keys())}. Say “write the {key} page” and I draft one from the rules."
+        return f"The {key} page says:\n{txt[:1200]}" + ("\n…" if len(txt) > 1200 else "") + "\nSay “change the returns window to 14 days” or “rewrite the shipping page” and I prepare the change."
+
+    def returns_window(self, t, m):
+        if self.store is None:
+            return None
+        gd = m.groupdict()
+        n = int(gd.get("n") or gd.get("n2") or gd.get("n3") or 0)
+        if n < 14:
+            return f"{n} days isn't allowed for consumers in the EU — the legal minimum is 14 days from delivery (right of withdrawal). I can set 14; 30 is what most small shops promise because it reads as confidence."
+        pages = self.store.data.get("pages", {})
+        cur = pages.get("returns", "")
+        mm = re.search(r"within (\d+) days", cur)
+        old = int(mm.group(1)) if mm else None
+        if old == n:
+            return f"The returns window is already {n} days."
+        new = re.sub(r"within \d+ days", f"within {n} days", cur) if mm else cur + f"\nYou can return any unused item within {n} days of delivery for a full refund."
+        prop = self.store.propose("page", "returns", new, f"you asked: returns window {old or '?'} → {n} days")
+        return {"proposal": prop["id"], "text": f"🏪 Returns window {old or '?'} → {n} days. The returns page and customer replies follow.\nApply it?"}
+
+    def waiting_longest(self, t, m):
+        if self.store is None:
+            return None
+        st = self.store
+        day = st.data.get("day", 0)
+        rows = [o for o in st.data["orders"] if o["status"] == "paid"]
+        if not rows:
+            return "Nobody is waiting — every paid order is shipped."
+        rows.sort(key=lambda o: o.get("day", 0))
+        out = [f"Waiting longest ({len(rows)} unshipped):"]
+        for o in rows[:6]:
+            wait = day - o.get("day", day)
+            c = o.get("customer") or {}
+            out.append(f"• #{o['n']} {c.get('name', '?')} ({c.get('country', '?')}) — {wait} practice day(s), {_eur(o.get('total', 0))}" + (" ⚠️ past the promise" if wait >= 1 else ""))
+        out.append("Say “print the shipping labels” and I prepare all of them.")
+        return "\n".join(out)
+
+    def order_lookup(self, t, m):
+        if self.store is None:
+            return None
+        gd = m.groupdict()
+        n = next((gd[k] for k in ("n", "n2", "n3", "n4", "n5", "n6") if gd.get(k)), None)
+        if not n:
+            return None
+        o = st_order = self.store.order(int(n))
+        if not o:
+            return f"There's no order #{n} in the practice shop (orders start at #51001)."
+        c = o.get("customer") or {}
+        lines = "; ".join(f"{l['qty']} × {l.get('name', l['id'])} at {_eur(l['price'])}" for l in o["lines"])
+        low = t.lower()
+        if re.search(r"\bwho|whose|chi\b", low):
+            return f"Order #{n}: {c.get('name', '?')} ({c.get('country', '?')}, {c.get('email', '?')}) — {lines}; {_eur(o.get('total', 0))}, {o['status']}."
+        return (f"Order #{n}: {_eur(o.get('total', 0))} total ({lines}" + (f"; shipping {_eur(o.get('shipping', 0))}" if o.get("shipping") is not None else "") +
+                f"), placed day {o.get('day', '?')}, status {o['status']}" + (f", tracking {o['tracking']}" if o.get("tracking") else "") + f". Customer: {c.get('name', '?')} ({c.get('country', '?')}).")
 
     # ---- round 15: consequences, absence, night work, how I propose, limits, friend price, missing payment, milestones, glossary ----
     def do_nothing(self, t, m):
