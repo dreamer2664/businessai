@@ -208,7 +208,7 @@ check("'summary of the week' → the numbers, best sellers, to-ship, low stock",
 r = A.respond("how much is shipping to germany?")
 check("'shipping to germany?' → the shop's own rule (€ 6,90, 4–6 days), not a web search", r and "Shipping to DE: € 6,90" in r and "4–6 business days" in r, (r or "")[:100])
 r = A.respond("quanto costa spedire in svizzera?")
-check("'spedire in svizzera?' → not offered (EU only)", r and "don't ship to CH" in r, (r or "")[:100])
+check("'spedire in svizzera?' → not offered (EU only)", r and "don't ship to Switzerland" in r and "EU" in r, (r or "")[:100])
 r = A.respond("how long until the toothbrushes sell out at this pace?")
 check("'how long until X sells out?' → days of stock from the last 7 days' sales", r and r.startswith("Bamboo Toothbrush Set") and ("days of stock" in r or "no sell-out in sight" in r), (r or "")[:120])
 r = A.respond("if I sell 40 mugs a month at 14.90 with cost 5.60, how much do I make?")
@@ -382,6 +382,40 @@ r = A.respond("what's the weather in bergamo")
 check("'what's the weather in bergamo' → Open-Meteo lookup (stubbed here), no research job", r == "weather stub Bergamo now", r)
 r = A.respond("will it rain in milan tomorrow?")
 check("'will it rain in milan tomorrow?' → tomorrow's forecast", r == "weather stub Milan tomorrow", r)
+# round 6: decisions and shop numbers in the owner's words
+for q, need in [("someone ordered 2 lamps but we only have 3, should I keep one back?", ["Ship the order in full", "in stock"]),
+                ("what should I write on the package / packing slip?", ["Packing slip", "card"]),
+                ("a customer asks for a discount code, do we have any?", ["one code, one purpose", "Reply to the customer"]),
+                ("should I offer gift wrapping?", ["paid option", "2,90"]),
+                ("which product makes us the most money?", ["Most money", "gross margin"]),
+                ("are we profitable?", ["Profit", "net margin"]),
+                ("how much did we spend on shipping this month?", ["to the courier", "customers paid"]),
+                ("how many customers do we have?", ["different people", "Countries"]),
+                ("write an out of office reply for the shop email", ["Subject:", "Oggetto:"]),
+                ("what if amazon sells the same mug cheaper?", ["Amazon sells it cheaper", "Stoneware Coffee Mug"]),
+                ("should I sell on etsy too?", ["Sell on Etsy too?", "Fees"]),
+                ("should I be on amazon?", ["Not yet", "GTIN"]),
+                ("how do I get my first 100 followers?", ["First 100 followers", "Don't: buy followers"]),
+                ("a customer left a 1-star review saying shipping was slow, what do I reply?", ["slow shipping", "Draft"]),
+                ("can I ship to switzerland?", ["Not yet", "Switzerland"]),
+                ("how long does it take to ship to germany?", ["4–6 business days", "Monday"]),
+                ("what's the cheapest product we sell?", ["Cheapest: Bamboo Toothbrush Set", "add-on"]),
+                ("what's the most expensive product?", ["Most expensive: LED Desk Lamp", "in stock"]),
+                ("a customer says the mug is chipped, should I refund or replace?", ["Refund or replace?", "Stoneware Coffee Mug"]),
+                ("temu sells the cork case for 4 euros, what do I do?", ["Temu sells it cheaper", "Phone Case Cork"])]:
+    A.last_brief = None; A.mind.queue.clear()
+    r = A.respond(q)
+    r = r if isinstance(r, str) else ""
+    check(f"round 6: '{q[:60]}'", all(x in r for x in need), r[:120].replace("\n", " | "))
+r = A.respond("customer says the mug arrived broken, photo attached")
+check("forwarded customer sentence without 'what do I answer' → inbox draft + asks for the photo", r is None and "photo" in A.bot.sent[-1][0].lower(), A.bot.sent[-1][0][:100])
+r = A.respond("does temu sell the cork case cheaper?")
+check("'does temu sell X cheaper?' is a lookup, not a rule of thumb", isinstance(r, str) and ("look it up" in r or "What I understood" in r), (r or "")[:80])
+for _ in range(60):                                                  # that lookup runs as a (fake) job — let it finish
+    if not A.busy and not A.mind.job:
+        break
+    time.sleep(0.5)
+A.last_brief = None; A.mind.queue.clear()
 A.domain_check = lambda dom: f"stub {dom}"
 r = A.respond("can you check if the domain greennest.it is free?")
 check("'is the domain greennest.it free?' → registry lookup (no browser job)", r == "stub greennest.it", r)

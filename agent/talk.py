@@ -45,12 +45,13 @@ class Talk:
     SHIP_OK = re.compile(r"\b(?:is|are)\s*" + _MONEY + r"\s*(?:for )?(?:shipping|delivery|spedizione)(?: (?:cost|fee))?(?: (?:to|for|in) [a-z ]{2,20}?)?\s*(?:too (?:much|expensive|high)|ok|okay|fine|reasonable|fair|normal|a lot|acceptable|right)"
                          r"|\b(?:è|e'|sono) (?:troppo|troppi|giusto|giusti|ok|normale|normali|tanto|tanti|caro|cara)?\s*" + _MONEY + r"\s*(?:di |per la |per )?spedizione", re.I)
     LAST_DOC_IT = re.compile(r"\b(?:mandami|rimandami|inviami|rimanda|manda|carica)\b.{0,20}\b(?:l'?ultimo|quel|il) (?:documento|report|file|pdf)\b", re.I)
+    CUSTOMER_FWD = re.compile(r"^\W*(?:a |the |my |one |another |un |una |il |la )?(?:customer|client|buyer|cliente)s?\s+(?:says?|said|wrote|writes|complain(?:s|ed)?|messaged|emailed|sent|dice|ha scritto|scrive|lamenta)\b(?P<inner>.{8,400})$", re.I | re.S)
     CUSTOMER = re.compile(r"\b(?:a |the |my )?(?:customer|client|buyer|cliente)s?\s+(?:says?|wrote|writes|asks?|is asking|complain(?:s|ed)?|messaged|emailed|sent|dice|scrive|chiede)\b(?P<inner>.{0,400}?)(?:what (?:do|should|can) i (?:answer|reply|say|tell|write|do)|how (?:do|should) i (?:answer|reply|respond|handle)|cosa (?:rispondo|gli dico|le dico|faccio)|what now)\b", re.I | re.S)
     START = re.compile(r"\b(where (do|should) i (start|begin)|how (do|should|can) i (start|begin|get started)|i want to (start|sell|open)|voglio (vendere|aprire|iniziare)|da dove (comincio|inizio|parto))\b", re.I)
     OPINION_IT = re.compile(r"\b(che ne pensi|cosa ne pensi|secondo te)\b", re.I)
     # ---- the practice store in plain words ----
-    STORE_NUM = re.compile(r"\b(?:how ?many (?:orders|sales|visitors|visits|customers)|^\W*(?:orders?|sales|profit|revenue|visits|visitors|conversion|best[- ]?sellers?|ordini|vendite|profitto|incasso|fatturato|visite)(?: (?:today|this week|so far|this month|oggi|di oggi|della settimana|questa settimana|del mese|finora))?(?=\W*$)|total (?:sales|revenue|orders|profit)(?: so far)?|(?:what(?:'s| is| are) )?(?:our|my|the) (?:best[- ]?sellers?|top (?:product|seller)s?|conversion(?: rate)?|revenue|turnover|profit|margin|numbers|visitors|visits)|how much (?:profit|money|revenue) (?:did|have) (?:we|i) (?:make|made|earn|earned)|(?:profit|revenue|sales) (?:so far|this week|today|this month)|summary of (?:the|this|my) (?:week|day|month)|(?:weekly|daily) summary|how(?:'s| is| are) (?:business|sales|things) going|quanti ordini|quante visite|quanto abbiamo (?:guadagnato|venduto|incassato)|qual è il (?:più venduto|best seller)|riepilogo (?:della |di questa )?(?:settimana|giornata)|riassunto (?:della |di questa |del |di )?(?:settimana|giornata|mese)|(?:our|my|the) (?:average (?:order|basket)(?: value| size)?|aov)|scontrino medio|(?:how are we doing|how did we do|come (?:siamo andati|è andata)) (?:compared to|vs\.?|versus|against|rispetto a(?:lla)?) (?:last|the previous|la scorsa|la settimana scorsa)|compared to last week|rispetto alla settimana scorsa)\b", re.I)
-    SHIP_COST_Q = re.compile(r"\b(?:how much (?:is|does|do we charge for|costs?) (?:the )?(?:shipping|delivery|postage)|(?:shipping|delivery) (?:cost|price|fee)s?(?: to| for)?|what do we charge (?:for )?(?:shipping|delivery)|quanto (?:costa|chiediamo per) (?:la )?spedizione|quanto costa spedire|what are (?:our|the|my) (?:shipping|delivery) (?:days|times|options|rules|prices|rates)|how long (?:does|is) (?:our |the )?(?:shipping|delivery)(?: take)?|(?:our|my) (?:shipping|delivery) (?:times|days|rules)|(?:tempi|giorni) di (?:spedizione|consegna)|spedizione (?:in|per|verso) [a-zà-ú]+ quanto costa|spedire in [a-zà-ú]+ quanto costa)\b", re.I)
+    STORE_NUM = re.compile(r"\b(?:how ?many (?:orders|sales|visitors|visits|customers)|^\W*(?:orders?|sales|profit|revenue|visits|visitors|conversion|best[- ]?sellers?|ordini|vendite|profitto|incasso|fatturato|visite)(?: (?:today|this week|so far|this month|oggi|di oggi|della settimana|questa settimana|del mese|finora))?(?=\W*$)|total (?:sales|revenue|orders|profit)(?: so far)?|(?:what(?:'s| is| are) )?(?:our|my|the) (?:best[- ]?sellers?|top (?:product|seller)s?|conversion(?: rate)?|revenue|turnover|profit|margin|numbers|visitors|visits)|how much (?:profit|money|revenue) (?:did|have) (?:we|i) (?:make|made|earn|earned)|(?:profit|revenue|sales) (?:so far|this week|today|this month)|summary of (?:the|this|my) (?:week|day|month)|(?:weekly|daily) summary|how(?:'s| is| are) (?:business|sales|things) going|quanti ordini|quante visite|quanto abbiamo (?:guadagnato|venduto|incassato)|qual è il (?:più venduto|best seller)|riepilogo (?:della |di questa )?(?:settimana|giornata)|riassunto (?:della |di questa |del |di )?(?:settimana|giornata|mese)|(?:our|my|the) (?:average (?:order|basket)(?: value| size)?|aov)|scontrino medio|what (?:did|have) (?:we|i) (?:earn|make|made|earned|sell|sold|take|taken)(?: in)?(?: this week| today| this month| so far| yesterday)?|are we (?:profitable|making money|in profit|losing money|in the black|in the red)|do we make (?:any )?money|siamo in (?:utile|perdita|attivo|passivo)|how much (?:did|have|do) (?:we|i) (?:spend|spent|pay|paid) (?:on|for) (?:shipping|postage|goods|stock|fees|payment fees|the goods)|quanto (?:abbiamo speso|spendiamo) (?:in|di|per) spedizioni|how many (?:customers|buyers|clients|clienti) (?:do (?:we|i) have|have we had|so far|in total|have bought)|quanti clienti abbiamo|which (?:product|item|one) (?:makes|earns|brings|gives)(?: us| me)? the most (?:money|profit|margin)|(?:most profitable|highest[- ]margin|biggest earner) (?:product|item)|what(?:'s| is) (?:our|the) (?:most profitable|highest[- ]margin) (?:product|item)|which product (?:earns|makes) (?:the )?most|(?:how are we doing|how did we do|come (?:siamo andati|è andata)) (?:compared to|vs\.?|versus|against|rispetto a(?:lla)?) (?:last|the previous|la scorsa|la settimana scorsa)|compared to last week|rispetto alla settimana scorsa)\b", re.I)
+    SHIP_COST_Q = re.compile(r"\b(?:(?:can|could|do|does|will) (?:we|i|you|the shop|it) (?:also )?(?:ship|deliver|send|be shipped|be sent) to [a-zà-ú ]{2,25}\??|(?:spediamo|spedite|spedisci|consegnate) (?:in|a|anche in) [a-zà-ú ]{2,25}|how long (?:does|will|would) (?:it|shipping|delivery|a parcel|an order) take (?:to (?:ship|deliver|arrive|get|reach))?(?: (?:to|in) [a-zà-ú ]{2,25})?|how (?:long|many days) (?:to|for) [a-zà-ú ]{2,25}\??|quanto ci mette (?:a arrivare )?(?:in|a) [a-zà-ú ]{2,25}|how much (?:is|does|do we charge for|costs?) (?:the )?(?:shipping|delivery|postage)|(?:shipping|delivery) (?:cost|price|fee)s?(?: to| for)?|what do we charge (?:for )?(?:shipping|delivery)|quanto (?:costa|chiediamo per) (?:la )?spedizione|quanto costa spedire|what are (?:our|the|my) (?:shipping|delivery) (?:days|times|options|rules|prices|rates)|how long (?:does|is) (?:our |the )?(?:shipping|delivery)(?: take)?|(?:our|my) (?:shipping|delivery) (?:times|days|rules)|(?:tempi|giorni) di (?:spedizione|consegna)|spedizione (?:in|per|verso) [a-zà-ú]+ quanto costa|spedire in [a-zà-ú]+ quanto costa)\b", re.I)
     SELLOUT_Q = re.compile(r"\b(?:how long (?:until|before|till) (?:the |our )?(?P<what>[a-z][a-z \-]{2,40}?) (?:sells? out|runs? out|is gone|is sold out)|when (?:will|does) (?:the |our )?(?P<what2>[a-z][a-z \-]{2,40}?) (?:sell out|run out)|(?:stock|units) (?:left )?(?:of |for )?(?:the )?(?P<what3>[a-z][a-z \-]{2,40}?) (?:last|lasts|will last)|quanto dura(?:no)? (?:le |la |il |lo |gli |i )?(?P<what4>[a-zà-ú][a-zà-ú \-]{2,40}?)\?)", re.I)
     MATHS = re.compile(r"^\W*(?:what(?:'s| is)|quanto (?:fa|è)|calcola|calculate|compute)?\s*(?P<a>\d+(?:[.,]\d+)?)\s*%\s*(?:of|di|del|della)\s*(?P<b>\d+(?:[.,]\d+)?)\W*$"
                        r"|^\W*(?:what(?:'s| is)|quanto fa)?\s*(?P<c>\d+(?:[.,]\d+)?)\s*(?:€|eur|euro)?\s*(?:plus|più|\+)\s*(?P<d>\d+(?:[.,]\d+)?)\s*%\W*$"
@@ -73,7 +74,7 @@ class Talk:
     FREE_RETURNS = re.compile(r"\b(?:should (?:i|we) (?:offer|do|give|have|accept) free returns?|free returns?\s*(?:\?|or not|worth it|yes or no|good idea)|(?:offer|give) free returns\?|resi gratuiti(?: sì o no| conviene|\?)|conviene (?:il reso gratuito|offrire il reso gratuito)|who (?:should )?pays? (?:for )?(?:the )?returns?)\b", re.I)
     CAPTIONS = re.compile(r"\b(?:give me|write|draft|make|suggest|fammi|scrivi(?:mi)?|dammi)\b.{0,12}?\b(?P<n>\d+|three|four|five|six|tre|cinque)?\s*(?:captions?|didascali[ae]|post captions?|instagram captions?|hooks?)\b.{0,20}?\b(?:for|per|about|su)\s+(?:the |a |an |our |my |il |la |una |un )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\W*$", re.I)
     WRITE_PAGE = re.compile(r"\b(?:write|draft|make|create|prepare|scrivi(?:mi)?|prepara|fammi)\b.{0,20}?\b(?:the |a |an |our |my |la |una |il |le )?(?P<kind>shipping|delivery|returns?|refund|about(?: us)?|faq|privacy|terms|contact|spedizioni?|resi|chi siamo|domande frequenti)\s+(?:policy|page|pagina|text|section|policy page)\b|\b(?:write|draft|make|scrivi|prepara)\b.{0,12}?\b(?:the |le |la )?(?P<kind2>faq|about us|privacy policy|terms and conditions|termini e condizioni|domande frequenti)\b", re.I)
-    INBOX_Q = re.compile(r"\b(?:how many (?:e-?mails?|messages?|customer messages?|mails?|tickets?|requests?|customers?) (?:are |is )?(?:waiting|pending|unanswered|new|open|in the inbox|to answer|do (?:i|we) have)|(?:anything|what(?:'s| is)) (?:new )?(?:in|waiting in) the inbox|any (?:new )?(?:messages?|e-?mails?|customer messages?)(?: waiting| to answer| today)?\??|quant[ei] (?:mail|e-?mail|messaggi|richieste) (?:ci sono|abbiamo|aspettano|da rispondere)|c'è qualcosa (?:nella|in) (?:posta|inbox))\b", re.I)
+    INBOX_Q = re.compile(r"\b(?:how many (?:e-?mails?|messages?|customer messages?|mails?|tickets?|requests?) (?:are |is )?(?:waiting|pending|unanswered|new|open|in the inbox|to answer|do (?:i|we) have)|how many customers (?:are )?(?:waiting|pending|unanswered|to answer|wrote|have written)|(?:anything|what(?:'s| is)) (?:new )?(?:in|waiting in) the inbox|any (?:new )?(?:messages?|e-?mails?|customer messages?)(?: waiting| to answer| today)?\??|quant[ei] (?:mail|e-?mail|messaggi|richieste) (?:ci sono|abbiamo|aspettano|da rispondere)|c'è qualcosa (?:nella|in) (?:posta|inbox))\b", re.I)
     PLATE = re.compile(r"^\W*(?:what(?:'s| is|’s)?\s*(?:on my plate|on the agenda|on (?:for|the plan) today|the plan (?:for )?today|today'?s plan|left (?:to do|for today)|(?:the )?priority today|urgent today)|what (?:do|should) (?:i|we) (?:do|have to do|need to do|handle) (?:today|now|first|this morning)|where (?:do|should) (?:i|we) start today|cosa (?:devo|dobbiamo) fare oggi|cosa c'è (?:da fare )?oggi|priorità (?:di )?oggi|da dove (?:inizio|comincio) oggi)(?:\s+(?:today|this morning|now|oggi|stamattina))?\W*$", re.I)
     ORDER_ACT = re.compile(r"^\W*(?:please |can you |could you |puoi )?(?P<act>cancel|refund|ship|mark(?: as)? shipped|annulla|rimborsa|spedisci)\s+(?:the )?(?:order|ordine)?\s*#?\s*(?P<n>\d{4,6})\b(?P<why>.*)$", re.I | re.S)
     SHIP_ALL = re.compile(r"^\W*(?:ship|send out|post|spedisci)\s+(?:everything|all|all (?:the )?(?:open |paid |pending )?orders|them all|tutto|tutti gli ordini)\W*$", re.I)
@@ -177,12 +178,12 @@ class Talk:
         q = self.quick(t)                                              # to-do, clock, opinions — also answered while I'm busy
         if q is not None:
             return q
-        m = self.CUSTOMER.search(t)
+        m = self.CUSTOMER.search(t) or (self.CUSTOMER_FWD.match(t) if not re.search(r"\b(should (?:i|we)|do (?:i|we)|can (?:i|we)|what (?:do|should|can) (?:i|we)|how (?:do|should|can) (?:i|we)|is (?:it|that)|devo|posso)\b|\?\s*$", t, re.I) else None)
         if m:
             adv = self.advice.reply(t, only=self.advice.SITUATIONS)     # "a customer wants an invoice / asks where it's made" → guidance first; forwarding the message still gets a draft
             if adv:
                 return adv
-            return {"customer": self._customer_text(t, m)}
+            return {"customer": self._customer_text(t, m), "photo": bool(re.search(r"\b(photo|picture|image|foto|pic)s?\b", t, re.I))}
         m = self.MATHS.match(t)
         if m:
             r = self.maths(m)
@@ -755,6 +756,16 @@ class Talk:
             p = self.store.find_product(what)
             if p and value > 0:
                 return {"store_change": {"kind": "cost", "product": p["id"], "value": round(value, 2), "name": p["name"], "old": p.get("cost", 0), "price": p["price"]}}
+        if re.search(r"\b(?:cheapest|least expensive|most expensive|priciest|lowest[- ]priced|highest[- ]priced|più economico|più caro|meno caro)\b.{0,15}?\b(?:product|item|thing|one|prodotto|articolo)\b|\bwhat(?:'s| is) (?:our|the|my) (?:cheapest|most expensive|priciest) (?:product|item)\b", low):
+            prods = sorted(self.store.products(), key=lambda p: p["price"])
+            if prods:
+                dear = bool(re.search(r"\b(most expensive|priciest|highest|più caro)\b", low))
+                p = prods[-1] if dear else prods[0]
+                rest = ", ".join(f"{q['name'].split(' (')[0]} {_eur(q['price'])}" for q in (prods[-2::-1][:3] if dear else prods[1:4]))
+                mg = (p["price"] - p.get("cost", 0)) / p["price"] * 100 if p["price"] else 0
+                return (f"{'Most expensive' if dear else 'Cheapest'}: {p['name']} at {_eur(p['price'])} (cost {_eur(p.get('cost', 0))}, {mg:.0f} % margin, {p['stock']} in stock); then {rest}. " +
+                        ("It carries the shop's profit per order — keep it in stock and in every post." if dear else
+                         "Under € 15 it only pays as an add-on: show it in the cart (“add a toothbrush set for € 12,90”) and in bundles, not as the hero product."))
         if self.PUSH_Q.search(t):
             return self.push_pick(t)
         if re.match(r"^\W*(?:what|which|cosa|che)\s+(?:should|could|do|can) (?:i|we)\s+post\s+(?:today|now|tomorrow|this week|oggi|domani|questa settimana)\W*$|^\W*cosa (?:posto|pubblico|pubblichiamo) oggi\W*$", t, re.I):
@@ -930,6 +941,36 @@ class Talk:
         conv = (len(paid) / visits * 100) if visits else 0
         if re.search(r"\b(compared|vs\.?|versus|against|rispetto)\b", low):
             return self.week_compare()
+        if re.search(r"\b(most (?:money|profit|profitable|margin)|highest[- ]margin|biggest earner|earns (?:the )?most|makes (?:the )?most)\b", low):
+            gain = {}
+            for o in paid:
+                for l in o["lines"]:
+                    gain[l["name"]] = gain.get(l["name"], 0) + l["qty"] * (l.get("price", 0) - l.get("cost", 0))
+            rank = sorted(gain.items(), key=lambda x: -x[1])
+            per_unit = sorted(((p["name"], p["price"] - p.get("cost", 0), (p["price"] - p.get("cost", 0)) / p["price"] * 100) for p in st.products() if p["price"]), key=lambda x: -x[1])
+            if rank:
+                k, v = rank[0]
+                u = units.get(k, 0)
+                return (f"Most money {label}: {k} — {_eur(v)} gross margin from {u} sold" + ((", then " + ", ".join(f"{a} {_eur(b)}" for a, b in rank[1:3])) if len(rank) > 1 else "") +
+                        f". Per unit the best is {per_unit[0][0]} ({_eur(per_unit[0][1])} each, {per_unit[0][2]:.0f} %)" + (" — so pushing it is the fastest way to more profit." if per_unit[0][0] != k else " — same one; keep it in stock and on the feed.") )
+            return ("No sales yet, so by margin per unit: " + ", ".join(f"{a} {_eur(b)} ({c:.0f} %)" for a, b, c in per_unit[:3]) +
+                    f". {per_unit[0][0]} is the one to push once orders start.")
+        if re.search(r"\b(spend|spent|pay|paid|speso|spendiamo)\b.{0,12}\b(shipping|postage|spedizion)", low):
+            n_p = sum(sum(l["qty"] for l in o["lines"]) for o in paid)
+            charged = sum(o.get("shipping", 0) for o in paid)
+            return (f"Shipping {label}: we paid about {_eur(ship)} to the courier for {len(paid)} parcels ({n_p} items; practice figure € 2,90 + € 0,35 per item), customers paid {_eur(charged)} of it" +
+                    (f" — so shipping cost us net {_eur(ship - charged)}" if ship > charged else " — covered") +
+                    ((lambda k: f"; {k} order{'s' if k != 1 else ''} had free shipping.")(len([o for o in paid if o.get('shipping', 0) == 0])) if any(o.get("shipping", 0) == 0 for o in paid) else "."))
+        if re.search(r"\b(spend|spent|pay|paid)\b.{0,12}\b(goods|stock|the goods|fees|payment fees)", low):
+            return f"{label.capitalize()}: goods {_eur(cogs)}, payment fees {_eur(fees)}, shipping {_eur(ship)} — against {_eur(rev)} of sales from {len(paid)} orders."
+        if re.search(r"\bhow many (?:customers|buyers|clients|clienti)\b|\bquanti clienti\b", low):
+            emails = {}
+            for o in paid:
+                key = (o.get("customer") or {}).get("email") or (o.get("customer") or {}).get("name") or str(o["n"])
+                emails[key] = emails.get(key, 0) + 1
+            rep = sum(1 for v in emails.values() if v > 1)
+            return (f"Customers {label}: {len(emails)} different people placed {len(paid)} orders" + (f"; {rep} came back for a second order — " + ("good sign." if rep else "") if rep else "; no repeat buyers yet — the thank-you card with a code is the cheapest fix.") +
+                    (f" Countries: " + ", ".join(f"{c} {n}" for c, n in sorted(((c, sum(1 for o in paid if o.get('country') == c)) for c in {o.get('country') for o in paid}), key=lambda x: -x[1])[:4]) + "." if paid else ""))
         if re.search(r"\b(average (?:order|basket)|aov|scontrino medio)\b", low):
             if not paid:
                 return f"No paid orders {label}, so no average basket yet."
@@ -950,9 +991,13 @@ class Talk:
         if re.search(r"\bconversion\b", low):
             return (f"Conversion {label}: {conv:.1f} % ({len(paid)} orders from {visits} visits). Normal for a small shop is 1–3 %; " +
                     ("that's healthy." if conv >= 1.5 else "below 1 % usually means the product page or the shipping cost scares people off — check the price shown before checkout."))
-        if re.search(r"\b(profit|money|earn|guadagnato|margin)\b", low) and not re.search(r"\bsummary|riepilogo\b", low):
-            return (f"Profit {label}: {_eur(profit)} on {_eur(rev)} of sales from {len(paid)} orders " +
-                    f"(goods {_eur(cogs)}, shipping {_eur(ship)}, payment fees {_eur(fees)})" + (f" — {profit / rev * 100:.0f} % net margin." if rev else "."))
+        if re.search(r"\b(profit|profitable|money|earn|earned|guadagnato|margin|utile|perdita|black|red)\b", low) and not re.search(r"\bsummary|riepilogo\b", low):
+            head = ""
+            if re.search(r"\b(profitable|making money|in profit|losing money|make (?:any )?money|utile|perdita|black|red)\b", low):
+                head = ("Yes — " if profit > 0 else "Not yet — ") if paid else "No sales yet, so neither — "
+            return (head + f"Profit {label}: {_eur(profit)} on {_eur(rev)} of sales from {len(paid)} orders " +
+                    f"(goods {_eur(cogs)}, shipping {_eur(ship)}, payment fees {_eur(fees)})" + (f" — {profit / rev * 100:.0f} % net margin." if rev else ".") +
+                    (" That's before your time, boxes (~€ 1/parcel), the domain and any ads — real profit needs those off too." if head.startswith("Yes") else ""))
         if re.search(r"\b(how ?many|quanti)\b.*\b(orders|sales|ordini|customers)\b", low):
             return (f"Orders {label}: {len(paid)}" + (f" ({_eur(rev)} in sales, average basket {_eur(rev / len(paid))})" if paid else "") +
                     (f"; {len([o for o in orders if o['status'] == 'refunded'])} refunded" if any(o["status"] == "refunded" for o in orders) else "") + ".")
@@ -975,15 +1020,23 @@ class Talk:
         from . import store as _s
         low = t.lower()
         code = next((c for w, c in (("germany", "DE"), ("germania", "DE"), ("france", "FR"), ("francia", "FR"), ("spain", "ES"), ("spagna", "ES"), ("italy", "IT"), ("italia", "IT"),
-                                     ("austria", "AT"), ("netherlands", "NL"), ("olanda", "NL"), ("belgium", "BE"), ("portugal", "PT"), ("poland", "PL"), ("uk", "GB"), ("united kingdom", "GB"), ("switzerland", "CH"), ("svizzera", "CH"), ("usa", "US"), ("america", "US"), ("stati uniti", "US")) if re.search(r"\b" + w + r"\b", low)), None)
+                                     ("austria", "AT"), ("netherlands", "NL"), ("olanda", "NL"), ("belgium", "BE"), ("portugal", "PT"), ("poland", "PL"), ("uk", "GB"), ("united kingdom", "GB"), ("england", "GB"), ("switzerland", "CH"), ("svizzera", "CH"), ("usa", "US"), ("america", "US"), ("stati uniti", "US"), ("united states", "US"),
+                                     ("ireland", "IE"), ("greece", "GR"), ("grecia", "GR"), ("sweden", "SE"), ("denmark", "DK"), ("finland", "FI"), ("czech", "CZ"), ("croatia", "HR"), ("hungary", "HU"), ("romania", "RO"), ("slovenia", "SI"), ("slovakia", "SK"), ("luxembourg", "LU"), ("norway", "NO"), ("canada", "CA"), ("australia", "AU"), ("japan", "JP"), ("china", "CN"), ("brazil", "BR"), ("turkey", "TR"), ("russia", "RU"), ("san marino", "SM"), ("sicily", "IT"), ("sardinia", "IT"), ("sicilia", "IT"), ("sardegna", "IT")) if re.search(r"\b" + w + r"\b", low)), None)
         rules = "Italy € 3,90 (free over € 39) · Germany/France/Spain € 6,90 · other EU € 8,90 · outside the EU: not offered yet"
         if not code:
             return f"Our shipping prices (practice store): {rules}. Orders ship within 1 business day with GLS from Bergamo."
         cost = self.store.shipping_for(code, 0)
         if cost is None:
-            return f"We don't ship to {code} yet — the shop covers the EU only (outside: not offered, UK/Switzerland planned). Full list: {rules}."
+            names = {"CH": "Switzerland", "GB": "the UK", "US": "the USA", "NO": "Norway", "CA": "Canada", "AU": "Australia", "JP": "Japan", "CN": "China", "BR": "Brazil", "TR": "Turkey", "RU": "Russia"}
+            why = {"CH": "customs: the buyer pays Swiss VAT + a courier handling fee (CHF 15–30) on delivery, which causes refused parcels — doable later with DDP labels via Packlink/DHL (~€ 20–25 for 2 kg)",
+                   "GB": "post-Brexit customs: UK VAT is due at checkout for orders under £ 135 (needs a UK VAT number), plus a customs declaration per parcel (~€ 20–25 shipping)",
+                   "US": "customs paperwork + € 40 shipping for 2 kg: the maths doesn't work under ~€ 60 orders"}.get(code, "outside the EU every parcel needs a customs declaration and the buyer may pay import VAT on delivery")
+            return f"Not yet — we don't ship to {names.get(code, code)}: {why}. The shop covers the EU: {rules}. If a customer asks, say “not yet, we're working on it — leave your e-mail and we tell you when”; say “open shipping to {names.get(code, code)}” when you want me to prepare the rule and prices for your tap."
         days = {"IT": "2–3 business days", "DE": "4–6 business days", "FR": "4–6 business days", "ES": "4–6 business days"}.get(code, "5–7 business days")
         free = " (free over € 39)" if code == "IT" else ""
+        if re.search(r"\b(how long|how many days|quanto ci mette|tempi|when (?:does|will) it arrive)\b", low):
+            return (f"To {code}: {days} door to door with GLS (we hand it over within 1 business day, so order Monday → delivered by about {'Thursday' if code == 'IT' else 'the following Monday' if code in ('DE', 'FR', 'ES') else 'the middle of the following week'}); "
+                    f"tracked; the customer pays {_eur(cost)}{free}. Tell them the range, not the best case — a day early delights, a day late gets a complaint.")
         return f"Shipping to {code}: {_eur(cost)}{free}, {days}, GLS with tracking. That's what the customer pays; it costs us about € 6–9 for a small EU parcel, so on a € 12,90 item the margin gets thin — a free-shipping threshold for the EU (~€ 60) helps."
 
     def sell_out(self, what):
@@ -1788,9 +1841,9 @@ class Talk:
         product = None
         if self.store is not None:
             product = self.store.find_product(t)
-        prod = product["name"] if product else "the item"
         broke = re.search(r"\b(broke|broken|damaged|cracked|arrived (?:in pieces|broken)|rotto|rotta|danneggiato)\b", t, re.I)
-        late = re.search(r"\b(late|never arrived|still waiting|in ritardo|mai arrivato)\b", t, re.I)
+        late = re.search(r"\b(late|slow|never arrived|still waiting|took (?:two|three|\d+) weeks|in ritardo|lenta|mai arrivato)\b", t, re.I)
+        prod = product["name"] if product else ("slow shipping" if late else "the item")
         rude = re.search(r"\b(rude|ignored|no (?:answer|reply)|maleducat)", t, re.I)
         cause = "a broken item" if broke else "a late or missing delivery" if late else "bad service" if rude else "the problem"
         fix = ("we replace or refund faulty items at once — no return needed for a broken piece, a photo is enough" if broke else

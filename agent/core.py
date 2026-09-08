@@ -958,7 +958,8 @@ class Agent:
         direct = self.talk.reply(text)                                              # everyday questions: answered here, no job
         if isinstance(direct, dict):
             if direct.get("customer"):
-                self.bot.send(self.owner_id, "That's a customer message — I'll draft the reply and you approve it.")
+                self.bot.send(self.owner_id, "That's a customer message — I'll draft the reply and you approve it." +
+                              (" Forward me the photo too and I look at the damage before you decide (replace / refund)." if direct.get("photo") else ""))
                 self.inbox.add("owner", "a customer", direct["customer"])
                 threading.Thread(target=self.process_inbox, daemon=True).start()
                 return None

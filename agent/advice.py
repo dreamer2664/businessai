@@ -40,6 +40,15 @@ class Advice:
         (r"\b(?:our|my|the|what(?:'s| is) (?:our|my|the)) (?:return|refund|cancellation) rate\b|\bhow many returns\b|\btasso di res[oi]\b|\bquanti resi\b", "return_rate"),
         (r"\b(?:which|what) countr(?:y|ies) (?:buys?|orders?|is|are) (?:the )?(?:most|best|top)\b|\bwhere (?:do|are) (?:our |the |my )?(?:customers|buyers|orders) (?:from|coming from|come from)\b|\b(?:sales|orders) by country\b|\bda che paes[ei] (?:comprano|arrivano)\b|\bquale paese compra di più\b", "by_country"),
         (r"\b(?:which|what) (?:day|weekday|day of the week|giorno)\b.{0,20}?\b(?:sells?|sold|best|most|più)\b|\bbest (?:day|weekday) for sales\b|\bsales by (?:day|weekday)\b", "by_day"),
+        (r"\b(?:out[- ]of[- ]office|auto[- ]?repl(?:y|ier)|automatic repl(?:y|ies)|autoresponder|vacation responder|risposta automatica|away message)\b", "auto_reply"),
+        (r"\b(?:first|primi) (?:\d+ |hundred |thousand |mille |cento )?(?:followers|follower|seguaci)\b|\b(?:get|grow|gain|more|find|win|avere|ottenere) (?:more )?(?:followers|follower|seguaci)\b|\bgrow (?:my |our |the )?(?:instagram|tiktok|account|page)\b", "first_followers"),
+        (r"\b(?:should (?:i|we)|worth|conviene|do (?:i|we) (?:also )?(?:need|want) to|what about|thinking (?:of|about)|is it worth)\b.{0,20}?\b(?:sell(?:ing)?|list(?:ing)?|open(?:ing)?|be|go|vendere|aprire)\b.{0,8}?\b(?:on|su|a)\s+(?P<mp>etsy|amazon|ebay|vinted|subito|zalando|manomano|temu|facebook marketplace|instagram shop|wallapop)\b|\b(?P<mp2>etsy|amazon|ebay|vinted|subito|zalando|manomano)\b.{0,15}?\b(?:too|as well|anche|worth it|good idea|yes or no)\b", "marketplace"),
+        (r"\b(?:should (?:i|we)|worth|conviene|do (?:i|we))\b.{0,20}?\b(?:offer|add|do|give|propose|offrire|fare)\b.{0,10}?\bgift[- ]?wrap(?:ping)?\b|\bgift[- ]?wrapping\b.{0,20}?\b(?:yes or no|worth|good idea|\?)|\bconfezione regalo\b", "gift_wrap"),
+        (r"\b(?:refund or replace|replace or refund|replacement or (?:a )?refund|refund or (?:a )?replacement|rimborso o sostituzione|sostituzione o rimborso|resend or refund|refund or resend)\b|\bshould (?:i|we) (?:refund|replace|resend)\b.{0,30}?\b(?:chipped|broken|damaged|cracked|faulty|defective|stopped working|doesn't work|arrived broken|rotto|difettoso)\b|\b(?:chipped|broken|damaged|cracked|faulty|defective|stopped working|doesn't work|rotto|difettoso)\b.{0,40}?\bshould (?:i|we) (?:refund|replace|resend)\b", "refund_or_replace"),
+        (r"(?<!does )(?<!do )(?<!is )\b(?:amazon|temu|aliexpress|shein|ebay|a competitor|competitors?|another shop|someone else|ikea|la concorrenza|un concorrente)\b.{0,30}?\b(?:sells?|has|offers?|lists?|vende|ha)\b.{0,40}?\b(?:cheaper|less|lower|for half|a metà|meno|più economico|(?:for|at|a) (?:€|eur|euro)?\s*\d+(?:[.,]\d+)?\s*(?:€|eur|euros?)?)\b|\b(?:cheaper|lower price|less)\b.{0,20}?\bon (?:amazon|temu|aliexpress|ebay)\b|\bundercut(?:ting)?\b", "cheaper_elsewhere"),
+        (r"\b(?:asks?|asking|wants?|would like|chiede|vuole)\b.{0,15}?\b(?:a |un )?(?:discount|promo|coupon|voucher|first[- ]order)\s*(?:code|codice)?\b|\bcodice sconto\b|\bdo we have (?:any )?(?:discount|promo|coupon) codes?\b|\bshould (?:i|we) (?:make|create|offer|set up|have) (?:a |any )?(?:discount|promo|coupon|welcome) codes?\b", "discount_code"),
+        (r"\b(?:what (?:do|should) i (?:write|put|include|print) (?:on|in|inside|with) the (?:package|parcel|box|packing slip|shipment|pacco))|packing slip\b|\bwhat goes in(?:to|side)? the (?:box|parcel|package)\b|\bcosa (?:metto|scrivo) (?:nel|sul) pacco\b|\b(?:thank[- ]you|thank you) (?:card|note)\b.{0,20}?\b(?:in|with) the (?:parcel|package|box|order)\b", "packing_slip"),
+        (r"\b(?:ordered|wants?|bought|asks? for|ha ordinato|vuole)\s+(?P<n>\d{1,3})\s+(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\b.{0,40}?\b(?:only have|we have|have only|left|in stock|ne (?:abbiamo|restano))\b.{0,20}?\b(?:keep|hold|hold back|save|reserve|tenere|tengo|trattenere)\b|\b(?:keep|hold) (?:one|1|some|a few) back\b|\blast (?:one|piece|unit)\b.{0,40}?\b(?:sell|ship|keep|hold)\b", "stock_hold"),
         (r"\b(?:what do you think|your (?:opinion|take|view|honest opinion)|how (?:do you|would you) (?:rate|judge)|che ne pensi|come (?:ti sembra|lo vedi|va secondo te))\b.{0,20}?\b(?:the |our |my |il |del |lo )?(?:shop|store|business|negozio|numbers|results|so far|finora)\b|\bhonest (?:review|opinion) of the (?:shop|store)\b", "shop_opinion"),
         (r"\b(?:thinking (?:of|about)|considering|planning to|should i|would it be (?:smart|good|a good idea) to|what about|conviene|pensavo di|vorrei)\b.{0,15}?\b(?:add|adding|sell|selling|stock|stocking|introduce|introducing|aggiungere|vendere)\b.{0,10}?\b(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\b.{0,30}?\b(?:good idea|worth it|smart|yes or no|\?|buona idea)", "add_product_idea"),
         (r"\bshould (?:i|we) (?:raise|increase|lower|drop|cut|reduce) (?:the |our |my )?prices?\b|\b(?:raise|increase|lower|cut) (?:the |our |my )?prices\??\W*$|\b(?:alzo|abbasso|aumento) i prezzi\b|\bare (?:our|my) prices (?:too )?(?:high|low|right|ok)\b", "raise_prices"),
@@ -56,7 +65,8 @@ class Advice:
         (r"\b(?:vacation|holiday|holidays|ferie|vacanza|away for (?:a|two|\d+) weeks?|closing (?:the shop )?for)\b.{0,40}?\b(?:shop|store|orders|what do i do|how|negozio|ordini|come faccio)\b|\bwhat (?:do i do with|happens to) (?:the shop|orders) (?:when|while) i'?m (?:away|on holiday)\b", "vacation"),
     ]
 
-    SITUATIONS = ("made_where", "lost_parcel", "says_delivered", "invoice", "wholesale", "influencer", "chargeback", "price_mistake", "copied")
+    SITUATIONS = ("made_where", "lost_parcel", "says_delivered", "invoice", "wholesale", "influencer", "chargeback", "price_mistake", "copied",
+                  "discount_code", "stock_hold", "cheaper_elsewhere", "refund_or_replace")
 
     JOB_WORDS = re.compile(r"https?://|\b(research|find|search|compare|look up|look into|write me a (?:doc|document|report)|document|report|cerca|trova|ricerca|confronta)\b", re.I)
 
@@ -468,6 +478,175 @@ class Advice:
                 "4. Shots per product: front, 45°, detail (texture, logo, stitching), scale (in a hand), in use, packaging. 6 photos, same order for every product.\n"
                 "5. Edit lightly (brightness, straighten, crop square 1:1 for shop, 4:5 for Instagram); no filters that change the colour — colour mismatches cause returns.\n"
                 "Do all products in one session, same spot, same time of day — consistency makes the shop look bigger than it is. Send me a photo and I tell you what to fix (say “look at this photo”).")
+
+    MARKETPLACES = {
+        "etsy": ("Etsy", "handmade, vintage, craft supplies and 'design-led' small brands — eco home goods fit well", "€ 0,18 per listing (4 months) + 6,5 % transaction + payment 4 % + € 0,30 + 15 % 'offsite ads' fee if a buyer comes through Etsy's ads (mandatory above $ 10k/yr)", "about 12–15 % all-in", "Yes for a small eco line — the buyers are already there and set-up is an afternoon. Start with your 3 best photos per product, ship in 1 day, and treat Etsy as a second shop window; keep your own site as the home."),
+        "amazon": ("Amazon", "everything, price- and Prime-driven", "Individual plan € 0,99 per item or Pro € 39/month, + 8–15 % referral (15 % home & kitchen), + FBA storage/pick-pack if you use their warehouse", "about 15–20 % (more with FBA)", "Not yet. Amazon is a price war with big sellers, needs invoices/GTIN barcodes, and one bad metric suspends the account. Come back when a product sells 5+ a day and you want volume."),
+        "ebay": ("eBay", "electronics, collectibles, second-hand and bargain buyers", "up to ~250 free listings/month, then € 0,35; ~12,8 % final value fee + € 0,35 per order", "about 13 %", "Maybe for the lamp and cases (people search eBay for gadgets); weak for mugs and wraps. Low effort: list, see what happens in 30 days."),
+        "vinted": ("Vinted", "second-hand clothes and home items; buyers expect used prices", "sellers pay € 0 — buyers pay a 'protection fee' (~5 % + € 0,70); Vinted Pro exists for businesses (selling new goods as a private seller breaks the rules and Italian tax law)", "0 % for you", "No for a shop selling new goods, unless you open a Vinted Pro business account; fine for clearing samples and returns."),
+        "subito": ("Subito.it", "local Italian buyers, cash on pickup", "free basic ads; paid boosts € 2–10", "0–5 %", "Only for clearing stock locally (returns, last pieces). Not a sales channel for a brand."),
+        "zalando": ("Zalando", "fashion and lifestyle, big brands", "partner program by invitation; ~5–25 % commission; strict logistics", "invite only", "Not reachable for a small shop today; revisit at € 20k+/month."),
+        "manomano": ("ManoMano", "home, garden and DIY", "€ 0 fixed for small sellers on the marketplace plan, ~15 % commission; application review", "about 15 %", "Possible for the lamp; the rest doesn't fit. Low priority."),
+        "temu": ("Temu", "ultra-cheap direct-from-factory goods", "local seller program in Europe with 0 % commission for now, but Temu sets prices and demands the lowest price on the market", "0 % but price control", "No — your margins and brand die there; it's where your competitors' € 3 mugs live."),
+        "facebook marketplace": ("Facebook Marketplace", "local buyers, pickup, second-hand", "free for local listings; a Facebook/Instagram shop is different (uses your catalogue)", "0 %", "Free and quick for local sales; the real move is the Instagram/Facebook Shop tied to your catalogue."),
+        "instagram shop": ("Instagram Shop", "your own followers", "free tags on posts; checkout on your site", "0 % (your own gateway)", "Yes — it's your catalogue shown on posts, no fee; needs a Facebook Business account and the product feed (I can prepare it)."),
+        "wallapop": ("Wallapop", "second-hand, local (Spain/Italy)", "free; paid 'destacar' boosts", "0 %", "Not for new goods; okay to clear samples."),
+    }
+
+    def marketplace(self, t, m):
+        key = (m.group("mp") or m.group("mp2") or "").lower()
+        if key not in self.MARKETPLACES:
+            return None
+        name, who, fees, allin, verdict = self.MARKETPLACES[key]
+        st = self.store
+        top = ""
+        if st is not None:
+            try:
+                prods = sorted(st.products(), key=lambda p: -(p["price"] - p.get("cost", 0)))
+                p = prods[0]
+                after = p["price"] * (1 - 0.15) - p.get("cost", 0) - 0.30
+                top = (f"\nWith your numbers: {p['name']} at {_eur(p['price'])} leaves about {_eur(after)} after ~15 % marketplace fees and cost (vs {_eur(p['price'] - p.get('cost', 0) - 0.029 * p['price'] - 0.30)} on your own site) — "
+                       "still fine; below € 10 items it stops being worth the packing time.")
+            except Exception:
+                top = ""
+        return (f"Sell on {name} too? {verdict}\n"
+                f"• Who buys there: {who}.\n"
+                f"• Fees: {fees} → {allin}.\n"
+                "• Rule for any marketplace: same price as your site (never cheaper there), your own photos, ship in 1 business day, answer within 24 h — marketplaces rank sellers on exactly that."
+                + top + "\nIf you want it, say so and I put 'open the account + list 3 products' on the plan; the account is yours, I prepare the listings for your tap.")
+
+    def gift_wrap(self, t, m):
+        st = self.store
+        aov = None
+        paid = self._paid()
+        if paid:
+            aov = sum(o["total"] for o in paid) / len(paid)
+        return ("Gift wrapping — yes, as a paid option, because your products are gifts (mugs, wraps, lamps) and it's the cheapest 'premium' you can add:\n"
+                "• Price it € 2,90–3,90; it costs you ~€ 0,60 (kraft paper, jute string, a card) + 2 minutes. Typically 10–20 % of orders take it, more in Nov–Dec.\n"
+                "• Offer a free handwritten card message with it — that's what people actually want; 'gift receipt without prices' in the box.\n"
+                "• Keep ONE style (kraft + your stamp/sticker) — matches an eco brand and never runs out of a colour.\n"
+                "• On the site: a checkbox at checkout 'Gift wrap + card (€ 2,90)' with a message field; on the product page one photo of the wrapped item.\n"
+                + (f"With an average order of {_eur(aov)}, a € 2,90 add-on on 15 % of orders is about +{aov and 2.9 * 0.15 / aov * 100:.0f} % revenue at ~80 % margin — small, but it also cuts returns (gifts get kept). " if aov else "")
+                + "Say “add gift wrapping to the store” and I prepare the checkout option and the page text for your tap.")
+
+    def cheaper_elsewhere(self, t, m):
+        p = self._product(t)
+        who = re.search(r"\b(amazon|temu|aliexpress|shein|ebay|ikea)\b", t, re.I)
+        who = who.group(1).title() if who else "A competitor"
+        pline = ""
+        if p:
+            cost = p.get("cost", 0)
+            floor = round((cost + 0.30 + 3.25) / (1 - 0.029 - 0.30), 2)   # price that still leaves ~30 % after fees + shipping share
+            pline = (f"\nYour {p['name']}: sells at {_eur(p['price'])}, costs {_eur(cost)} — the lowest price that still leaves ~30 % after fees and your share of shipping is about {_eur(floor)}. "
+                     f"Never go under that to chase {who.lower() if who.startswith('A ') else who}; if their price is below your cost, they're selling a different product (quality, warranty, origin) or losing money.")
+        return (f"{who} sells it cheaper — this happens to every small shop, and the answer is not to match the price:\n"
+                "1. Check it's really the same item: material, size, brand, seller reviews, delivery time, return rights. Usually it isn't — then say so on your page (“hand-glazed in Portugal, 2-year warranty, ships from Italy in 1 day”).\n"
+                "2. Compete on what they can't do: your photos, a gift option, a bundle (mug + wraps), the handwritten note, replies within an hour, easy returns. People pay 20–30 % more for certainty on a € 15–40 purchase.\n"
+                "3. If it IS the same generic product from the same factory, drop it from the line over time — a product you can't defend is a product you'll never make money on.\n"
+                "4. Don't start a price war; a price cut is the only move competitors copy the same day." + pline +
+                "\nSay “compare the <product> on amazon” and I fetch their listing, price, delivery and reviews into a document so you see the real difference.")
+
+    def discount_code(self, t, m):
+        st = self.store
+        name = "the shop"
+        if st is not None:
+            try:
+                name = st.data.get("name", "the shop").split(" — ")[0]
+            except Exception:
+                pass
+        ask = bool(re.search(r"\b(asks?|asking|wants?|would like|chiede|vuole)\b", t, re.I))
+        head = ("A customer asks for a discount code — " if ask else "Discount codes — ")
+        return (head + "the practice store has none yet, and my rule is: one code, one purpose, never 'because they asked'.\n"
+                "• A blanket 10 % for anyone who asks trains people to ask; a code tied to something (newsletter sign-up, second order, a review with a photo) earns its cost.\n"
+                "• Sensible set: WELCOME10 only via the newsletter box (10 %, first order, 30 days), COMEBACK10 in the parcel card (second order), free shipping over € 39 for everyone (already in place) — nothing else.\n"
+                "• Cost check: 10 % on a € 14,90 mug is € 1,49 of a ~€ 5,50 margin — fine once, not on every order.\n"
+                + ("Reply to the customer (for your tap): “Thanks for asking! We don't do codes on request, but if you sign up to our newsletter you get 10 % off your first order — and shipping is free over € 39.” "
+                   "It says no without saying no.\n" if ask else "")
+                + f"Say “create a welcome code” and I prepare it (10 %, first order, newsletter) for your tap; {name}'s checkout takes it from there.")
+
+    def packing_slip(self, t, m):
+        return ("What goes in the parcel (in this order, top to bottom):\n"
+                "1. Packing slip — order number, date, the items and quantities (no prices needed for B2C; put prices only if the customer asked for a receipt), your shop name, e-mail and return address. Half a page. I print it with the label (say “print the shipping labels”).\n"
+                "2. A small card — handwritten first name + 2 lines of thanks + how to return/contact. Optionally a code for the next order (COMEBACK10). Costs € 0,10, gets you reviews and second orders.\n"
+                "3. Care/use note if the product needs one (mug: dishwasher ok; wraps: cold water, no meat; lamp: charge 2,5 h first).\n"
+                "4. Invoice: only if requested (or B2B) — Italian B2C sales need no invoice unless the customer asks at checkout; keep the 'corrispettivi' record instead.\n"
+                "5. Nothing loose: card and slip in a paper sleeve, not floating.\n"
+                "Outside the box: only the label and a 'fragile' mark where needed — no company stickers that invite theft. Say “write the thank-you card text” and I draft it.")
+
+    def stock_hold(self, t, m):
+        n = int(m.group("n")) if m.groupdict().get("n") else None
+        p = self._product(m.groupdict().get("what") or t)
+        if not p:
+            return ("Ship what was ordered — an order is a promise, and holding a paid unit back to 'keep one in stock' is how you end up with two unhappy customers instead of one happy one. "
+                    "Then reorder today. If the last unit is a display/photo sample, sell it too and shoot photos before it goes.")
+        st = self.store
+        day = st.data.get("day", 0)
+        week = sum(l["qty"] for o in self._paid() if o.get("day", 0) > day - 7 for l in o["lines"] if l["id"] == p["id"])
+        left = p["stock"]
+        after = left - (n or 0) if n and left >= (n or 0) else left
+        return (f"Ship the order in full — the {p['name']} has {left} in stock" + (f", {after} after this order" if n else "") +
+                f" (selling {week} a week lately). Holding one back gains you nothing: the next buyer pays the same, and a partial shipment costs you a second postage and an annoyed customer.\n"
+                f"Do instead: (1) mark it shipped when GLS takes it; (2) reorder now — say “how much should I order of the {p['name'].split(' (')[0].lower()}” and I compute it; "
+                f"(3) if the supplier needs 2+ weeks, put 'ships in X days' on the page when it hits 0 instead of hiding it — pre-orders keep the sales.")
+
+    def auto_reply(self, t, m):
+        st = self.store
+        name, mail = "Green Nest", "help@greennest.example"
+        if st is not None:
+            try:
+                name = st.data.get("name", name).split(" — ")[0]
+                mail = st.data.get("pages", {}).get("contact_email", mail) if isinstance(st.data.get("pages"), dict) else mail
+            except Exception:
+                pass
+        it = bool(re.search(r"\b(risposta automatica|ferie|in italiano|italian)\b", t, re.I))
+        en = (f"Subject: We got your message — {name}\n\n"
+              "Hi, thanks for writing to us! This is an automatic note to say your message arrived.\n"
+              "We answer every e-mail personally within 1 business day (Mon–Fri). Orders keep shipping as usual, within 1 business day.\n"
+              "Quick answers meanwhile: tracking → in your shipping e-mail; returns → 30 days, instructions at <returns page>; order changes → reply with your order number.\n"
+              f"Talk soon,\n{name} · {mail}")
+        hol = ("Holiday version — add one line at the top: “We're closed from <date> to <date>; orders placed now ship on <date> and e-mails get answered from that day. Thank you for your patience!”")
+        itx = (f"Oggetto: Abbiamo ricevuto il tuo messaggio — {name}\n\n"
+               "Ciao, grazie per averci scritto! Questa è una risposta automatica per dirti che il messaggio è arrivato.\n"
+               "Rispondiamo personalmente a ogni e-mail entro 1 giorno lavorativo (lun–ven). Gli ordini partono regolarmente entro 1 giorno lavorativo.\n"
+               "Nel frattempo: tracking → nell'e-mail di spedizione; resi → 30 giorni, istruzioni su <pagina resi>; modifiche all'ordine → rispondi con il numero d'ordine.\n"
+               f"A presto,\n{name} · {mail}")
+        rules = ("Rules: short, a real reply time, the three things people actually ask, no 'your message is important to us'. Set it in Gmail → Settings → Vacation responder (dates + this text) — "
+                 "or say “set the auto-reply” when Gmail is connected and I prepare it for your tap.")
+        return ("Auto-reply for the shop e-mail — English first, Italian under it; fill the <…>:\n\n" + (itx + "\n\n" + en if it else en + "\n\n" + itx) + "\n\n" + hol + "\n" + rules)
+
+    def first_followers(self, t, m):
+        st = self.store
+        prods = []
+        if st is not None:
+            try:
+                prods = [p["name"].split(" (")[0] for p in st.products()][:3]
+            except Exception:
+                prods = []
+        ex = prods[0] if prods else "your best product"
+        return ("First 100 followers — they come from work, not tricks; here's the 30-day version that works for a small shop:\n"
+                "1. Profile first (day 1): clear name, one-line bio saying what you sell + where you ship, link to the shop, 9 posts before you invite anyone (an empty page converts nobody).\n"
+                f"2. Post 1 a day for 30 days, 3 formats in rotation: the product in real use ({ex} on a real desk/kitchen), a 15-second making/packing video, one 'why we do this' text post. Reels/TikTok get reach without followers; photos don't.\n"
+                "3. 20 minutes a day of real comments on 10 accounts your buyers follow (eco home, slow living, Italian design) — not 'nice pic', a real sentence. That's where the first 100 come from.\n"
+                "4. Tell the people you already have: every parcel gets a card with the handle; your e-mail signature; your personal account shares the shop once a week.\n"
+                "5. One small collaboration: 3 micro-creators (2–10k followers) get a product for an honest story — ask me, I write the message.\n"
+                "Don't: buy followers (kills reach for good), giveaways for follows (you get freebie hunters), 5 platforms at once (one, done well). "
+                "Measure reach and saves, not followers — 100 real ones who buy beat 5,000 who don't. Say “what should I post today?” and I give you the day's post.")
+
+    def refund_or_replace(self, t, m):
+        p = self._product(t)
+        st = self.store
+        line = ""
+        if p:
+            cost, price, stock = p.get("cost", 0), p["price"], p["stock"]
+            repl = cost + 3.25 + 1.0
+            line = (f"\nYour numbers for the {p['name']}: a replacement costs you about {_eur(repl)} (goods {_eur(cost)} + postage + box) and keeps the {_eur(price)} sale; a refund costs the full {_eur(price)} plus the first postage. "
+                    + (f"{stock} in stock, so replace is possible." if stock > 0 else "Stock is 0, so it has to be a refund (or 'we resend as soon as it's back, plus a small extra' if they can wait)."))
+        return ("Refund or replace? Let the customer choose — but lead with the replacement, and never ask them to send the broken one back (a photo is enough under € 30; the return postage would cost more than the item):\n"
+                "• Reply today: “I'm so sorry — that shouldn't happen. I can send you a new one tomorrow, or refund you in full today; which do you prefer? No need to return the damaged one.”\n"
+                "• Replace when it's in stock and the damage is transport/one-off — most people want the product, and a fast replacement turns a complaint into a 5-star review.\n"
+                "• Refund when it's out of stock, it's the second problem with the same customer, or the fault is the product itself (then pull the batch).\n"
+                "• Either way: log it (order, photo, cause) — 3 breakages of the same item = a packaging problem, not bad luck; and claim from the courier if the box was crushed." + line +
+                "\nForward me the customer's message and I draft the reply for your tap; say “refund order <n>” or “resend order <n>” once they answer.")
 
     def vacation(self, t, m):
         return ("Going on holiday with an online shop — four ways, pick by how long:\n"
