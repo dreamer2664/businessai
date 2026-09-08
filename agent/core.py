@@ -38,6 +38,7 @@ from .google import Google, GoogleError
 from . import library
 from .brief import Brief
 from .pace import Pace
+from .talk import Talk
 from .sellers import SellerCheck
 from .accounts import Accounts
 from .study import Study
@@ -123,6 +124,7 @@ class Agent:
         self.site_training = False          # "start auto training on website building" → loop until "stop"
         self.sites_built = 0
         self.mind = Mind(planner=self.planner, log=self.log, pace=self.pace, viewer=self.viewer)
+        self.talk = Talk(memory=self.memory, mind=self.mind, library=library, inbox=self.inbox, store=self.store, log=self.log)
         self.viewer.listener = self.mind.on_event
         self.stop_flag = False
         self.rehearsal = Rehearsal(self.tasks, accounts=self.accounts, social=self.social, inbox=self.inbox, log=self.log, viewer=self.viewer, eyes=self.eyes)
@@ -834,6 +836,20 @@ class Agent:
             self.last_brief = b
             self.bot.send(self.owner_id, Brief.text(b) + "\n\nShall I go?", buttons=[[("▶ Go", "b:go"), ("✏️ Change", "b:edit"), ("✖ Cancel", "b:no")]])
             return None
+        direct = self.talk.reply(text)                                              # everyday questions: answered here, no job
+        if isinstance(direct, dict):
+            if direct.get("customer"):
+                self.bot.send(self.owner_id, "That's a customer message — I'll draft the reply and you approve it.")
+                self.inbox.add("owner", "a customer", direct["customer"])
+                threading.Thread(target=self.process_inbox, daemon=True).start()
+                return None
+            if direct.get("todo"):
+                for item in direct["todo"]:
+                    self.memory.add(item)
+                return direct["text"]
+        if direct:
+            self.log("talk", text=text[:60])
+            return direct
         it = self.planner.intent(text) if self.planner.installed() else None       # cheap regexes inside, model for the middle
         b = self.briefer.make(text)
         if it and it["kind"] in ("watch", "summarize", "visit") and b["kind"] in ("ask", "research", "visit", "watch", "summarize"):
