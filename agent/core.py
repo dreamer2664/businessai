@@ -39,6 +39,7 @@ from .pace import Pace
 from .sellers import SellerCheck
 from .accounts import Accounts
 from .study import Study
+from .sitebuilder import SiteBuilder, KINDS as SITE_KINDS
 
 
 def money_list(orders):
@@ -64,6 +65,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
 /do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do <page1> <page2> | which is cheaper? (compare several pages) · /do <page> | fill in the form: name = …, email = …, message = … (I type, you send) · /do desktop <goal> — same on my own screen. Any click that costs money, publishes, signs in or deletes waits for your tap.
 /google — my own Google account (Drive library + reading my own mailbox for sign-up codes): /google connect · /google test · /google ls
+"build a website for <a place>" — I write the copy, build the pages, check them in my browser and send you the files · "start auto training on website building" — I practise on random real places from the map (watch it live) · "stop training"
 /ideas — business ideas I jotted from short videos (/ideas <topic> = go watch some now) · /study [topic] — find and keep a good PDF in my library
 /accounts — the site accounts I created with my own e-mail (I sign up when a task needs it and tell you in one line; never money sites)
 /library — the documents I've written (seller checks, research, comparisons); they also land in my Drive folder
@@ -109,6 +111,9 @@ class Agent:
         self.study = Study(self.tasks, planner=self.planner, google=self.google, memory=self.memory, log=self.log, notify=self.notify, viewer=self.viewer)
         self.quiet_sessions = 0
         self.last_quiet = 0
+        self.sites = SiteBuilder(planner=self.planner, tasks=self.tasks, google=self.google, log=self.log, viewer=self.viewer, eyes=self.eyes)
+        self.site_training = False          # "start auto training on website building" → loop until "stop"
+        self.sites_built = 0
         self.active_brief = None            # the plan being worked on (shown in /status)
         self.last_brief = None              # last plan proposed, for "go" / "change step 2 …"
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
@@ -716,6 +721,20 @@ class Agent:
             had = self.editing or self.editing_post
             self.editing = self.editing_post = None
             return "Okay, edit cancelled — the draft is still waiting with its buttons." if had else "Nothing to cancel."
+        if re.search(r"\b(start|begin|avvia)\b.*\b(auto[- ]?train|training|practi[cs]e|allenamento)\b.*\b(website|web site|sites?|siti)\b", low) or low.startswith("/train"):
+            arg = low.replace("/train", "").strip()
+            if arg.startswith("stop") or arg in ("off", "no"):
+                self.site_training = False
+                return f"Stopping website training after the current one ({self.sites_built} built this session)."
+            if self.site_training:
+                return f"Already training on websites ({self.sites_built} built so far). Say 'stop training' to stop. Watch it on {self.viewer.address()}"
+            self.site_training = True
+            threading.Thread(target=self.train_sites, daemon=True).start()
+            return (f"🏋️ Website training on: I pick a random real place in a random country, build its full site, check it in my browser, save it "
+                    f"to my library/Drive and send you one line per site. Watch on {self.viewer.address()} — say 'stop training' to stop.")
+        if re.search(r"^(stop|basta|enough)\b.*\b(train|training|allenamento|websites?)?", low) and self.site_training:
+            self.site_training = False
+            return f"Okay — stopping website training after the current one ({self.sites_built} built)."
         if low.startswith("/ideas"):
             arg = text[6:].strip()
             if arg:
@@ -815,12 +834,92 @@ class Agent:
             threading.Thread(target=self.run_task, args=(f"{kind} {topic}", b), daemon=True).start()
             return head
         if kind == "build_site":
-            return head + "\n\n(Website building is the next thing I'm learning — not ready yet.)"
+            threading.Thread(target=self.run_build_site, args=(b,), daemon=True).start()
+            return head + "\n\nBuilding it now — you'll get a screenshot and the files (and a Drive link if connected)."
         if kind == "post":
             plat, t2 = self.social.parse(topic)
             threading.Thread(target=self.draft_post, args=(plat, t2 or topic), daemon=True).start()
             return head
         return self.start_task("research", topic)
+
+    def _site_brief_from(self, b):
+        """'build a website for a small bakery in bergamo called Forno Bianchi' → builder brief."""
+        g = b["goal"]
+        low = g.lower()
+        kind = next((k for k in sorted(SITE_KINDS, key=len, reverse=True) if k in low), None)
+        if not kind:
+            kind = {"pizzeria": "restaurant", "trattoria": "restaurant", "bar": "cafe", "coffee": "cafe", "barber": "hair salon", "hairdresser": "hair salon", "fitness": "gym",
+                    "dental": "dentist", "b&b": "hotel", "bed and breakfast": "hotel", "flowers": "florist", "books": "bookshop", "bikes": "bike shop", "vet": "veterinary",
+                    "lawyer": "lawyer", "studio legale": "lawyer", "store": "shop", "boutique": "shop"}.get(next((w for w in ("pizzeria", "trattoria", "coffee", "barber", "hairdresser", "fitness", "dental", "b&b", "bed and breakfast", "flowers", "books", "bikes", "vet", "studio legale", "lawyer", "boutique", "store", "bar") if w in low), ""), "shop")
+        m = re.search(r"\b(?:called|named|chiamat[oa]|di nome)\s+[\"“']?([A-Z][\w&'’ -]{1,40}?)[\"”']?(?:\s+(?:in|at|a|di|offering|that|which|with)\b|\s*[,.;:]|$)", g)
+        name = m.group(1).strip() if m else None
+        if not name:                                                       # "for Studio Legale Rossi, a lawyer in Milan"
+            m = re.search(r"\b(?:for|per)\s+((?:[A-Z][\w&'’-]*\s?){1,4})\s*,\s*(?:an?|the|un|una)\b", g)
+            name = m.group(1).strip() if m else None
+        m2 = re.search(r"\b(?:in|at|a)\s+([A-Z][\w'’-]+(?: [A-Z][\w'’-]+)?)(?:\s*,\s*([A-Z][\w]+(?: [A-Z][\w]+)?))?(?=\s*[.,;:]|\s+(?:called|named|that|which|with|for|offering|and)\b|$)", g)
+        city = m2.group(1).strip() if m2 else ""
+        country = (m2.group(2) or "").strip() if m2 else ""
+        if not name:
+            name = f"{city} {kind.title()}".strip() if city else f"My {kind.title()}"
+        services = None
+        m3 = re.search(r"\b(?:services|offering|that (?:sells|does|offers))\s*:?\s*(.+)$", g, re.I)
+        if m3:
+            services = [x.strip(" .") for x in re.split(r",|;| and ", m3.group(1)) if 2 < len(x.strip()) < 40][:6] or None
+        return {"name": name, "kind": kind, "city": city, "country": country, "services": services, "about": None, "tagline": None}
+
+    def run_build_site(self, b):
+        self.busy = "building a website"
+        try:
+            brief = self._site_brief_from(b)
+            self.viewer.plan_step(1, f"writing copy for {brief['name']}")
+            report, built, shot = self.sites.build_for(brief)
+            self.viewer.plan_step(3, "checked in my browser")
+            self.bot.send(self.owner_id, report)
+            if shot:
+                self.bot.send_photo(self.owner_id, shot, caption=f"Home page of {brief['name']}")
+            if built:
+                self.bot.send_document(self.owner_id, str(built["zip"]), caption="The whole site (unzip, open index.html).")
+            self.memory.note("website", brief["name"], report, [])
+        except Exception as e:
+            self.log("build_site_failed", error=traceback.format_exc()[-400:])
+            self.bot.send(self.owner_id, f"Building the site failed: {type(e).__name__}: {str(e)[:160]}")
+        finally:
+            self.busy = None
+            self.pace.finish()
+            self.viewer.plan_done()
+            self.active_brief = None
+
+    def train_sites(self):
+        """Auto-training loop: random real place → full site → check → save; one short line per site."""
+        import random as _r
+        rng = _r.Random()
+        while self.site_training:
+            if self.busy and not str(self.busy).startswith("website training"):
+                time.sleep(20)
+                continue
+            self.busy = "website training"
+            try:
+                self.viewer.show_plan("Website training: random real place → full website", ["pick a random place on the map", "write the copy", "build the pages", "check every page in my browser", "save to my library / Drive"], None)
+                self.viewer.plan_step(0)
+                report, built, shot = self.sites.auto_train(rng)
+                self.viewer.plan_done()
+                if built:
+                    self.sites_built += 1
+                    self.bot.send(self.owner_id, report.splitlines()[0].replace("🌐 Built a website for", f"🌐 #{self.sites_built} built this website for") + ("\n" + report.splitlines()[1] if len(report.splitlines()) > 1 else ""))
+                    if shot and self.watch:
+                        self.bot.send_photo(self.owner_id, shot, caption=built["slug"])
+                    self.memory.note("website", built["slug"], report, [])
+                else:
+                    self.log("site_train_skip", why=report[:100])
+            except Exception as e:
+                self.log("site_train_failed", error=traceback.format_exc()[-300:])
+            finally:
+                self.busy = None
+            for _ in range(45):                                   # 45 s between sites, stop promptly when told
+                if not self.site_training:
+                    break
+                time.sleep(1)
+        self.bot.send(self.owner_id, f"🏁 Website training stopped — {self.sites_built} site(s) built this session; all in my library" + (" and Drive → Websites." if self.google.connected() else "."))
 
     def _run_ideas(self, query, b, urls=None):
         self.busy = "ideas from videos"
