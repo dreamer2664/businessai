@@ -44,6 +44,22 @@ DEFAULT_POLICY = {
     "sign_off": "Best regards,\nCustomer care",
 }
 
+COUNTRY_WORDS = (("switzerland", "CH", "Switzerland"), ("svizzera", "CH", "Switzerland"), ("schweiz", "CH", "Switzerland"), ("suisse", "CH", "Switzerland"), ("united kingdom", "GB", "the UK"), ("uk", "GB", "the UK"), ("england", "GB", "the UK"), ("scotland", "GB", "the UK"), ("london", "GB", "the UK"),
+                 ("united states", "US", "the USA"), ("usa", "US", "the USA"), ("america", "US", "the USA"), ("canada", "CA", "Canada"), ("australia", "AU", "Australia"), ("norway", "NO", "Norway"), ("norvegia", "NO", "Norway"), ("japan", "JP", "Japan"), ("turkey", "TR", "Turkey"), ("brazil", "BR", "Brazil"), ("india", "IN", "India"), ("china", "CN", "China"), ("serbia", "RS", "Serbia"), ("ukraine", "UA", "Ukraine"), ("russia", "RU", "Russia"), ("israel", "IL", "Israel"), ("mexico", "MX", "Mexico"), ("dubai", "AE", "the UAE"), ("emirates", "AE", "the UAE"), ("new zealand", "NZ", "New Zealand"), ("south africa", "ZA", "South Africa"), ("iceland", "IS", "Iceland"), ("san marino", "SM", "San Marino"), ("vatican", "VA", "the Vatican"), ("andorra", "AD", "Andorra"), ("monaco", "MC", "Monaco"),
+                 ("germany", "DE", "Germany"), ("germania", "DE", "Germany"), ("deutschland", "DE", "Germany"), ("berlin", "DE", "Germany"), ("munich", "DE", "Germany"), ("france", "FR", "France"), ("francia", "FR", "France"), ("paris", "FR", "France"), ("spain", "ES", "Spain"), ("spagna", "ES", "Spain"), ("españa", "ES", "Spain"), ("madrid", "ES", "Spain"), ("barcelona", "ES", "Spain"), ("italy", "IT", "Italy"), ("italia", "IT", "Italy"), ("sicily", "IT", "Italy"), ("sardinia", "IT", "Italy"), ("sicilia", "IT", "Italy"), ("sardegna", "IT", "Italy"),
+                 ("austria", "AT", "Austria"), ("vienna", "AT", "Austria"), ("netherlands", "NL", "the Netherlands"), ("holland", "NL", "the Netherlands"), ("olanda", "NL", "the Netherlands"), ("amsterdam", "NL", "the Netherlands"), ("belgium", "BE", "Belgium"), ("belgio", "BE", "Belgium"), ("brussels", "BE", "Belgium"), ("portugal", "PT", "Portugal"), ("portogallo", "PT", "Portugal"), ("lisbon", "PT", "Portugal"), ("poland", "PL", "Poland"), ("polonia", "PL", "Poland"), ("ireland", "IE", "Ireland"), ("irlanda", "IE", "Ireland"), ("dublin", "IE", "Ireland"), ("greece", "GR", "Greece"), ("grecia", "GR", "Greece"), ("sweden", "SE", "Sweden"), ("svezia", "SE", "Sweden"), ("denmark", "DK", "Denmark"), ("danimarca", "DK", "Denmark"), ("finland", "FI", "Finland"), ("czech", "CZ", "Czechia"), ("prague", "CZ", "Czechia"), ("croatia", "HR", "Croatia"), ("croazia", "HR", "Croatia"), ("hungary", "HU", "Hungary"), ("ungheria", "HU", "Hungary"), ("romania", "RO", "Romania"), ("slovenia", "SI", "Slovenia"), ("slovakia", "SK", "Slovakia"), ("luxembourg", "LU", "Luxembourg"), ("lussemburgo", "LU", "Luxembourg"), ("malta", "MT", "Malta"), ("cyprus", "CY", "Cyprus"), ("cipro", "CY", "Cyprus"), ("bulgaria", "BG", "Bulgaria"), ("lithuania", "LT", "Lithuania"), ("latvia", "LV", "Latvia"), ("estonia", "EE", "Estonia"))
+SHIP_DAYS = {"IT": "2–3", "DE": "4–6", "FR": "4–6", "ES": "4–6"}
+
+
+def country_in(text):
+    """(code, display name) for the first country/city named in a customer message, else (None, None)."""
+    low = (text or "").lower()
+    for w, code, name in COUNTRY_WORDS:
+        if re.search(r"\b" + re.escape(w) + r"\b", low):
+            return code, name
+    return None, None
+
+
 KINDS = ["where_is_my_order", "return_or_refund", "damaged_or_wrong", "product_question", "cancel_or_change",
          "discount_request", "complaint", "compliment", "spam_or_scam", "partnership_or_press", "other"]
 
@@ -329,10 +345,32 @@ class Inbox:
                     c["unmentioned"] = [w for w in c["unmentioned"] if w not in ("stock", "restock", "availability", "available")]
                     prod += (f"\nLIVE STOCK (from the shop's own system, more current than the page): {sp['name']}: "
                              + (f"{sp['stock']} unit(s) in stock — orders leave within 1 business day." if sp["stock"] > 0 else "SOLD OUT right now — do not promise a date; say you will ask the owner when it is back."))
+        ship_check = ""
+        if self.store is not None and rec.get("channel") == "store" and c["kind"] in ("product_question", "other") and \
+                re.search(r"\b(ship|ships|shipping|deliver|delivery|deliveries|send|sending|post|spedi\w*|consegn\w*|livr\w*|liefer\w*|verzend\w*)\b|\b(live|living|based|i'?m|i am|located) in\b.{0,30}\b(order|buy|purchase|get)\b|\b(order|buy|purchase) (?:from|to|in) [A-Z]", rec["text"], re.I):
+            code, cname = country_in(rec["text"])                          # "do you ship to Switzerland?" → the shipping table decides, not the model
+            if code:
+                try:
+                    cost = self.store.shipping_for(code, 0)
+                except Exception:
+                    cost = None
+                rule = next((r for r in self.store.ship_rules() if r[0] == code), None) or (next((r for r in self.store.ship_rules() if r[0] == "EU"), None) if cost is not None else None)
+                c["ship_to"] = {"code": code, "name": cname, "offered": cost is not None, "cost": cost, "free_over": (rule[2] if rule else None),
+                                "days": SHIP_DAYS.get(code, "5–7")}
+                if cost is None:
+                    ship_check = f"\nSHIPPING CHECK (from the shop's own shipping table): we do NOT deliver to {cname} — only to EU countries. Say so plainly; do not promise a date or a workaround."
+                else:
+                    ship_check = (f"\nSHIPPING CHECK (from the shop's own shipping table): we DO deliver to {cname}: € {cost:.2f}".replace(".", ",") +
+                                  (f" (free over € {rule[2]:.2f})".replace(".", ",") if rule and rule[2] else "") + f", {SHIP_DAYS.get(code, '5–7')} business days after dispatch; orders leave within 1 business day.")
+                other_q = rec["text"].count("?") > 1 or bool(re.search(r"\b(also|and (?:is|does|do|can|how|what|which)|another question|second question)\b", rec["text"].lower()))
+                if not other_q and not c.get("stock") and not c.get("contradiction"):
+                    text = self._sanitize(self._template(c), rec)       # a plain 'do you ship to X?' → the table's answer, word for word
+                    c["note"] = "answered from the shipping table"
+                    return {**c, "text": text, "checks": []}
         if c["kind"] == "product_question":
             about_shipping = bool(re.search(r"\b(ship|deliver|delivery|shipping)\b", rec["text"].lower()))
             have = (self.policy.get("ships_to") if about_shipping else self.policy.get("products")) or ""
-            if not have.strip() and about_shipping and shop:               # the shop's own shipping page answers it
+            if not have.strip() and about_shipping and (shop or ship_check):   # the shop's own shipping page / table answers it
                 have = "see the facts from the shop's website below"
             if not have.strip() and prod:                                  # the product's own page answers it
                 have = "see the product page from the shop's website below"
@@ -382,7 +420,7 @@ class Inbox:
             if c.get("unmentioned"):
                 needs += (f"\nTHE PAGE DOES NOT MENTION: {', '.join(c['unmentioned'][:4])}. Do not say yes or no about " +
                           ("that" if len(c["unmentioned"]) == 1 else "those") + " — write that you will check it with the owner and answer within one business day.")
-        extra = (f"\nBACKGROUND FACTS you may use (do not quote sources): \n{facts}" if facts else "") + shop + prod
+        extra = (f"\nBACKGROUND FACTS you may use (do not quote sources): \n{facts}" if facts else "") + shop + prod + ship_check
         if self.style.get("sentences"):
             extra += f"\nLENGTH: the owner prefers about {self.style['sentences']} sentence(s)."
         text = None
@@ -420,6 +458,25 @@ class Inbox:
 
     def _template(self, c):
         p = self.policy
+        if c.get("ship_to"):
+            st = c["ship_to"]
+            if re.search(r"\b(spedite|spedizion\w*|consegn\w*|quanto costa|in italia|arriva)\b", c.get("text", "").lower()):
+                it_names = {"Switzerland": "Svizzera", "the UK": "Regno Unito", "the USA": "Stati Uniti", "Germany": "Germania", "France": "Francia", "Spain": "Spagna", "Italy": "Italia", "Austria": "Austria", "the Netherlands": "Paesi Bassi", "Belgium": "Belgio", "Portugal": "Portogallo"}
+                nm = it_names.get(st["name"], st["name"])
+                if not st["offered"]:
+                    return (f"Grazie per la domanda. Al momento spediamo solo all'interno dell'Unione Europea, quindi purtroppo non possiamo ancora spedire in {nm}. "
+                            "Segnalo il suo interesse al titolare: se cambierà, lo annunceremo nella pagina Spedizioni. Mi dispiace non avere notizie migliori.")
+                cost = ("gratuita" if st["cost"] == 0 else f"€ {st['cost']:.2f}".replace(".", ","))
+                return (f"Grazie per la domanda. Sì, spediamo in {nm}: la spedizione costa {cost}" +
+                        (f" (gratuita per ordini sopra € {st['free_over']:.2f})".replace(".", ",") if st.get("free_over") else "") +
+                        f" e la consegna richiede {st['days']} giorni lavorativi dalla partenza — gli ordini partono dal nostro magazzino entro 1 giorno lavorativo. Resto a disposizione per qualsiasi altra domanda.")
+            if not st["offered"]:
+                return (f"Thank you for your question. At the moment we deliver only within the EU, so unfortunately we cannot ship to {st['name']} yet. "
+                        "I will pass your interest on to the owner — if that changes, it will be announced on our shipping page. Sorry not to have better news.")
+            cost = ("free" if st["cost"] == 0 else f"€ {st['cost']:.2f}".replace(".", ","))
+            return (f"Thank you for your question. Yes, we deliver to {st['name']}: shipping is {cost}" +
+                    (f" (free for orders over € {st['free_over']:.2f})".replace(".", ",") if st.get("free_over") else "") +
+                    f", and delivery takes {st['days']} business days after dispatch — orders leave our warehouse within 1 business day. Just write back if you need anything else.")
         if c.get("stock") is not None and c.get("product"):
             if c["stock"] > 0:
                 return (f"Thank you for your question. The {c['product']} is in stock right now — {c['stock']} unit{'s' if c['stock'] != 1 else ''} available — "
@@ -565,7 +622,11 @@ class Inbox:
         closing = self.style.get("closing", "").lower()
         if closing and body.lower().rstrip(" .!").endswith(" " + closing):   # "... latest. Carlo" → strip the copied closing
             body = body[: -len(closing)].rstrip(" .!,-—") + "."
-        return self.greeting_for(rec) + "\n\n" + body + "\n\n" + self.policy["sign_off"]
+        greet, sign = self.greeting_for(rec), self.policy["sign_off"]
+        if re.match(r"^(Grazie|Buongiorno|Salve|Gentile)\b", body) and not self.policy.get("greeting") and sign == DEFAULT_POLICY["sign_off"]:
+            greet = re.sub(r"^Hi\b", "Buongiorno", greet)                    # an Italian body gets Italian bookends (owner-set ones win)
+            sign = "Cordiali saluti,\nIl servizio clienti"
+        return greet + "\n\n" + body + "\n\n" + sign
 
     def _check(self, text, c, source=""):
         """Automatic safety checks on a draft — shown to the owner next to the Approve button."""
