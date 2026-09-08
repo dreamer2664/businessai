@@ -28,6 +28,7 @@ from .inbox import Inbox
 from .shopfacts import ShopFacts
 from . import store as practice_store
 from .channels import Channels, REAL as REAL_CHANNELS
+from . import mind as _mind
 from .social import Social
 from .eyes import Eyes
 from .desktop import Desktop
@@ -907,6 +908,13 @@ class Agent:
             if not quick and (self.talk.PRICE.search(text) or self.talk.SHIP_OK.search(text)):   # pricing maths: no browsing, answer now
                 p = self.talk.reply(text)
                 quick = p if isinstance(p, str) else None
+            if not quick and not _mind.STATUS_Q.search(text) and not re.search(r"\b(stop|hurry|why)\b", low):
+                st_ = self.talk.selftalk.reply(text)                                   # shop judgment / numbers questions: from the ledger, no browsing
+                if isinstance(st_, str) and not re.search(r"^Nothing running|^Right now:", st_):
+                    quick = st_
+                elif not st_ and (self.talk.STORE_Q.search(text) or self.talk.STORE_NUM.search(text) or self.talk.SHIP_COST_Q.search(text)):
+                    p = self.talk.reply(text)
+                    quick = p if isinstance(p, str) else None
             if quick:
                 self.log("talk", text=text[:60], while_busy=True)
                 return quick
