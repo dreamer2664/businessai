@@ -172,8 +172,9 @@ def main():
         sys.exit(1)
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
     url = f"http://localhost:{PORT}"
-    print(f"Talk to the builder here: {url}   (Ctrl-C to close)")
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    print(f"\n  ✅ Chat is running. Open this in your browser:  {url}\n  (leave this window open; Ctrl-C closes the chat)\n")
+    if os.environ.get("BAI_TALK_OPEN", "1") == "1" and not os.path.exists("/proc/sys/fs/binfmt_misc/WSLInterop"):
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
