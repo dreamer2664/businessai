@@ -33,8 +33,23 @@ class SelfTalk:
         self.pace = pace
         self.version = version
         self.busy_text = lambda: None          # core sets this to a function returning Agent.busy
+        self.last_reply = lambda: None         # talk sets this: () → (question, answer) of the last thing I said
 
     RULES = [
+        (r"^\W*(?:are you sure(?: about (?:that|this|it))?|sure\??|really\??|(?:is|are) (?:that|those|these) (?:right|correct|true|real)|sei sicur[oa]|davvero)\W*$|\bhow do you know (?:that|this)\b|\bwhere (?:did you get|does) (?:that|this) (?:number|figure)? ?(?:come )?from\b", "are_you_sure"),
+        (r"\b(?:best[- ]selling|top|most popular|best) (?:product|item|seller)\b.{0,20}?\b(?:and )?why\b|\bwhy (?:does|is) (?:the |our )?(?:\w+ ){0,3}(?:sell|selling) (?:so )?(?:well|best|most)\b|\bwhy is (?:it|that) (?:the|our) best[- ]?seller\b|\bperch[ée] (?:si )?vende", "best_why"),
+        (r"\b(?:how long|when) (?:until|till|before|do) (?:we|i) ?(?:break even|breakeven|reach break[- ]even|get (?:the|our) money back|recover (?:the|our) (?:investment|money|start-?up costs?))\b|\bbreak[- ]?even\b.{0,20}?\b(?:when|how long|point)\b|\bquando (?:andiamo in pari|rientriamo)\b|\bhave we (?:broken even|made (?:the|our) money back)\b", "break_even"),
+        (r"\bhow many (?:orders|sales|customers|visits|visitors) (?:do|would|will) (?:we|i) need\b.{0,30}?(?:€|eur|euros?)?\s*(?P<amt>\d[\d.,]*)\s*(?:€|eur|euros?|k)?\b.{0,20}?\b(?:a|per|in a|each|every) (?P<per>month|week|day|year)\b|\b(?:to make|for|to earn|to reach|to hit) (?:€|eur)?\s*(?P<amt2>\d[\d.,]*)\s*(?:€|eur|euros?|k)?\s*(?:a|per|in a|each|every) (?P<per2>month|week|day|year)\b.{0,30}?\bhow many (?:orders|sales|customers)\b|\bquanti ordini (?:servono|ci vogliono)\b.{0,20}?(?P<amt3>\d[\d.,]*)", "orders_needed"),
+        (r"^\W*(?:is )?(?:anything|something|nothing)? ?(?:urgent|on fire|burning|critical)(?: today| right now| now)?\W*$|\bis (?:anything|something|there anything) (?:urgent|on fire|critical|pressing)\b|\bany (?:emergencies|fires|urgent (?:things|stuff|matters))\b|\bc'?[èe] qualcosa di urgente\b", "urgent"),
+        (r"\b(?:did|has) (?:anyone|anybody|someone|any customer|a customer) complain\w*\b|\bany (?:complaints?|unhappy customers?|angry customers?|bad (?:reviews?|feedback))\b(?: (?:today|this week|lately|recently))?|\b(?:who|anyone) (?:is|was) unhappy\b|\bqualcuno si [èe] lamentato\b|\breclami\b", "complaints"),
+        (r"\bwhat would you do with (?:€|eur)?\s*(?P<amt>\d[\d.,]*)\s*(?:€|eur|euros?|k)?\b|\bif (?:i|you) had (?:€|eur)?\s*(?P<amt2>\d[\d.,]*)\s*(?:€|eur|euros?)?\b.{0,30}?\b(?:spend|do|invest|put)\b|\b(?:how|where) (?:should|would) (?:i|we|you) (?:spend|invest|put) (?:€|eur)?\s*(?P<amt3>\d[\d.,]*)\s*(?:€|eur|euros?)?\b|\bcosa faresti con (?:€ ?)?(?P<amt4>\d[\d.,]*)", "spend_budget"),
+        (r"\bhow (?:do|can|could|should) (?:i|we) get (?:more |some |our first )?(?:reviews|ratings|testimonials|stars)\b|\bmore reviews\b|\bcome (?:ottengo|avere) (?:più )?recensioni\b|\bask(?:ing)? for reviews\b", "reviews"),
+        (r"\b(?:give me|one|an?|any|quick|your best) (?:idea|tip|trick|thing|suggestion)s?\b.{0,25}?\b(?:to )?(?:sell|selling|get) more\b|\bhow (?:do|can|could) (?:i|we) sell more\b(?: this week| today)?|\bidea (?:to|for) (?:more )?(?:sales|selling)\b|\bboost sales\b|\bun'?idea per vendere di più\b|\bone idea\b", "one_idea"),
+        (r"\bwhat (?:mistakes?|errors?) (?:did|have) (?:i|we) (?:make|made)\b|\bwhat did (?:i|we) (?:do wrong|get wrong|mess up|screw up)\b|\bmy (?:mistakes|errors) this week\b|\bche errori ho fatto\b|\bcosa ho sbagliato\b", "mistakes"),
+        (r"\bwhat do (?:customers|buyers|people|clients|clienti) ask (?:the )?most\b|\bmost (?:common|frequent) (?:customer )?(?:questions?|messages?|requests?)\b|\bwhat (?:are|do) (?:customers|people) (?:asking|writing) (?:about|us|me)?\b|\bcosa chiedono (?:di più|più spesso) i clienti\b", "asked_most"),
+        (r"\bwhy (?:did|have|are|is) (?:the )?(?:sales|orders|revenue|visits|traffic|conversion)s? (?:drop|dropped|fall|fallen|down|going down|dropping|falling|lower|slowed|slow)\b|\bwhy (?:did|have) we sell less\b|\bwhat happened to (?:the )?sales\b|\bperch[ée] (?:sono )?(?:calate|scese) le vendite\b|\bsales (?:are )?down\b", "sales_drop"),
+        (r"\b(?:are|aren'?t) (?:the |our |my )?prices? too (?:high|low|expensive|cheap)\b|\b(?:am i|are we) (?:too )?(?:expensive|cheap|overpriced|underpriced)\b|\bis (?:the |our )?(?:pricing|price) (?:right|ok|okay|wrong)\b|\b(?:i )?prezzi (?:sono )?troppo (?:alti|bassi)\b", "prices_right"),
+        (r"\bwhat(?:'s| is|’s) your (?:goal|aim|objective|target|mission)\b.{0,20}?\b(?:shop|store|business|us|here|me)\b|\bwhat are you (?:trying to (?:do|achieve)|aiming (?:at|for)|optimi[sz]ing for)\b|\bwhat do you want (?:for|from) (?:the|this|our) (?:shop|store|business)\b|\bqual è il tuo obiettivo\b", "my_goal"),
         (r"^\W*(?:what are you (?:doing|up to|working on)(?: right now| now| at the moment)?|what(?:'s| is) (?:going on|happening)(?: right now| now)?|are you busy|cosa stai facendo|che fai(?: adesso)?)\W*$", "doing_now"),
         (r"\bwhy did you (?:propose|suggest|want to|recommend|prepare)\b(?P<what>.{3,80})|\bwhy (?:the|that|this) (?:proposal|suggestion|change)\b|\bperché hai proposto\b(?P<what2>.{3,80})", "why_proposal"),
         (r"\bwhat (?:happens|will happen|if) (?:if )?i (?:ignore|don't (?:answer|tap|approve|look at)|skip|leave) (?:the |your )?(?:proposals?|suggestions?|buttons?|questions?)\b|\bcan i ignore (?:the |your )?proposals\b", "ignore_proposals"),
@@ -641,6 +656,374 @@ class SelfTalk:
         return (f"Prices × {factor:g}: if nobody blinked, {_eur(rev)} → {_eur(new_rev)} of sales and all of the extra {_eur(new_rev - rev)} is profit (costs stay). "
                 f"But some buyers walk: at +{(factor - 1) * 100:.0f} % expect to lose ~{lost * 100:.0f} % of orders — profit becomes ~{_eur((orders * (1 - lost)) * (unit_margin + aov * (factor - 1)))} vs {_eur(profit)} now. "
                 + ("Still a win — small rises on products with no direct comparison usually pay." if (orders * (1 - lost)) * (unit_margin + aov * (factor - 1)) > profit else "Not worth it at that size — try +5–10 % on the best seller only."))
+
+    def _msg_kinds(self, days=7):
+        """Customer messages of the last N days, each with its kind (regex classifier, no model)."""
+        out = []
+        if self.inbox is None:
+            return out
+        try:
+            since = (_dt.datetime.now() - _dt.timedelta(days=days)).isoformat()[:19]
+            for r in self.inbox.items():
+                if str(r.get("t", ""))[:19] < since:
+                    continue
+                try:
+                    k = self.inbox.classify(r["text"])["kind"]
+                except Exception:
+                    k = "other"
+                out.append((r, k))
+        except Exception:
+            pass
+        return out
+
+    def _days(self):
+        """{day: (orders, sales)} and {day: visits} from the ledger."""
+        st = self.store
+        od, vd = {}, {}
+        for o in st.data["orders"]:
+            if o["status"] in ("paid", "shipped", "delivered"):
+                a, b = od.get(o.get("day", 0), (0, 0.0))
+                od[o.get("day", 0)] = (a + 1, b + o["total"])
+        for d, v in st.data.get("visits", {}).items():
+            vd[int(d)] = v
+        return od, vd
+
+    def are_you_sure(self, t, m):
+        last = None
+        try:
+            last = self.last_reply()
+        except Exception:
+            pass
+        if not last or not isinstance(last, tuple) or not last[1]:
+            return "Sure about what? Ask the question again and I'll tell you where each part of the answer comes from — ledger, your own settings, what I've read, or my judgement."
+        q, a = last
+        a_l = str(a).lower()
+        n = self._n() or {}
+        if re.search(r"\n— .|\bsurvey\b|\baccording to\b|shopify's|\*\s*$", str(a)) and "€" not in str(a):
+            return ("Honestly, no — that answer came from what I've read (articles, not our data), so it's a rule of thumb, not a fact about your shop. "
+                    "If it matters for a decision, say “research it and write me a document” and I'll come back with sources you can open; or ask the same question about OUR numbers and I answer from the ledger.")
+        if re.search(r"€|\d+ order|\d+ visits|conversion|profit|sold|stock", a_l):
+            return (f"The numbers in it — yes: they come straight from the shop's ledger ({n.get('orders', 0)} orders, every one counted), not estimated. "
+                    "Two things are softer: costs use the per-product cost and the practice shipping/fee rates you gave me (change them and the margins move), and any 'what to do' part is my judgement — right in direction, arguable in detail. "
+                    "Say “show me the maths” and I lay the calculation out line by line.")
+        if re.search(r"\b(law|legal|vat|tax|inps|forfettario|guarantee|withdraw|gdpr)\b", a_l + " " + q.lower()):
+            return "Reasonably — that's the rule as I checked it against Italian/EU sources this year, and it's right for the common case. Your own situation can differ (regime, volumes, what you sell), so treat it as the question to bring to a commercialista, not the final word."
+        if re.search(r"\b(i'?d|i would|my (?:take|opinion|advice)|verdict|rule of thumb|usually|typically)\b", a_l):
+            return "It's my judgement from the numbers plus what I've learned about small shops — confident in direction, not a guarantee. If you see something in the shop I can't see from the ledger (a supplier problem, a customer's tone), tell me and I'll rethink it."
+        return "Yes, as far as it's about our own data and settings; anything about the outside world in it is what I've read, not something I verified today. Point at the part you doubt and I'll say exactly where it comes from."
+
+    def best_why(self, t, m):
+        n = self._n() or {}
+        units = n.get("units", {})
+        if not units:
+            return "No sales yet, so no best seller — run a practice day and ask again."
+        st = self.store
+        best = max(units, key=units.get)
+        prod = next((p for p in st.products() if p["name"] == best), None) or {}
+        prods = st.products()
+        cheapest = min(prods, key=lambda p: p["price"])
+        reasons = []
+        if prod and prod["id"] == cheapest["id"]:
+            reasons.append(f"it's the cheapest thing in the shop ({_eur(prod['price'])}) — the low-risk first purchase people make to try a new shop")
+        elif prod and prod["price"] <= 20:
+            reasons.append(f"under € 20 ({_eur(prod['price'])}) — impulse territory, no thinking needed")
+        if prod and re.search(r"\bset\b|\d+ ?pcs|pack", prod["name"].lower()):
+            reasons.append("it's a set — a multi-pack feels like better value and works as a gift")
+        if prod and prod.get("stock", 0) > 0:
+            reasons.append("it never sold out, so it was always there to buy — two products that sold slower were out of stock part of the time" if any(p["stock"] == 0 for p in prods) else "it stayed in stock the whole time")
+        if prod and prod.get("price") and prod.get("cost") is not None:
+            mg = (prod["price"] - prod["cost"]) / prod["price"] * 100
+            reasons.append(f"and it's a good one to lead with: {mg:.0f} % gross margin, light to ship")
+        total = sum(units.values())
+        share = units[best] / total * 100
+        second = sorted(units.items(), key=lambda x: -x[1])[1] if len(units) > 1 else None
+        return (f"Best seller: {best} — {units[best]} of {total} units sold ({share:.0f} %)" + (f"; second is {second[0]} with {second[1]}." if second else ".") +
+                "\nWhy, as far as the numbers can tell: " + "; ".join(reasons or ["it's the product on the home page and in the posts — visibility, more than the product itself"]) + "." +
+                "\nWhat that means: post it, bundle it with a slower item (“toothbrush set + mug”) and never let it go out of stock; a shop's best seller is its door.")
+
+    def break_even(self, t, m):
+        st = self.store
+        n = self._n() or {}
+        stock_cost = sum(p["stock"] * p.get("cost", 0) for p in st.products())
+        setup = 150.0
+        outlay = stock_cost + setup
+        profit = n.get("profit", 0)
+        day = max(1, st.data.get("day", 0))
+        per_day = profit / day if day else 0
+        remaining = outlay - profit
+        if not n.get("orders"):
+            return f"No sales yet, so there's nothing to project from. What's at stake: {_eur(stock_cost)} of stock at cost on the shelf plus ~€ 150 of set-up (domain, boxes, samples) = {_eur(outlay)} to earn back."
+        if remaining <= 0:
+            return f"Already there: {_eur(profit)} of profit so far covers the {_eur(stock_cost)} of stock still on the shelf plus ~€ 150 of set-up. From here every sale is real gain (before your time and taxes)."
+        days = remaining / per_day if per_day > 0 else None
+        return (f"Break-even, on what I can see: money out = {_eur(stock_cost)} of stock at cost still on the shelf + ~€ 150 of set-up (domain, boxes, samples) = {_eur(outlay)}. "
+                f"Profit so far {_eur(profit)} in {day} day(s) = {_eur(per_day)} a day → about {days:.0f} more days ({(days / 7):.1f} weeks) at this pace." if days else f"Profit so far is {_eur(profit)} — at zero or negative daily profit there is no break-even date; fix the margin first.") + \
+               (" Two things move it: a stock reorder pushes it out (more money on the shelf), a better week pulls it in. If you spent more on set-up than € 150 (photos, samples, ads), tell me the number and I redo it." if days else "")
+
+    def orders_needed(self, t, m):
+        gd = m.groupdict()
+        amt = _num(gd.get("amt") or gd.get("amt2") or gd.get("amt3") or "1000")
+        if re.search(r"\d\s*k\b", t.lower()):
+            amt *= 1000
+        per = (gd.get("per") or gd.get("per2") or "month").lower()
+        n = self._n() or {}
+        aov = (n["revenue"] / n["orders"]) if n.get("orders") else 25.0
+        unit_margin = (n["profit"] / n["orders"]) if n.get("orders") else aov * 0.5
+        conv = n.get("conversion") or 2.0
+        want_profit = bool(re.search(r"\b(profit|net|utile|in my pocket|take home|keep)\b", t.lower()))
+        days = {"month": 30, "week": 7, "day": 1, "year": 365}[per]
+        need_sales = amt / aov
+        need_profit = amt / unit_margin if unit_margin > 0 else float("inf")
+        line = (f"To make {_eur(amt)} of {'profit' if want_profit else 'sales'} a {per} with your current basket ({_eur(aov)} per order" + (f", {_eur(unit_margin)} of it profit" if not want_profit else f" → {_eur(unit_margin)} profit each") + "): "
+                f"{(need_profit if want_profit else need_sales):.0f} orders a {per} — {((need_profit if want_profit else need_sales) / days):.1f} a day — "
+                f"which at {conv:.1f} % conversion means about {int((need_profit if want_profit else need_sales) / (conv / 100)):,} visits a {per}.".replace(",", "."))
+        if not want_profit:
+            line += f" If you meant profit in your pocket, it's {need_profit:.0f} orders ({need_profit / days:.1f} a day)."
+        base = (n.get("orders", 0) / max(1, self.store.data.get("day", 1))) * days
+        line += f" You're at ~{base:.0f} orders a {per} at the current pace." if n.get("orders") else ""
+        line += " The two levers: basket size (bundles, a free-shipping threshold) and visits (posts/videos first, ads only once the page converts)."
+        return line
+
+    def urgent(self, t, m):
+        facts = self._facts()
+        st = self.store
+        urgent = []
+        day = st.data.get("day", 0)
+        late = [o for o in st.data["orders"] if o["status"] == "paid" and day - o.get("day", day) >= 1]
+        if late:
+            urgent.append(f"🔴 {len(late)} order(s) past the promised next-day shipping (oldest #{min(late, key=lambda o: o.get('day', 0))['n']}) — ship today: say “print the shipping labels”")
+        for r, k in self._msg_kinds(7):
+            if r.get("status") == "new" and k in ("damaged_or_wrong", "return_or_refund", "cancel_or_change"):
+                urgent.append(f"🔴 unanswered {k.replace('_', ' ')} message from {r.get('from', 'a customer')} — draft is ready in /inbox")
+        for f in facts:
+            if f[2] == "restock":
+                urgent.append(f"🟠 {f[1].split(' — ')[0]} — still listed, so buyers bounce; reorder or mark 'back in X days'")
+        try:
+            items = self.memory.open_items() if self.memory else []
+            due = [x for x in items if x.get("due") and x["due"][:16] <= _dt.datetime.now().isoformat()[:16]]
+            for x in due[:2]:
+                urgent.append(f"🟠 reminder due: {re.sub(r' \(⏰ .*\)$', '', x['text'])[:50]}")
+        except Exception:
+            pass
+        if not urgent:
+            return "Nothing urgent: no late orders, no complaint unanswered, nothing sold out, no reminder due. The rest can wait for your evening report."
+        return "Urgent, most first:\n" + "\n".join(f"• {u}" for u in urgent[:5]) + ("\nEverything else is routine." if len(urgent) <= 2 else "")
+
+    def complaints(self, t, m):
+        rows = self._msg_kinds(7)
+        bad = [(r, k) for r, k in rows if k in ("damaged_or_wrong", "return_or_refund", "where_is_my_order", "cancel_or_change") or re.search(r"\b(angry|unacceptable|terrible|disappointed|worst|never again|scam|furious|ridiculous)\b", r["text"].lower())]
+        if not rows:
+            return "No customer messages at all in the last 7 days — nothing to complain about, or nobody's talking (both worth knowing: a zero-message week with orders is normal for a small shop)."
+        if not bad:
+            return f"No complaints: {len(rows)} message(s) in the last 7 days, all questions or compliments — " + ", ".join(sorted({k.replace('_', ' ') for _, k in rows})) + "."
+        names = {"damaged_or_wrong": "damaged/wrong item", "return_or_refund": "return or refund", "where_is_my_order": "where is my order", "cancel_or_change": "cancel/change"}
+        lines = [f"{len(bad)} of {len(rows)} message(s) in the last 7 days were complaints or problems:"]
+        for r, k in bad[:5]:
+            lines.append(f"• {r.get('from', '?')} — {names.get(k, k)}: “{r['text'][:70]}…” → {'answered' if r.get('status') != 'new' else 'draft waiting for your tap'}")
+        kinds = {}
+        for _, k in bad:
+            kinds[k] = kinds.get(k, 0) + 1
+        top = max(kinds, key=kinds.get)
+        cause = {"where_is_my_order": "usually late shipping or no tracking mail — ship daily and send the tracking number the same day",
+                 "damaged_or_wrong": "packaging: mugs and lamps need double-wall boxes and 5 cm of padding; one broken parcel costs more than 20 better boxes",
+                 "return_or_refund": "expectations vs photos — check the product page says exactly what arrives (size, colour, material)",
+                 "cancel_or_change": "people change their mind fast — ship fast and they can't; and a clear 'edit your order within 2 h' line saves mails"}
+        lines.append(f"Pattern: most are '{names.get(top, top)}' — {cause.get(top, '')}.")
+        return "\n".join(lines)
+
+    def spend_budget(self, t, m):
+        gd = m.groupdict()
+        amt = _num(gd.get("amt") or gd.get("amt2") or gd.get("amt3") or gd.get("amt4") or "200")
+        if re.search(r"\d\s*k\b", t.lower()):
+            amt *= 1000
+        st = self.store
+        n = self._n() or {}
+        units = n.get("units", {})
+        left = amt
+        plan = []
+        oos = sorted([p for p in st.products() if p["stock"] == 0], key=lambda p: -units.get(p["name"], 0))
+        low = sorted([p for p in st.products() if 0 < p["stock"] <= 3], key=lambda p: -units.get(p["name"], 0))
+        for p in oos + low:
+            qty = 10 if p.get("cost", 0) < 8 else 5
+            c = qty * p.get("cost", 0)
+            if c <= left and c > 0:
+                plan.append((c, f"{qty} × {p['name'].split(' (')[0]} at {_eur(p['cost'])} = {_eur(c)} — {'sold out' if p['stock'] == 0 else 'nearly out'}" + (f", {units.get(p['name'], 0)} sold so far" if units.get(p['name']) else "")))
+                left -= c
+        if left >= 25:
+            c = min(30.0, left)
+            plan.append((c, f"{_eur(c)} on 100 thank-you cards with a 10 % return code + better tape/paper — the cheapest repeat-customer machine there is"))
+            left -= c
+        if left >= 40:
+            best = max(units, key=units.get) if units else None
+            days = int(left // 5)
+            plan.append((left, f"{_eur(left)} on a first ad test: € 5 a day for {days} days on one short video of {best.split(' (')[0] if best else 'the best seller'}, Italy only, to learn the cost per visit — not to make money yet"))
+            left = 0
+        if left > 0:
+            plan.append((left, f"{_eur(left)} kept as a cushion for a refund or a broken parcel"))
+        out = [f"With {_eur(amt)}, in this order:"]
+        for i, (c, line) in enumerate(plan, 1):
+            out.append(f"{i}. {line}")
+        out.append("Why this order: stock you can't sell is lost sales today; cards bring the second order; ads only teach you something once the page converts (it does, at " + (f"{n['conversion']:.1f} %)." if n.get('orders') else "— unknown until there are sales)."))
+        out.append("Nothing here spends itself — say “order 10 more <product>” or “prepare the ad test” and I prepare it for your tap.")
+        return "\n".join(out)
+
+    def reviews(self, t, m):
+        n = self._n() or {}
+        return ("More reviews — what works for a small shop, in order of effect:\n"
+                "1. Ask at the right moment: 5–7 days after delivery (the item is in use, the parcel joy is still there), one short personal e-mail with a direct link to the review form. That alone is 5–10 % of buyers; nothing else comes close.\n"
+                "2. The card in the parcel: 'Happy with it? A photo review helps us more than you'd think' + a QR code to the review page. Don't offer money for a review (illegal in the EU when undisclosed); a small code for the NEXT order in exchange for honest feedback is fine if the review isn't required.\n"
+                "3. Make it easy: 3 clicks max, phone-friendly, photo optional.\n"
+                "4. Reply to every review, good or bad, in one human sentence — future buyers read the replies more than the stars.\n"
+                "5. Answer problems fast: a solved complaint becomes a 5-star review surprisingly often; an ignored one becomes a 1-star.\n"
+                + (f"With your {n['orders']} orders so far, expect the first 1–3 reviews from a review request e-mail; " if n.get("orders") else "") +
+                "say “write the review request e-mail” and I draft it, or “put a review line on the thank-you card” and I add it to the card text.")
+
+    def one_idea(self, t, m):
+        st = self.store
+        n = self._n() or {}
+        units = n.get("units", {})
+        day = st.data.get("day", 0)
+        ideas = []
+        best = max(units, key=units.get) if units else None
+        instock = [p for p in st.products() if p["stock"] > 0]
+        slow = sorted([p for p in instock if units.get(p["name"], 0) <= 1], key=lambda p: -p["stock"])
+        aov = (n["revenue"] / n["orders"]) if n.get("orders") else 0
+        if best and slow:
+            b = next((p for p in st.products() if p["name"] == best), None)
+            if b and b["stock"] > 0:
+                s0 = slow[0]
+                bundle = round((b["price"] + s0["price"]) * 0.9, 2)
+                ideas.append(f"Bundle the best seller with the slowest item: “{best.split(' (')[0]} + {s0['name'].split(' (')[0]}” for {_eur(bundle)} instead of {_eur(b['price'] + s0['price'])} (10 % off, still {((bundle - b['cost'] - s0['cost']) / bundle * 100):.0f} % margin). It lifts the basket and moves the {s0['stock']} pcs of {s0['name'].split(' (')[0]} sitting there. Say “add the bundle” and I prepare it.")
+        if aov:
+            thr = int(aov) + 6
+            thr = thr - (thr % 5) + 4.99
+            ideas.append(f"Free shipping over {_eur(thr)}: your average basket is {_eur(aov)}, so shoppers add a small item to reach it — basket up 10–20 % in most small shops. Say “free shipping over {int(thr)}” and I prepare the rule.")
+        if best:
+            ideas.append(f"One 20-second video a day of {best.split(' (')[0]} in a real room, 7 days straight, same hook (“the one thing in my kitchen everyone asks about”) — short video is the only free traffic that still works; I'll write the 7 hooks: say “write 7 video hooks”.")
+        ideas.append("A 'back in stock / new colour' e-mail to everyone who bought — a mail to past buyers converts 5–10× a post; I draft it in your tone: say “write the e-mail to past customers”.")
+        ideas.append("Put the shipping price and the '1-day dispatch from Bergamo' line on the product page above the buy button — the checkout surprise is where small shops lose a third of carts.")
+        if not ideas:
+            return "Run a practice day first — with no sales I'd only be guessing which lever to pull."
+        pick = ideas[day % len(ideas)]
+        return f"One idea for this week: {pick}\n(Ask again tomorrow and I give you a different one — I rotate through {len(ideas)}.)"
+
+    def mistakes(self, t, m):
+        st = self.store
+        day = st.data.get("day", 0)
+        n = self._n() or {}
+        out = []
+        late = [o for o in st.data["orders"] if o["status"] == "paid" and day - o.get("day", day) >= 1]
+        if late:
+            out.append(f"{len(late)} order(s) not shipped the next day as the page promises — the one mistake customers notice")
+        oos = [p for p in st.products() if p["stock"] == 0]
+        for p in oos:
+            out.append(f"{p['name'].split(' (')[0]} ran out and stayed listed as buyable — reorder point should be 2 weeks of sales, not zero")
+        rows = self._msg_kinds(7)
+        new = [r for r, _ in rows if r.get("status") == "new"]
+        if new:
+            out.append(f"{len(new)} customer message(s) still unanswered — drafts were ready; a reply within the hour is the cheapest marketing")
+        rej = [p for p in st.data.get("proposals", []) if p["status"] == "rejected"]
+        openp = [p for p in st.data.get("proposals", []) if p["status"] == "open"]
+        if openp and day >= 2:
+            out.append(f"{len(openp)} proposal(s) left undecided for days — a 'no' is fine, a 'nothing' costs the week")
+        if n.get("orders") and n.get("visits"):
+            units = n.get("units", {})
+            if len(units) < len(st.products()) - len(oos):
+                unsold = [p["name"].split(" (")[0] for p in st.products() if p["stock"] > 0 and not units.get(p["name"])]
+                if unsold:
+                    out.append(f"{', '.join(unsold)} never appeared in a post, so never sold — every product needs its week in the light")
+        if not out:
+            return "None I can see in the ledger: orders shipped on time, nothing sold out, customers answered. The mistakes I can't see are the ones outside the shop — posts not made, photos not taken — tell me what you did and I'll be honest."
+        return ("Mistakes this week, from the numbers (the ones I can see — no judgement on the rest):\n" + "\n".join(f"• {x}" for x in out[:5]) +
+                "\nMine too: " + ("I should have nagged harder about the late orders." if late else "I could have proposed the fixes earlier instead of waiting to be asked.") + " Say “fix them” and I prepare labels, reorders and drafts in one go.")
+
+    def asked_most(self, t, m):
+        rows = self._msg_kinds(30)
+        if not rows:
+            return "No customer messages yet, so no pattern. In small home-goods shops the usual top three are: where is my order (40 %), does it fit/what size (25 %), returns (15 %) — the first one disappears when the tracking mail goes out the same day."
+        kinds = {}
+        for _, k in rows:
+            kinds[k] = kinds.get(k, 0) + 1
+        top = sorted(kinds.items(), key=lambda x: -x[1])
+        names = {"where_is_my_order": "where is my order", "product_question": "product questions (size, material, does it fit)", "return_or_refund": "returns/refunds", "damaged_or_wrong": "damaged or wrong item",
+                 "cancel_or_change": "cancel/change the order", "discount_request": "discount requests", "compliment": "compliments", "partnership_or_press": "collab/press", "spam_or_scam": "spam", "other": "other"}
+        fix = {"where_is_my_order": "send the tracking number the same day and put 'delivery in 2–3 days after dispatch' on the product page — this kind halves",
+               "product_question": "add the answers to the product page (a short FAQ under the description) — I can write it from the messages: say “write the FAQ”",
+               "return_or_refund": "check the photos match reality (colour, size in cm next to a hand)",
+               "damaged_or_wrong": "packaging — double box and padding for anything breakable",
+               "discount_request": "a visible 'first order −10 % for newsletter' beats one-off haggling",
+               "cancel_or_change": "a line 'changes possible within 2 hours of ordering' saves most of them"}
+        lines = [f"What customers ask most ({len(rows)} messages in the last 30 days):"]
+        for k, c in top[:4]:
+            lines.append(f"• {names.get(k, k)}: {c} ({c / len(rows) * 100:.0f} %)")
+        lines.append(f"What to do about the top one: {fix.get(top[0][0], 'answer it once on the page, then the mails stop')}.")
+        return "\n".join(lines)
+
+    def sales_drop(self, t, m):
+        st = self.store
+        od, vd = self._days()
+        day = st.data.get("day", 0)
+        if day < 2:
+            return "Too early to talk about drops — the shop has had " + ("one practice day" if day == 1 else "no practice day") + "; a trend needs at least a few days."
+        w = 3 if day >= 6 else 1
+        a_days = range(day - w + 1, day + 1)
+        b_days = range(day - 2 * w + 1, day - w + 1)
+        a_o = sum(od.get(d, (0, 0))[0] for d in a_days); b_o = sum(od.get(d, (0, 0))[0] for d in b_days)
+        a_s = sum(od.get(d, (0, 0))[1] for d in a_days); b_s = sum(od.get(d, (0, 0))[1] for d in b_days)
+        a_v = sum(vd.get(d, 0) for d in a_days); b_v = sum(vd.get(d, 0) for d in b_days)
+        span = f"days {a_days[0]}–{a_days[-1]} vs {b_days[0]}–{b_days[-1]}" if w > 1 else f"day {day} vs day {day - 1}"
+        if a_s >= b_s * 0.9:
+            return (f"They didn't, by the ledger: {a_o} orders / {_eur(a_s)} ({span}) against {b_o} / {_eur(b_s)} before — " + ("flat" if a_s < b_s * 1.1 else "actually up") +
+                    f". Visits {a_v} vs {b_v}. Day-to-day swings of ±50 % are normal at this size; I only call it a drop after a full week under the previous one. If you saw a drop somewhere else (a marketplace, a social account), tell me where.")
+        causes = []
+        if a_v < b_v * 0.85:
+            causes.append(f"fewer visitors ({a_v} vs {b_v}, {(1 - a_v / b_v) * 100:.0f} % down) — that's traffic: fewer posts, a post that flopped, or the algorithm; not the shop itself")
+        conv_a = a_o / a_v * 100 if a_v else 0; conv_b = b_o / b_v * 100 if b_v else 0
+        if a_v and conv_a < conv_b * 0.8:
+            causes.append(f"visitors buy less ({conv_a:.1f} % vs {conv_b:.1f} %) — something on the page or at checkout changed, or the traffic is colder")
+        oos = [p for p in st.products() if p["stock"] == 0]
+        if oos:
+            causes.append("sold out: " + ", ".join(p["name"].split(" (")[0] for p in oos) + " — visitors who came for those left")
+        pc = [c for c in st.data.get("changes", []) if "price" in str(c.get("what", "")).lower()]
+        if pc:
+            causes.append(f"a price change on {pc[-1]['t'][:10]} ({pc[-1]['what'][:60]}) — if the drop started then, that's it")
+        if not causes:
+            causes.append("nothing in the ledger explains it (visits and conversion are steady, stock is fine) — small numbers wobble; watch two more days before changing anything")
+        return f"Sales down: {a_o} orders / {_eur(a_s)} ({span}) vs {b_o} / {_eur(b_s)}. What the numbers point to:\n" + "\n".join(f"• {c}" for c in causes) + "\nFirst move: " + ("restock, then post." if oos else "post today (traffic is the fastest lever) and don't touch prices on one bad stretch.")
+
+    def prices_right(self, t, m):
+        st = self.store
+        n = self._n() or {}
+        units = n.get("units", {})
+        high = bool(re.search(r"\b(high|expensive|overpriced|alti)\b", t.lower()))
+        if not n.get("orders"):
+            return "No sales yet, so the market hasn't voted. On paper: " + "; ".join(f"{p['name'].split(' (')[0]} {_eur(p['price'])} ({(p['price'] - p['cost']) / p['price'] * 100:.0f} % gross)" for p in st.products()) + ". Margins are healthy; whether the price is 'too high' only conversion can tell — run practice days."
+        conv = n.get("conversion", 0)
+        lines = []
+        verdict = ("Not too high, by the numbers: " if conv >= 1.5 else "Possibly — ") + f"{conv:.1f} % of visitors buy" + (" (above the 1–3 % normal), and people who find prices too high simply don't buy." if conv >= 1.5 else ", under the normal 1.5–3 %: price, shipping surprise or photos — one of the three.")
+        if not high:
+            verdict = f"Too low? No: net margin is {n['profit'] / n['revenue'] * 100:.0f} % after goods, shipping and fees — healthy. " + ("A shop that converts at " + f"{conv:.1f} % could try +5–10 % on the best seller and watch a week." if conv >= 3 else "Keep them; test upward only when conversion is comfortably above 3 %.")
+        lines.append(verdict)
+        for p in st.products():
+            sold = units.get(p["name"], 0)
+            mg = (p["price"] - p["cost"]) / p["price"] * 100
+            note = ("sells well → room to go up 5–10 %" if sold >= 3 else "sells → fine" if sold >= 1 else ("sold out, can't judge" if p["stock"] == 0 else "no sales → either unseen or too dear — post it once before cutting the price"))
+            lines.append(f"• {p['name'].split(' (')[0]} {_eur(p['price'])} ({mg:.0f} % gross, {sold} sold): {note}")
+        lines.append("Rule I use: cut a price only after the product has had its week in posts and still doesn't sell; raise one only on the best seller and only by a step (,90 endings).")
+        return "\n".join(lines)
+
+    def my_goal(self, t, m):
+        n = self._n() or {}
+        st = self.store
+        aov = (n["revenue"] / n["orders"]) if n.get("orders") else 25.0
+        margin = (n["profit"] / n["revenue"]) if n.get("revenue") else 0.5
+        target_orders = 120
+        return ("My goal for the shop, in order:\n"
+                "1. Keep every promise on our own pages: every order shipped next day, every customer answered within the hour, every product listed is in stock. That's the reputation — the only thing a small shop has.\n"
+                f"2. Turn it into a real income for you: from {n.get('orders', 0)} orders so far to ~{target_orders} a month, which at your basket ({_eur(aov)}) and margin ({margin * 100:.0f} %) is about {_eur(target_orders * aov * margin - 300)} a month after goods, shipping, fees and the INPS minimum. Then double it.\n"
+                "3. Never spend your money or speak in public without your tap — and get so good at preparing things that your tap takes 10 seconds.\n"
+                "4. Get smarter every week: learn from what you accept and reject, from the customers' messages, and from what I read in the quiet hours.\n"
+                "What I'm NOT optimising for: sales at any margin, ads before the page converts, or a hundred products — three that sell beat thirty that don't.")
 
     def learned(self, t, m):
         bits = []

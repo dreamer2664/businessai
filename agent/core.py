@@ -650,6 +650,14 @@ class Agent:
 
     # ---- the (tiny, for now) conversational policy ---------------------
     def respond(self, text):
+        out = self._respond(text)
+        try:
+            self.talk.note_reply(text, out)
+        except Exception:
+            pass
+        return out
+
+    def _respond(self, text):
         low = text.lower()
         if low in ("/start", "/help", "help"):
             return f"Hi! Business AI {VERSION}\n\n{HELP}"
