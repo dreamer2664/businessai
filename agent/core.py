@@ -967,7 +967,11 @@ class Agent:
                     self.memory.add(item)
                 return direct["text"]
             if direct.get("translate"):
-                return self.translate(direct["translate"], direct["to"])
+                out = self.translate(direct["translate"], direct["to"])
+                if direct.get("page") and out.startswith("In "):                     # a shop page translated → proposal to publish
+                    body = out.split("\n", 1)[1] if "\n" in out else out
+                    return self.store_change({"kind": "page", "page": direct["page"], "value": body, "text": f"{direct['page'].capitalize()} page in {direct['to']}"})
+                return out
             if direct.get("away"):                                                    # "off to lunch, back in an hour" → quiet time to study
                 if not self.busy:
                     self.pace.set({"pace": "slow", "deadline_min": None, "budget_min": int(direct["away"]), "why": "you said you're away"}, "owner away")
@@ -1577,6 +1581,15 @@ class Agent:
             prop = st.propose("price", ch["product"], ch["value"], f"you asked: price {money(ch['old'])} → {money(ch['value'])}")
             self.bot.send(self.owner_id, f"🏪 {ch['name']}: price {money(ch['old'])} → {money(ch['value'])}{warn}\nApply it?",
                           buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
+        if k in ("ship", "cancel", "refund"):
+            prop = st.propose(k, str(ch["order"]), {"ship": "shipped", "cancel": "cancelled", "refund": "refunded"}[k], "you asked in chat")
+            label = {"ship": "✅ Mark shipped", "cancel": "✅ Cancel & refund", "refund": "✅ Refund"}[k]
+            self.bot.send(self.owner_id, f"🏪 {ch['text']}.\nDo it?", buttons=[[(label, f"s:ok:{prop['id']}"), ("❌ No", f"s:no:{prop['id']}")]])
+            return None
+        if k == "page":
+            prop = st.propose("page", ch["page"], ch["value"], "you asked in chat")
+            self.bot.send(self.owner_id, f"🏪 {ch['text']}.\nNew text:\n{ch['value'][:900]}\nPublish it on the practice store?", buttons=[[("✅ Publish", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
             return None
         if k == "cost":
             price = ch.get("price") or 0

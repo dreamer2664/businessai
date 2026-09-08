@@ -50,7 +50,7 @@ class Talk:
     OPINION_IT = re.compile(r"\b(che ne pensi|cosa ne pensi|secondo te)\b", re.I)
     # ---- the practice store in plain words ----
     STORE_NUM = re.compile(r"\b(?:how many (?:orders|sales|visitors|visits|customers)|(?:what(?:'s| is| are) )?(?:our|my|the) (?:best[- ]?sellers?|top (?:product|seller)s?|conversion(?: rate)?|revenue|turnover|profit|margin|numbers|visitors|visits)|how much (?:profit|money|revenue) (?:did|have) (?:we|i) (?:make|made|earn|earned)|(?:profit|revenue|sales) (?:so far|this week|today|this month)|summary of (?:the|this|my) (?:week|day|month)|(?:weekly|daily) summary|how(?:'s| is| are) (?:business|sales|things) going|quanti ordini|quante visite|quanto abbiamo (?:guadagnato|venduto|incassato)|qual è il (?:più venduto|best seller)|riepilogo (?:della |di questa )?(?:settimana|giornata)|riassunto (?:della |di questa |del |di )?(?:settimana|giornata|mese)|(?:our|my|the) (?:average (?:order|basket)(?: value| size)?|aov)|scontrino medio|(?:how are we doing|how did we do|come (?:siamo andati|è andata)) (?:compared to|vs\.?|versus|against|rispetto a(?:lla)?) (?:last|the previous|la scorsa|la settimana scorsa)|compared to last week|rispetto alla settimana scorsa)\b", re.I)
-    SHIP_COST_Q = re.compile(r"\b(?:how much (?:is|does|do we charge for|costs?) (?:the )?(?:shipping|delivery|postage)|(?:shipping|delivery) (?:cost|price|fee)s?(?: to| for)?|what do we charge (?:for )?(?:shipping|delivery)|quanto (?:costa|chiediamo per) (?:la )?spedizione|quanto costa spedire)\b", re.I)
+    SHIP_COST_Q = re.compile(r"\b(?:how much (?:is|does|do we charge for|costs?) (?:the )?(?:shipping|delivery|postage)|(?:shipping|delivery) (?:cost|price|fee)s?(?: to| for)?|what do we charge (?:for )?(?:shipping|delivery)|quanto (?:costa|chiediamo per) (?:la )?spedizione|quanto costa spedire|what are (?:our|the|my) (?:shipping|delivery) (?:days|times|options|rules|prices|rates)|how long (?:does|is) (?:our |the )?(?:shipping|delivery)(?: take)?|(?:our|my) (?:shipping|delivery) (?:times|days|rules)|(?:tempi|giorni) di (?:spedizione|consegna))\b", re.I)
     SELLOUT_Q = re.compile(r"\b(?:how long (?:until|before|till) (?:the |our )?(?P<what>[a-z][a-z \-]{2,40}?) (?:sells? out|runs? out|is gone|is sold out)|when (?:will|does) (?:the |our )?(?P<what2>[a-z][a-z \-]{2,40}?) (?:sell out|run out)|(?:stock|units) (?:left )?(?:of |for )?(?:the )?(?P<what3>[a-z][a-z \-]{2,40}?) (?:last|lasts|will last)|quanto dura(?:no)? (?:le |la |il |lo |gli |i )?(?P<what4>[a-zà-ú][a-zà-ú \-]{2,40}?)\?)", re.I)
     MATHS = re.compile(r"^\W*(?:what(?:'s| is)|quanto (?:fa|è)|calcola|calculate|compute)?\s*(?P<a>\d+(?:[.,]\d+)?)\s*%\s*(?:of|di|del|della)\s*(?P<b>\d+(?:[.,]\d+)?)\W*$"
                        r"|^\W*(?:what(?:'s| is)|quanto fa)?\s*(?P<c>\d+(?:[.,]\d+)?)\s*(?:€|eur|euro)?\s*(?:plus|più|\+)\s*(?P<d>\d+(?:[.,]\d+)?)\s*%\W*$"
@@ -75,9 +75,27 @@ class Talk:
     WRITE_PAGE = re.compile(r"\b(?:write|draft|make|create|prepare|scrivi(?:mi)?|prepara|fammi)\b.{0,20}?\b(?:the |a |an |our |my |la |una |il |le )?(?P<kind>shipping|delivery|returns?|refund|about(?: us)?|faq|privacy|terms|contact|spedizioni?|resi|chi siamo|domande frequenti)\s+(?:policy|page|pagina|text|section|policy page)\b|\b(?:write|draft|make|scrivi|prepara)\b.{0,12}?\b(?:the |le |la )?(?P<kind2>faq|about us|privacy policy|terms and conditions|termini e condizioni|domande frequenti)\b", re.I)
     INBOX_Q = re.compile(r"\b(?:how many (?:e-?mails?|messages?|customer messages?|mails?|tickets?|requests?|customers?) (?:are |is )?(?:waiting|pending|unanswered|new|open|in the inbox|to answer|do (?:i|we) have)|(?:anything|what(?:'s| is)) (?:new )?(?:in|waiting in) the inbox|any (?:new )?(?:messages?|e-?mails?|customer messages?)(?: waiting| to answer| today)?\??|quant[ei] (?:mail|e-?mail|messaggi|richieste) (?:ci sono|abbiamo|aspettano|da rispondere)|c'è qualcosa (?:nella|in) (?:posta|inbox))\b", re.I)
     PLATE = re.compile(r"^\W*(?:what(?:'s| is|’s)?\s*(?:on my plate|on the agenda|on (?:for|the plan) today|the plan (?:for )?today|today'?s plan|left (?:to do|for today)|(?:the )?priority today|urgent today)|what (?:do|should) (?:i|we) (?:do|have to do|need to do|handle) (?:today|now|first|this morning)|where (?:do|should) (?:i|we) start today|cosa (?:devo|dobbiamo) fare oggi|cosa c'è (?:da fare )?oggi|priorità (?:di )?oggi|da dove (?:inizio|comincio) oggi)(?:\s+(?:today|this morning|now|oggi|stamattina))?\W*$", re.I)
+    ORDER_ACT = re.compile(r"^\W*(?:please |can you |could you |puoi )?(?P<act>cancel|refund|ship|mark(?: as)? shipped|annulla|rimborsa|spedisci)\s+(?:the )?(?:order|ordine)?\s*#?\s*(?P<n>\d{4,6})\b(?P<why>.*)$", re.I | re.S)
+    SHIP_ALL = re.compile(r"^\W*(?:ship|send out|post|spedisci)\s+(?:everything|all|all (?:the )?(?:open |paid |pending )?orders|them all|tutto|tutti gli ordini)\W*$", re.I)
+    LATE_Q = re.compile(r"\b(?:which|what|any|quali)\s+orders?\s+(?:are|is)\s+(?:late|overdue|delayed|stuck|waiting too long|in ritardo)|\b(?:late|overdue|delayed|stuck) orders\b|\bordini in ritardo\b|\banything (?:late|overdue|stuck)\b", re.I)
+    WHO_BOUGHT = re.compile(r"\b(?:who (?:bought|ordered|purchased)|chi ha (?:comprato|ordinato))\s+(?:the |a |an |il |la |lo |i )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)(?:\s+(?:this week|today|yesterday|so far|oggi|ieri))?\W*$", re.I)
+    MARGIN_ON = re.compile(r"\b(?:what(?:'s| is) (?:my |our |the )?(?:margin|markup|profit)|how much (?:do (?:i|we) make|margin|profit)|quanto (?:guadagno|ci guadagno|margine))\s+(?:on|per|for|su|sul|sulla|sulle|sui)\s+(?:each |every |a |one |the |our |my |il |la |lo |i |ogni )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\W*$", re.I)
+    SOLD_WHEN = re.compile(r"\b(?:what (?:did|have) we (?:sell|sold)|what sold|cosa abbiamo venduto|quanto abbiamo venduto)\s*(?P<when>yesterday|today|this week|last week|so far|ieri|oggi|questa settimana|la settimana scorsa)?\W*$", re.I)
+    STOCK_VALUE = re.compile(r"\b(?:how much (?:money|cash|capital) (?:is )?(?:tied up|sitting|stuck|invested) in (?:stock|inventory)|(?:stock|inventory) value|value of (?:our|my|the) (?:stock|inventory)|quanto (?:vale|abbiamo) (?:il |in )?magazzino|how many days of stock (?:do we have|overall|in total|left)|days of stock)\b", re.I)
+    OOS_SAY = re.compile(r"\b(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\s+(?:is|are|è|sono)\s+(?:out of stock|sold out|esaurit[oi]|finit[oi])\b.{0,30}?\b(?:what (?:do|should) i (?:tell|say|answer|write)|cosa (?:dico|rispondo))\b|\b(?:what (?:do|should) i (?:tell|say to|answer)|cosa (?:dico|rispondo))\b.{0,30}?\b(?:out of stock|sold out|esaurito)\b", re.I)
+    BANK_TRANSFER = re.compile(r"\b(?:bank transfer|wire transfer|bonifico|pay (?:on|at) delivery|cash on delivery|contrassegno|paypal (?:friends|family)|pay (?:by|with|via) (?:bank|wire|bonifico|crypto|bitcoin))\b", re.I)
+    BULK_DISC = re.compile(r"\b(?:someone |a customer |a buyer |un cliente )?(?:ordered|wants|asks? for|is asking for|would like|bought|ha ordinato|vuole|chiede)\s+(?P<n>\d{1,4})\s+(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\b.{0,40}?\b(?:discount|sconto|price break|cheaper|deal|wholesale)\b|\b(?:discount|sconto)\b.{0,30}?\b(?:for|on|per|su)\s+(?P<n2>\d{1,4})\s+(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\b", re.I)
+    FIRST_CUST = re.compile(r"\b(?:how (?:do|can|should) (?:i|we) (?:get|find|win|reach|attract) (?:my |our |the )?first (?:\d+ )?(?:customers?|sales?|orders?|buyers?)|first (?:\d+ )?(?:customers|sales|orders) (?:how|where|tips)|come (?:trovo|trovare|avere) i primi (?:clienti|ordini)|where do (?:my |the )?first (?:customers|sales) come from|nobody is buying|no sales yet)\b", re.I)
+    ADS_BUDGET = re.compile(r"\b(?:i have|i've got|we have|ho|abbiamo|budget(?: of| is)?|with)\s*" + _MONEY.replace("(\\d", "(?P<amt>\\d") + r"\s*(?:a month|per month|al mese|a week|per week)?\s*(?:for|to spend on|budget for|di budget per|in|per)\s+(?:ads|advertising|marketing|meta ads|facebook ads|instagram ads|tiktok ads|google ads|pubblicità|promozione)\b|\bwhere (?:do|should) i (?:put|spend|invest) (?:my |the )?(?:ad|ads|marketing) (?:money|budget|euros)\b|\b(?:ads?|advertising|marketing) budget\b.{0,20}?\bwhere\b", re.I)
+    VAT_ON = re.compile(r"\b(?:what(?:'s| is) the |how much |quanto è l'|quanta )?(?:vat|iva|sales tax)\b.{0,20}?\b(?:on|of|in|su|per|for)\s+(?:a |an |the |un |una |il |la )?" + _MONEY.replace("(\\d", "(?P<amt>\\d") + r"(?:\s+(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?))?\W*$|\b(?:vat|iva)\s+(?:included|inclusa|compresa)\b.{0,20}?" + _MONEY.replace("(\\d", "(?P<amt2>\\d"), re.I)
+    FEES_PAID = re.compile(r"\b(?:how much (?:did|have|do) we (?:pay|paid|spend|spent|lose|lost) (?:in|on) (?:payment |card |stripe |paypal |gateway |transaction )?fees|(?:payment |card |gateway |transaction )?fees (?:so far|this week|this month|paid|total)|quanto abbiamo pagato di commissioni|commissioni (?:pagate|totali))\b", re.I)
+    BIO_Q = re.compile(r"\b(?:write|draft|make|create|suggest|scrivi|scrivimi|fammi|crea)\b.{0,20}?\b(?:instagram|tiktok|ig|social|profile|profilo)?\s*(?:bio|biography|profile text|about text|tagline|slogan)\b", re.I)
+    SET_FREE_SHIP = re.compile(r"\b(?:set|make|put|change|offer|introduce|metti|imposta|offri)\b.{0,15}?\bfree (?:shipping|delivery)\b.{0,20}?\b(?:over|above|from|for orders over|from orders of|sopra|oltre|da)\s*" + _MONEY.replace("(\\d", "(?P<amt>\\d") + r"|\bspedizione gratuita\b.{0,15}?\b(?:sopra|oltre|da)\s*" + _MONEY.replace("(\\d", "(?P<amt2>\\d"), re.I)
+    WHY_NOBODY = re.compile(r"\b(?:why (?:did|has|does|is) (?:nobody|no one|no-one|noone) (?:buy|bought|buying|order|ordered|want)|why (?:isn'?t|doesn'?t|aren'?t|don'?t) (?:the |our |my )?(?P<what0>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?) (?:sell|selling|move|moving)|why (?:are|is) (?:the |our |my )?(?P<what00>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?) not selling|perch[eé] nessuno compra|perch[eé] non (?:si )?vend(?:e|ono))\b(?:\s+(?:the |our |my |i |le |il |la )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?))?\W*$", re.I)
+    PAGE_LANG = re.compile(r"\b(?:translate|traduci)\b.{0,12}?\b(?:the |la |le )?(?P<page>shipping|returns?|faq|contact|about|spedizioni?|resi|contatti)\s+(?:page|policy|pagina)\b.{0,12}?\b(?:into|in|to) (?P<lang>english|italian|german|french|spanish|dutch|inglese|italiano|tedesco|francese|spagnolo|olandese)\b|\bmake the (?:shop|store|negozio) (?:bilingual|in (?:english|italian|german|french|spanish)( too| as well)?|multilingual)\b|\b(?:negozio|shop|store) (?:bilingue|anche in inglese|anche in italiano)\b", re.I)
     STORE_OPEN = re.compile(r"^\W*(?:can you |could you |please |puoi )?(?P<verb>open|start|launch|turn on|close|stop|shut|apri|avvia|chiudi)\s+(?:up |down )?(?:the |my |our |il |lo |la )?(?:practice |test |fake |training |online )?(?:store|shop|negozio|bottega)\b", re.I)
     STORE_STOCK = re.compile(r"\b(?:what(?:'s| is| do we have| do i have) (?:in |the |our |my )?stock|stock (?:levels?|list|situation|status)|how many .{2,30}? (?:do (?:we|i) have|are left|in stock|left)|list (?:the |our |my )?products|(?:our|my) (?:products|catalogue|catalog)|cosa (?:abbiamo|c'è) in magazzino|quant[ei] .{2,30}? (?:abbiamo|restano|rimangono))\b", re.I)
-    STORE_DAY = re.compile(r"\b(?:(?:run|simulate|start|do|play|fai)\s+(?:a |one |another |the next |un |un altro )?(?:practice |test |training )?(?:day|giorno)|(?:a |one |another )?(?:practice |test )?day (?:passes|goes by)|let (?:a|the) day pass|practice day|giorno di prova|passa un giorno)\b", re.I)
+    STORE_DAY = re.compile(r"\b(?:(?:run|simulate|start|do|play|fai)\s+(?:a |one |another |the next |un |un altro |\d+ |two |three |five |seven )?(?:more )?(?:practice |test |training )?(?:days?|giorn[oi])|(?:a |one |another )?(?:practice |test )?day (?:passes|goes by)|let (?:a|the) day pass|practice day|giorno di prova|passa un giorno)\b", re.I)
     STORE_REVIEW = re.compile(r"\b(?:review the (?:store|shop)|store review|what (?:do you|would you) (?:propose|suggest) (?:for|in) the (?:store|shop)|any proposals|what (?:should|needs to|do) (?:i|we) (?:do|fix) in the (?:store|shop)|cosa proponi per il negozio|controlla il negozio)\b", re.I)
     STORE_ORDERS = re.compile(r"\b(?:(?:open|pending|new|today'?s|latest|recent|last|unshipped|paid) orders|orders to ship|what (?:do i|should i|needs to be|do we) ship|which orders|show (?:me )?(?:the )?orders|ordini (?:da spedire|aperti|recenti|nuovi)|quali ordini)\b", re.I)
     STORE_LABELS = re.compile(r"\b(?:print|prepare|make|generate|create|give me|stampa|prepara|fammi)\b.{0,20}?\b(?:shipping labels?|labels?|packing slips?|etichette|bolle|lettere di vettura)\b|\b(?:shipping labels?|packing slips?|etichette)\b.{0,25}?\b(?:for|of|per)\b.{0,25}?\b(?:orders?|ordini|today|oggi)\b", re.I)
@@ -171,6 +189,16 @@ class Talk:
             return self.complaints(t)
         if self.FREE_RETURNS.search(t):
             return self.free_returns(t)
+        if self.FIRST_CUST.search(t):
+            return self.first_customers(t)
+        m = self.ADS_BUDGET.search(t)
+        if m and not re.search(r"https?://", t):
+            return self.ads_budget(_num(m.group("amt")) if m.group("amt") else None, t)
+        m = self.VAT_ON.search(t)
+        if m and not re.search(r"\b(register|number|partita|threshold|oss)\b", low):
+            return self.vat_on(_num(m.group("amt") or m.group("amt2")), m.group("what") or "", t)
+        if self.BIO_Q.search(t) and not re.search(r"https?://|\bwebsite\b", low):
+            return self.shop_bio(t)
         m = self.WRITE_PAGE.search(t)
         if m and not re.search(r"https?://|\bwebsite\b|\bsito\b", low):
             return self.write_page((m.group("kind") or m.group("kind2")).lower(), t)
@@ -273,6 +301,9 @@ class Talk:
         m = self.TIME_IN.search(t)
         if m:
             return self.clock(m.group("place"))
+        mp = self.PAGE_LANG.search(t) if self.store is not None else None
+        if mp and mp.group("page"):
+            return self.page_language(mp.group("page"), mp.group("lang") or "", t)
         m = self.SAY_IN.match(t) or self.TRANSLATE.match(t)
         if m:
             lang = (m.group("lang") or "").lower()
@@ -711,6 +742,51 @@ class Talk:
                 return {"store_change": {"kind": "cost", "product": p["id"], "value": round(value, 2), "name": p["name"], "old": p.get("cost", 0), "price": p["price"]}}
         if self.PUSH_Q.search(t):
             return self.push_pick(t)
+        if re.match(r"^\W*(?:what|which|cosa|che)\s+(?:should|could|do|can) (?:i|we)\s+post\s+(?:today|now|tomorrow|this week|oggi|domani|questa settimana)\W*$|^\W*cosa (?:posto|pubblico|pubblichiamo) oggi\W*$", t, re.I):
+            return self.post_today(t)
+        m = self.ORDER_ACT.match(t)
+        if m:
+            return self.order_action(m.group("act").lower(), int(m.group("n")), (m.group("why") or "").strip(" ,.-—"))
+        if self.SHIP_ALL.match(t):
+            return {"store_cmd": "shipped_all"}
+        if self.LATE_Q.search(t):
+            return self.late_orders()
+        m = self.WHO_BOUGHT.search(t)
+        if m:
+            r = self.who_bought(m.group("what"))
+            if r:
+                return r
+        m = self.MARGIN_ON.search(t)
+        if m and not re.search(r"\b(black friday|sale|saldi)\b", low):
+            r = self.margin_on(m.group("what"))
+            if r:
+                return r
+        m = self.SOLD_WHEN.search(t)
+        if m:
+            return self.sold_when((m.group("when") or "so far").lower())
+        if self.STOCK_VALUE.search(t):
+            return self.stock_value(t)
+        m = self.OOS_SAY.search(t)
+        if m:
+            return self.out_of_stock_script(m.group("what") or "")
+        if self.BANK_TRANSFER.search(t) and re.search(r"\?|\b(ok|okay|fine|safe|should|accept|posso|conviene|is that|va bene)\b", low) and not self.CUSTOMER.search(t):
+            return self.bank_transfer(t)
+        m = self.BULK_DISC.search(t)
+        if m and not self.CUSTOMER.search(t):
+            return self.bulk_discount(int(m.group("n") or m.group("n2")), m.group("what") or m.group("what2") or "")
+        if self.FEES_PAID.search(t):
+            return self.fees_paid(t)
+        m = self.SET_FREE_SHIP.search(t)
+        if m:
+            return self.set_free_shipping(_num(m.group("amt") or m.group("amt2")))
+        m = self.WHY_NOBODY.search(t)
+        if m:
+            r = self.why_not_selling(m.group("what") or m.group("what0") or m.group("what00") or "")
+            if r:
+                return r
+        m = self.PAGE_LANG.search(t)
+        if m:
+            return self.page_language(m.group("page") or "", m.group("lang") or "", t)
         m = self.REORDER_Q.search(t)
         if m:
             r = self.reorder_qty(m.group("what") or m.group("what2") or "")
@@ -746,8 +822,9 @@ class Talk:
         if self.STORE_STOCK.search(t) and not re.search(r"\b(dead stock|stock photo|stock image|in stock\?? on|amazon|aliexpress|supplier)\b", low):
             return {"store_cmd": "stock"}
         if self.STORE_DAY.search(t):
-            n = re.search(r"\b(\d)\s+(?:practice |test )?days\b", low)
-            return {"store_cmd": f"day {n.group(1)}" if n else "day"}
+            n = re.search(r"\b(\d|two|three|five|seven)\s+(?:more )?(?:practice |test )?(?:days|giorni)\b", low)
+            words = {"two": "2", "three": "3", "five": "5", "seven": "7"}
+            return {"store_cmd": f"day {words.get(n.group(1), n.group(1))}" if n else "day"}
         if self.STORE_REVIEW.search(t):
             return {"store_cmd": "review"}
         if self.STORE_NAME_Q.search(t):
@@ -987,6 +1064,33 @@ class Talk:
         lines.append(f"Say “5 captions for the {p['name'].split(' ')[0].lower()}” or “tiktok ideas for {p['name'].split(' (')[0].lower()}” and I write them.")
         return "\n".join(lines)
 
+    def post_today(self, t):
+        """'what should I post today?' — one concrete idea for one product, from the store's data; the post itself only after the owner picks."""
+        st = self.store
+        day = st.data.get("day", 0)
+        sold7 = {}
+        for o in st.data["orders"]:
+            if o["status"] in ("paid", "shipped", "delivered") and o.get("day", 0) > day - 7:
+                for l in o["lines"]:
+                    sold7[l["id"]] = sold7.get(l["id"], 0) + l["qty"]
+        ps = [p for p in st.products() if p["stock"] >= 5]
+        if not ps:
+            return "Don't post a product today — everything is out of stock or nearly. Post the shop's story instead (who you are, why you started) and say “we received N more …” when stock lands."
+        p = max(ps, key=lambda x: (x["price"] - x.get("cost", 0)) * (1 + sold7.get(x["id"], 0)))
+        name = p["name"].split(" (")[0]
+        detail = (p.get("details") or [p.get("short", "")])[0].rstrip(".")
+        wd = _dt.date.today().weekday()
+        angles = ["the product in someone's hand, 7 seconds, no talking — caption: one honest detail",
+                  "packing an order: box, paper, the card — people love seeing the parcel being made",
+                  f"the 'why' — one line on why you picked {name.lower()} over the cheap version",
+                  "a mistake or a lesson from this week (e.g. a parcel that came back) — honesty gets saved and shared",
+                  f"{name} next to the thing it replaces (the plastic one) — no text, just the two",
+                  "answer a real customer question on camera (from the inbox) — 15 seconds",
+                  "behind the numbers: how many orders this week, what surprised you"]
+        return (f"Post today: {name} — {angles[wd]}.\nCaption: “{detail}.” + one question to the viewer. Best time 12:30 or 19:00–21:00.\n"
+                f"Why this product: {p['stock']} in stock, {sold7.get(p['id'], 0)} sold this week, {(p['price'] - p.get('cost', 0)) / p['price'] * 100:.0f} % margin.\n"
+                f"Say “write the instagram post for {name.lower()}” and I draft it for your approval, or “5 captions for the {name.split(' ')[-1].lower()}”.")
+
     def reorder_qty(self, what):
         p = self.store.find_product(what)
         if not p:
@@ -1191,6 +1295,285 @@ class Talk:
         if not lines:
             return "Nothing urgent today: no orders to ship, no messages waiting, to-do list empty. Good day to work on the next product or a post — say “tiktok ideas” or “which product should I push?”."
         return f"Today ({_dt.date.today().strftime('%a %d %b')}) — {n} thing(s):\n" + "\n".join(lines) + "\nTell me “done <what>” as you go."
+
+    # ---- orders by number, late ones, who bought what, margins, stock value ---------------------------------
+    def order_action(self, act, n, why):
+        st = self.store
+        o = st.order(n)
+        if not o:
+            return f"There's no order #{n} in the practice store. Say “which orders” to see the recent ones."
+        act = "ship" if act.startswith(("ship", "mark", "spedisci")) else "cancel" if act.startswith(("cancel", "annulla")) else "refund"
+        who = f"{o['customer'].get('name', '')} ({o['country']})"
+        items = ", ".join(f"{l['name']} ×{l['qty']}" for l in o["lines"])
+        if act == "ship":
+            if o["status"] != "paid":
+                return f"Order #{n} is already {o['status']} — nothing to ship."
+            return {"store_change": {"kind": "ship", "order": n, "text": f"Mark order #{n} shipped — {who}, {items}, {_eur(o['total'])}"}}
+        if act == "cancel":
+            if o["status"] != "paid":
+                return (f"Order #{n} is {o['status']}, so it can't be cancelled any more" + (" — a shipped order is refunded when it comes back (say “refund order " + str(n) + "” once it's returned)." if o["status"] in ("shipped", "delivered") else "."))
+            return {"store_change": {"kind": "cancel", "order": n, "text": f"Cancel order #{n} — {who}, {items}, refund {_eur(o['total'])} to the customer, stock goes back" + (f"; reason: {why}" if why else "")}}
+        if o["status"] not in ("paid", "shipped", "delivered", "return_requested"):
+            return f"Order #{n} is {o['status']} — it can't be refunded (again)."
+        note = " Faulty item → no need to ask for it back, a photo is enough; you can claim the parcel damage from the courier." if re.search(r"\b(broken|damaged|crack|faulty|rotto|danneggiato)\b", why.lower()) else ""
+        return {"store_change": {"kind": "refund", "order": n, "text": f"Refund order #{n} — {who}, {items}, {_eur(o['total'])} back to the customer" + (f"; reason: {why}" if why else "") + note}}
+
+    def late_orders(self):
+        st = self.store
+        day = st.data.get("day", 0)
+        late = [o for o in st.data["orders"] if o["status"] == "paid" and day - o.get("day", day) >= 1]
+        stuck = [o for o in st.data["orders"] if o["status"] == "shipped" and day - o.get("day", day) >= 7]
+        if not st.data["orders"]:
+            return "No orders yet, so nothing can be late. Say “run a practice day” and customers come."
+        if not late and not stuck:
+            return "Nothing is late: every paid order left within a day and no shipped parcel is older than a week. 👍"
+        lines = []
+        if late:
+            lines.append(f"Late to ship ({len(late)} — promised 'ships within 1 business day'):\n" + "\n".join(f"• #{o['n']} {o['customer'].get('name', '')} ({o['country']}) — paid on day {o.get('day')}, {day - o.get('day', day)} day(s) ago — {', '.join(l['name'] + ' ×' + str(l['qty']) for l in o['lines'])}" for o in late[:8]))
+        if stuck:
+            lines.append(f"Shipped but not delivered after 7+ days ({len(stuck)}): " + ", ".join(f"#{o['n']} → {o.get('tracking', 'no tracking')}" for o in stuck[:6]) + " — open a trace with GLS and tell the customers you did.")
+        lines.append("Say “print the shipping labels” then “all shipped”, or “ship order <number>” one by one.")
+        return "\n".join(lines)
+
+    def who_bought(self, what):
+        p = self.store.find_product(what)
+        if not p:
+            return None
+        buyers = [(o, sum(l["qty"] for l in o["lines"] if l["id"] == p["id"])) for o in self.store.data["orders"] if any(l["id"] == p["id"] for l in o["lines"]) and o["status"] != "cancelled"]
+        if not buyers:
+            return f"Nobody has bought {p['name']} yet."
+        rows = [f"• #{o['n']} {o['customer'].get('name', '')} ({o['country']}) — ×{q}, day {o.get('day')}, {o['status']}" for o, q in buyers[-8:]]
+        return f"{p['name']} — {len(buyers)} order(s), {sum(q for _, q in buyers)} unit(s):\n" + "\n".join(rows) + "\n(Customer details stay in the store; I never put names in posts or documents.)"
+
+    def margin_on(self, what):
+        p = self.store.find_product(what)
+        if not p:
+            return None
+        price, cost = p["price"], p.get("cost", 0)
+        fee = 0.029 * price + 0.30
+        gross = price - cost
+        net = gross - fee
+        net_ship = net - 3.25
+        return (f"{p['name']} at {_eur(price)}: cost {_eur(cost)} → gross margin {_eur(gross)} ({gross / price * 100:.0f} %); after the payment fee {_eur(fee)} → {_eur(net)} ({net / price * 100:.0f} %); "
+                f"if the order gets free shipping another −€ 3,25 → {_eur(net_ship)} ({net_ship / price * 100:.0f} %). "
+                + ("Thin: below ~45 % one refund wipes out three sales — consider " + _eur(round(cost / 0.4 + 0.09, 0) - 0.10) + "." if net / price < 0.45 else "Healthy — enough room for a promo and the odd refund."))
+
+    def sold_when(self, when):
+        st = self.store
+        day = st.data.get("day", 0)
+        it = when in ("ieri", "oggi", "questa settimana", "la settimana scorsa")
+        when_en = {"ieri": "yesterday", "oggi": "today", "questa settimana": "this week", "la settimana scorsa": "last week"}.get(when, when)
+        if when_en == "yesterday":
+            keep = lambda o: o.get("day") == day - 1
+        elif when_en == "today":
+            keep = lambda o: o.get("day") == day
+        elif when_en == "this week":
+            keep = lambda o: o.get("day", 0) > day - 7
+        elif when_en == "last week":
+            keep = lambda o: day - 14 < o.get("day", 0) <= day - 7
+        else:
+            keep = lambda o: True
+        paid = [o for o in st.data["orders"] if o["status"] in ("paid", "shipped", "delivered") and keep(o)]
+        if not paid:
+            return (f"Ieri non abbiamo venduto nulla" if it and when_en == "yesterday" else f"Nothing sold {when_en}") + (f" (practice day {day - 1})." if when_en == "yesterday" else ".")
+        units = {}
+        for o in paid:
+            for l in o["lines"]:
+                units[l["name"]] = units.get(l["name"], 0) + l["qty"]
+        rev = sum(o["total"] for o in paid)
+        return f"Sold {when_en}: {len(paid)} order(s), {_eur(rev)} — " + ", ".join(f"{k} ×{v}" for k, v in sorted(units.items(), key=lambda x: -x[1])) + "."
+
+    def stock_value(self, t):
+        st = self.store
+        day = st.data.get("day", 0)
+        rows, total_cost, total_retail = [], 0.0, 0.0
+        sold14 = {}
+        for o in st.data["orders"]:
+            if o["status"] in ("paid", "shipped", "delivered") and o.get("day", 0) > day - 14:
+                for l in o["lines"]:
+                    sold14[l["id"]] = sold14.get(l["id"], 0) + l["qty"]
+        for p in st.products():
+            c = p["stock"] * p.get("cost", 0)
+            total_cost += c
+            total_retail += p["stock"] * p["price"]
+            daily = sold14.get(p["id"], 0) / 14
+            days = f"{p['stock'] / daily:.0f} days" if daily else ("out" if p["stock"] == 0 else "no sales in 14 days")
+            rows.append(f"• {p['name']}: {p['stock']} pcs = {_eur(c)} at cost · {days} of stock")
+        return (f"Stock: {_eur(total_cost)} tied up at cost (worth {_eur(total_retail)} at retail):\n" + "\n".join(rows) +
+                "\nRule of thumb: 4–8 weeks of stock per product; more than 12 weeks is cash asleep — discount or bundle it; less than 3 is a reorder.")
+
+    def out_of_stock_script(self, what):
+        p = self.store.find_product(what) if what else None
+        name = p["name"] if p else (what or "the product")
+        return (f"When someone asks for {name} while it's out of stock — three lines, never “soon”:\n"
+                f"“Hi <name>, thanks for asking! {name} is sold out right now; the next batch is due on <date> (say the real date, or 'in about 2 weeks'). "
+                f"I can e-mail you the moment it's back — want me to? Meanwhile <similar product> is in stock if you need one sooner.”\n"
+                "On the product page: keep it visible with a 'notify me' button (those e-mails convert 20–30 %), show the restock date, and never take money for stock you don't have."
+                + (f"\nSay “we received 20 more {name.split(' (')[0].lower()}” when the goods arrive and I put it back on sale." if p else ""))
+
+    def bank_transfer(self, t):
+        it = bool(re.search(r"\b(bonifico|contrassegno|va bene|posso)\b", t.lower()))
+        if re.search(r"\b(cash on delivery|contrassegno|pay (?:on|at) delivery)\b", t, re.I):
+            return ("Cash on delivery (contrassegno): possible in Italy but I'd say no for a small shop — the courier charges € 3–5 extra, 10–20 % of COD parcels are refused and come back at your cost, and you get the money 2–3 weeks later. "
+                    "If you really want it: charge the COD fee to the customer, only for Italy, only under € 100.")
+        if re.search(r"\b(crypto|bitcoin|friends|family)\b", t, re.I):
+            return "No — crypto and PayPal 'friends & family' have no buyer or seller protection and no paper trail for the accountant. Cards / PayPal goods & services / bank transfer only."
+        txt = ("Bank transfer — yes, it's fine and common in Italy/Germany, with three rules: (1) ship only when the money is on the account (1–2 business days SEPA), never on a screenshot; "
+               "(2) put the order number in the payment reference so you can match it; (3) if nothing arrives in 5 days, cancel and release the stock. "
+               "It costs you no fee (cards take 2,9 % + € 0,30), but there's no chargeback protection for the customer either — so keep it as an option next to cards, not instead of them. "
+               "Tell the customer: “Sure — IBAN <…>, reference <order number>; we ship the day the transfer lands and e-mail you the tracking.”")
+        if it:
+            txt = ("Bonifico — sì, va benissimo (in Italia e Germania è normale), con tre regole: (1) spedisci solo quando i soldi sono sul conto (1–2 giorni SEPA), mai su uno screenshot; "
+                   "(2) numero d'ordine nella causale; (3) se in 5 giorni non arriva nulla, annulla e libera la scorta. Nessuna commissione (le carte costano 2,9 % + € 0,30), ma niente protezione chargeback per il cliente: tienilo come opzione accanto alle carte, non al posto.")
+        return txt
+
+    def bulk_discount(self, n, what):
+        p = self.store.find_product(what) if self.store is not None else None
+        if p:
+            price, cost = p["price"], p.get("cost", 0)
+            fee = 0.029 * price + 0.30
+            unit = price - cost - fee
+            disc = 0.10 if n >= 10 else 0.05 if n >= 5 else 0.0
+            newp = round(price * (1 - disc), 2)
+            saved_ship = 3.25 * (n - 1) * 0.5                                             # one parcel instead of many — rough
+            return (f"{n} × {p['name']}: at full price you make {_eur(unit * n)} ({_eur(unit)} each after fees). "
+                    + (f"Yes, offer −{disc * 100:.0f} % ({_eur(newp)} each): you still make {_eur((newp - cost - 0.029 * newp - 0.30) * n)}, one parcel instead of {n}, and a bulk buyer is often a repeat buyer (a café, an office). "
+                       f"Say it as “{disc * 100:.0f} % off from {10 if n >= 10 else 5} pieces” so it looks like a rule, not a favour. Do check stock first: {p['stock']} in stock." if disc else
+                       f"Under 5 pieces I wouldn't discount — free shipping is a better gift (costs you ~€ 3–4, feels like more)."))
+        return (f"{n} pieces of {what}: as a rule −5 % from 5 pieces, −10 % from 10, −15 % from 25, never below 2× your cost; or free shipping instead of a discount for small lots. "
+                "State it as a rule (“10 % off from 10 pieces”), invoice it properly, and check the stock before you promise.")
+
+    def fees_paid(self, t):
+        st = self.store
+        label, keep = self._period(t)
+        paid = [o for o in st.data["orders"] if o["status"] in ("paid", "shipped", "delivered") and keep(o)]
+        if not paid:
+            return f"No paid orders {label}, so no payment fees yet."
+        rev = sum(o["total"] for o in paid)
+        fees = sum(0.029 * o["total"] + 0.30 for o in paid)
+        return (f"Payment fees {label}: {_eur(fees)} on {_eur(rev)} of sales ({fees / rev * 100:.1f} %, {len(paid)} orders at 2,9 % + € 0,30 each). "
+                f"The fixed € 0,30 hurts on small baskets — a higher average order (bundles, free-shipping threshold) lowers the percentage. "
+                f"Above ~€ 5.000 a month ask the provider for a lower rate; European cards via a local acquirer often cost 1,4–1,8 %.")
+
+    def set_free_shipping(self, amt):
+        st = self.store
+        pages = st.data.get("pages", {})
+        cur = pages.get("shipping", "")
+        if not cur:
+            return "The practice store has no shipping page to change yet."
+        new = re.sub(r"free over € ?[\d.,]+", f"free over {_eur(amt).replace(',00', '')}", cur)
+        if new == cur:
+            new = cur.replace("Italy · € 3,90", f"Italy · € 3,90 (free over {_eur(amt).replace(',00', '')})", 1)
+        return {"store_change": {"kind": "page", "page": "shipping", "value": new, "text": f"Shipping page: free shipping in Italy over {_eur(amt)} (was over € 39)"}}
+
+    def why_not_selling(self, what):
+        st = self.store
+        p = st.find_product(what) if what else None
+        if not p:
+            return None
+        day = st.data.get("day", 0)
+        views = None
+        sold = sum(l["qty"] for o in st.data["orders"] if o["status"] in ("paid", "shipped", "delivered") for l in o["lines"] if l["id"] == p["id"])
+        reasons = []
+        if p["stock"] == 0:
+            reasons.append("it's OUT OF STOCK — nobody can buy it; the page shows 'sold out'. That's the whole reason until you restock (say “we received 20 more …”).")
+        if p["price"] and (p["price"] - p.get("cost", 0)) / p["price"] > 0.72:
+            reasons.append(f"the price ({_eur(p['price'])}) is high for the category — compare it: say “compare prices for {p['name'].split(' (')[0].lower()}”.")
+        if not p.get("short"):
+            reasons.append("the page has no description — a bare name doesn't sell; say “write a description for …”.")
+        if len(p.get("details", [])) < 3:
+            reasons.append("few details on the page (size, material, care) — buyers leave when a question isn't answered.")
+        if day < 7:
+            reasons.append(f"it's only day {day} — with ~40 visits a day a product at 2 % conversion sells about one every 1–2 days; too early to judge.")
+        if not reasons:
+            reasons.append("the page looks fine, so it's traffic: nobody sees it. Put it in a post this week and in the 'you may also like' of the best seller, then judge after 14 days.")
+        return (f"{p['name']} — {sold} sold so far, {p['stock']} in stock. Why it isn't moving:\n" + "\n".join(f"• {r}" for r in reasons) +
+                "\nOrder of fixes: stock → price vs market → page (photo, first sentence, details) → traffic (posts, bundles). One change at a time, a week each.")
+
+    def page_language(self, page, lang, t):
+        key = ("shipping" if re.match(r"(shipping|spedizion)", page) else "returns" if re.match(r"(return|resi)", page) else "faq" if page.startswith("faq") else
+               "contact" if re.match(r"(contact|contatti)", page) else "")
+        lang = self.LANGS.get(lang.lower(), lang.title()) if lang else ""
+        if key and lang:
+            body = self.store.data.get("pages", {}).get(key, "")
+            if not body:
+                return f"The store has no {key} page yet."
+            return {"translate": body, "to": lang, "page": key}
+        return ("Bilingual shop — the practice store speaks one language per page for now. Two ways: (1) I translate the four help pages (say “translate the shipping page into English”) and the product descriptions one by one, and you tap Apply on each; "
+                "(2) for the real shop, most platforms (Shopify Translate & Adapt, WooCommerce + Polylang) hold both languages properly — pick the platform first. Product names, prices and legal pages must be identical in both languages.")
+
+    # ---- growth questions: first customers, ads money, VAT, bio -------------------------------------------
+    def first_customers(self, t):
+        it = bool(re.search(r"\b(come|primi|clienti)\b", t.lower()))
+        name = self.store.data.get("name", "the shop").split(" —")[0] if self.store is not None else "the shop"
+        en = ("First customers — in this order, cheapest first (weeks 1–4):\n"
+              "1. People who already know you: one honest message to friends/family/colleagues with the link and 'tell me what's confusing'. Aim: 5 orders and 5 pieces of feedback, not profit.\n"
+              "2. One channel, daily: pick TikTok or Instagram Reels (not both), 1 short video a day for 30 days — the product in use, the packing, a mistake you made. Say “tiktok ideas for <product>” and I write them.\n"
+              "3. Marketplaces as a side door: the same product on Etsy/eBay/Vinted brings buyers who would never find your site; move them to your shop with a card in the parcel (say “write a thank-you note”).\n"
+              "4. Local: 2–3 shops or cafés that match the product, 10 pieces on consignment; a market stall one Saturday = 50 real conversations.\n"
+              "5. Only then paid ads: € 5–10 a day on the one video that already worked organically (say “I have 200 euros for ads”).\n"
+              "What NOT to do: giveaways for followers, buying followers, 10 % discount pop-ups on day one, five platforms at once.\n"
+              f"Measure: visits, add-to-carts and orders per week — say “how are we doing compared to last week” and I read them from {name}.")
+        itx = ("Primi clienti — in quest'ordine, prima le cose gratis (settimane 1–4):\n"
+               "1. Chi già ti conosce: un messaggio onesto ad amici/colleghi con il link e 'dimmi cosa non è chiaro'. Obiettivo: 5 ordini e 5 feedback, non il profitto.\n"
+               "2. Un canale solo, ogni giorno: TikTok o Reels (non entrambi), 1 video breve al giorno per 30 giorni — il prodotto in uso, l'imballaggio, un errore che hai fatto. Dimmi “idee tiktok per <prodotto>” e li scrivo.\n"
+               "3. Marketplace come porta laterale: lo stesso prodotto su Etsy/eBay/Vinted porta compratori che non troverebbero mai il sito; portali nel tuo shop con un biglietto nel pacco.\n"
+               "4. Locale: 2–3 negozi o bar in tema, 10 pezzi in conto vendita; un mercatino di sabato = 50 conversazioni vere.\n"
+               "5. Solo dopo le ads: € 5–10 al giorno sul video che ha già funzionato da solo.\n"
+               "Da NON fare: giveaway per follower, follower comprati, pop-up −10 % il primo giorno, cinque piattaforme insieme.")
+        return itx if it else en
+
+    def ads_budget(self, amt, t):
+        amt = amt or 200.0
+        per_month = bool(re.search(r"\b(a month|per month|al mese|monthly)\b", t, re.I))
+        daily = amt / 30 if per_month else amt / 20
+        test = min(amt, max(30.0, amt * 0.4))
+        best = None
+        if self.store is not None:
+            try:
+                ps = [p for p in self.store.products() if p["stock"] >= 5]
+                best = max(ps, key=lambda p: p["price"] - p.get("cost", 0)) if ps else None
+            except Exception:
+                best = None
+        prod = best["name"].split(" (")[0] if best else "your best-margin product with stock"
+        return (f"{_eur(amt)}{' a month' if per_month else ''} for ads — my plan (small budgets die when spread thin):\n"
+                f"1. Spend € 0 for the first week: post 5–7 organic short videos of {prod}; the one with the best watch-time is your ad. Paying to promote an untested video is the classic way to lose {_eur(amt)}.\n"
+                f"2. Then ONE platform (Meta = Instagram+Facebook for home/gift products 25–55; TikTok for under-35 impulse buys), ONE product ({prod}), ONE goal (sales/conversions, never 'engagement' or 'followers').\n"
+                f"3. Test: {_eur(test)} over 5–7 days at ~{_eur(daily)} a day, 2–3 versions of the video, broad targeting (Italy, 25–55) — let the algorithm find the buyers.\n"
+                f"4. Read the numbers on day 7: cost per purchase must be under a third of the margin ({_eur((best['price'] - best.get('cost', 0)) / 3) if best else '~€ 3–4'}). Under → put the rest of the money on that video; over → stop, fix the page or the price, don't add budget.\n"
+                f"5. Keep {_eur(amt - test)} in reserve for the winner; never top up a loser.\n"
+                "Before the first euro: the pixel/tracking installed, a product page that loads in 2 s on a phone, shipping cost visible, and stock for 30+ orders. I'll prepare the ad text and the shot list when you say “write the ad for {0}”.".format(prod))
+
+    def vat_on(self, amt, what, t):
+        rate = 0.22
+        if re.search(r"\b(book|libro|food|cibo|bread|pane|pasta|pasta|baby|infant|medic)\b", (what or "") + " " + t, re.I):
+            rate = 0.04 if re.search(r"\b(book|libro|bread|pane|pasta|milk|latte)\b", (what or "") + " " + t, re.I) else 0.10
+        net = amt / (1 + rate)
+        vat = amt - net
+        it = bool(re.search(r"\b(iva|quanto)\b", t.lower()))
+        core = (f"IVA su {_eur(amt)} (prezzo al pubblico, IVA inclusa al {rate * 100:.0f} %): {_eur(vat)} di IVA, {_eur(net)} netto." if it else
+                f"VAT on {_eur(amt)} (consumer price, VAT included at {rate * 100:.0f} %): {_eur(vat)} is VAT, {_eur(net)} is yours before costs.")
+        return core + ("\nIn Italy consumer prices always include VAT. Regime forfettario: you don't charge VAT at all (and can't deduct it), so the {0} stays whole but your supplier's VAT is a cost. "
+                       "Ordinary regime: you pay the state the {1} minus the VAT you paid suppliers. Selling to consumers in other EU countries above € 10.000/year → their VAT rate via OSS.").format(_eur(amt), _eur(vat)) if not it else \
+               "\nIn forfettario l'IVA non si applica (e non si scarica): il prezzo resta intero ma l'IVA del fornitore è un costo. In regime ordinario versi l'IVA incassata meno quella pagata ai fornitori. Sopra € 10.000/anno di vendite UE → IVA del paese del cliente (OSS)."
+
+    def shop_bio(self, t):
+        st = self.store
+        name = st.data.get("name", "Green Nest").split(" —")[0] if st is not None else "Your shop"
+        prods = [p["name"].split(" (")[0].lower() for p in st.products()[:3]] if st is not None else ["products"]
+        it = bool(re.search(r"\b(scrivi|profilo|negozio)\b", t.lower()))
+        cats = ", ".join(prods[:2]) + (f" & {prods[2]}" if len(prods) > 2 else "")
+        en = (f"Instagram bio for {name} (150 characters max — pick one, edit the city):\n"
+              f"1. 🌿 {name} · everyday things that last\n📦 ships from Bergamo in 1 day · 🇮🇹 free shipping over € 39\n👇 shop\n"
+              f"2. {name} — {cats}, chosen by hand, no plastic.\nSmall shop, real people. Orders ship next day 📦\n"
+              f"3. Less stuff, better stuff. {cats}.\nQuestions? DM us — we answer within 24 h. 👇 shop\n"
+              "Rules: what you sell + why you're different + one proof (ships in 1 day / made in …) + the link. No hashtags in the bio, no 'welcome to my page'. Put the link to the shop, not to a link tree, until you have 3+ things to link.")
+        itx = (f"Bio Instagram per {name} (max 150 caratteri — scegline una):\n"
+               f"1. 🌿 {name} · oggetti di tutti i giorni che durano\n📦 spediamo da Bergamo in 1 giorno · spedizione gratis da € 39\n👇 shop\n"
+               f"2. {name} — {cats}, scelti a mano, zero plastica.\nPiccolo negozio, persone vere. Spedizione il giorno dopo 📦\n"
+               f"3. Meno cose, cose migliori. {cats}.\nDomande? Scrivici in DM — rispondiamo entro 24 h. 👇 shop\n"
+               "Regole: cosa vendi + perché sei diverso + una prova (spedito in 1 giorno / fatto in …) + il link. Niente hashtag in bio, niente 'benvenuti'.")
+        return itx if it else en
 
     # ---- small maths, reminders, notes, guidance -------------------------------------------------------
     def maths(self, m):
