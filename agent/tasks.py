@@ -208,6 +208,9 @@ class Tasks:
         if want_doc and opened:
             self.last_doc = self._research_doc(topic, brief, opened, images)
             out = (f"Research: {topic}\n\n{brief}" if brief else f"Research: {topic} — {len(opened)} pages read; the document has the key points per page with links and pictures.") + f"\n({len(opened)} pages read in {time.time() - t0:.0f}s)"
+        elif want_doc:
+            self.last_doc = None
+            out += "\nNo document this time — none of the pages had anything solid on it. Tell me another angle (other words, a site to start from) and I try again."
         return out
 
     def _page_image(self, b):
@@ -325,14 +328,14 @@ class Tasks:
                     ship = re.findall(r"\b\d+\s?(?:-|to)\s?\d+\s?(?:business )?days\b", text, re.I)[:3]
                     moq = re.findall(r"\bMOQ\b[^.]{0,60}|\bminimum order[^.]{0,60}", text, re.I)[:2]
                     kind = "directory/list" if re.search(r"\b(best|top \d+|list of)\b", (b.page.title() or ""), re.I) else "supplier/site"
-                    rows.append((dom, kind, (b.page.title() or "")[:70], ", ".join(prices) or "-", ", ".join(ship) or "-", "; ".join(m.strip() for m in moq) or "-"))
+                    rows.append((dom, kind, (b.page.title() or "")[:70], ", ".join(prices) or "-", ", ".join(ship) or "-", "; ".join(m.strip() for m in moq) or "-", r["url"]))
         if not rows:
             return f"Supplier comparison for {product}: nothing readable found (search blocked or pages behind walls)."
         out = [f"Supplier comparison: {product}", "site | kind | page | prices seen | shipping times | MOQ notes"]
-        out += [" | ".join(r) for r in rows]
+        out += [" | ".join(r[:6]) for r in rows]
         out.append("Note: read-only research; nothing was contacted or ordered.")
         if self.memory:
-            self.memory.note("suppliers", product, "\n".join(out[2:-1]), [f"https://{r[0]}" for r in rows])
+            self.memory.note("suppliers", product, "\n".join(out[2:-1]), [r[6] for r in rows])
         if want_doc:
             from . import library
             doc = library.Doc(f"Comparison: {product}", f"{len(rows)} sites · {time.strftime('%Y-%m-%d %H:%M')}", kind="compare")
@@ -340,7 +343,9 @@ class Tasks:
                         "nothing was contacted or ordered. Supplier sites are more useful than directory lists.")
             doc.table("Side by side", [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows], header=["site", "kind", "page", "prices seen", "shipping times", "MOQ notes"])
             for r in rows:
-                doc.source(f"https://{r[0]}", r[2])
+                doc.option(r[2] or r[0], r[6], price=r[3] if r[3] != "-" else "", grade="ok",
+                           facts={k: v for k, v in (("Kind", r[1]), ("Prices seen", r[3]), ("Shipping times", r[4]), ("Minimum order", r[5])) if v and v != "-"})
+                doc.source(r[6], r[2])
             self.last_doc = doc.save(f"compare-{product[:40]}")
             self.log("doc_saved", title=doc.title, options=len(rows))
             out = [f"Supplier comparison: {product} — {len(rows)} sites, best-looking first in the document (table with prices, shipping, MOQ, links)."]

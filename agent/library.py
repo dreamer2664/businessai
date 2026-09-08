@@ -95,7 +95,7 @@ class Doc:
     # ---- output --------------------------------------------------------------------
     def html(self):
         srcs = list(dict.fromkeys(self.sources))
-        src_html = ("<h2>Pages I read</h2><ol class=src>" + "".join(f"<li>{_linkify(s)}</li>" for s in srcs) + "</ol>") if srcs else ""
+        src_html = ("<h2>Sources — pages I read</h2><ol class=src>" + "".join(f"<li>{_linkify(s)}</li>" for s in srcs) + "</ol>") if srcs else ""
         return (f"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                 f"<title>{html.escape(self.title)}</title><style>{CSS}</style></head><body>"
                 f"<h1>{html.escape(self.title)}</h1><div class=sub>{html.escape(self.subtitle)} · {self.created:%d %b %Y, %H:%M} · written by Business AI</div>"
@@ -134,7 +134,7 @@ def _inline(text):
 def _linkify(s, escaped=False):
     if not escaped:
         s = html.escape(s)
-    return re.sub(r"(https?://[^\s<]+)", lambda m: f'<a href="{m.group(1)}">{m.group(1)[:80]}{"…" if len(m.group(1)) > 80 else ""}</a>', s)
+    return re.sub(r"((?:https?|file)://[^\s<]+)", lambda m: f'<a href="{m.group(1)}">{m.group(1)[:80]}{"…" if len(m.group(1)) > 80 else ""}</a>', s)
 
 
 def _data_uri(img):
