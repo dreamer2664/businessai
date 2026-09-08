@@ -122,6 +122,15 @@ def random_place(rng=random, timeout=40):
             "cuisine": t.get("cuisine", ""), "lat": c.get("lat"), "lon": c.get("lon"), "osm_id": f"{e['type']}/{e['id']}"}
 
 
+def geocode(address, city, country="", timeout=15):
+    q = ", ".join(x for x in (address, city, country) if x)
+    req = urllib.request.Request("https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({"q": q, "format": "json", "limit": 1}),
+                                 headers={"User-Agent": "businessai-sitebuilder/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        d = json.loads(r.read().decode())
+    return {"lat": float(d[0]["lat"]), "lon": float(d[0]["lon"])} if d else {}
+
+
 # ---- the pages -------------------------------------------------------------------------------------------
 def _svg_hero(name, primary, seed=0):
     rng = random.Random(seed)
@@ -222,6 +231,11 @@ class SiteBuilder:
         """Write the site. Returns {dir, index, pages, copy}."""
         b = dict(b)
         b["kind"] = b.get("kind") if b.get("kind") in KINDS else "shop"
+        if not b.get("lat") and (b.get("address") or b.get("city")):
+            try:
+                b.update(geocode(b.get("address") or "", b.get("city") or "", b.get("country") or ""))
+            except Exception as e:
+                self.log("geocode_failed", error=str(e)[:80])
         k = KINDS[b["kind"]]
         c = self.copy(b)
         slug = slugify(f"{b['name']}-{b.get('city', '')}")
@@ -243,10 +257,12 @@ class SiteBuilder:
         services = f"""<section><h2>Services</h2><div class="grid">{"".join(f'<div class="card">{_svg_card(i + 10, p)}<div class="t"><h3>{html.escape(s["title"])}</h3><p>{html.escape(s["text"])}</p></div></div>' for i, s in enumerate(c['services']))}</div>
 <p style="margin-top:24px"><a class="btn" href="contact.html">{html.escape(c['cta'])}</a></p></section>"""
         gallery = f"""<section><h2>Gallery</h2><p class="lead">A first look. Real photos go here — drop them into the <code>gallery</code> folder and replace these placeholders.</p><div class="grid">{"".join(f'<div class="card">{_svg_card(i + 20, p)}<div class="t"><h3>{html.escape(t)}</h3></div></div>' for i, t in enumerate(["The place", "Our team", "Details", "At work", "Happy customers", "Around us"]))}</div></section>"""
-        contact = f"""<section><h2>Contact</h2><div class="facts">{facts}</div></section>
+        reach = (f"The quickest way to reach {html.escape(b['name'])} is by phone" + (f" at {html.escape(b['phone'])}" if b.get('phone') else "") +
+                 f" or simply by coming in{(' during opening hours (' + html.escape(b['hours']) + ')') if b.get('hours') else ''}. For anything that can wait, use the form below and we reply within one working day.")
+        contact = f"""<section><h2>Contact</h2><p class="lead">{reach}</p><div class="facts">{facts}</div></section>
 <section><h2>Send us a message</h2><form onsubmit="event.preventDefault();this.querySelector('button').textContent='Thanks — we will reply soon';"><input placeholder="Your name" required><input type="email" placeholder="Your e-mail" required><textarea rows="5" placeholder="How can we help?" required></textarea><button type="submit">Send</button></form>
 <p><small>This form is a demo (no server). Connect it to Formspree, Netlify Forms or your e-mail when the site goes live.</small></p></section>
-<section><h2>Map</h2><iframe class="map" loading="lazy" title="map" src="https://www.openstreetmap.org/export/embed.html?bbox={(b.get('lon') or 0) - 0.006}%2C{(b.get('lat') or 0) - 0.004}%2C{(b.get('lon') or 0) + 0.006}%2C{(b.get('lat') or 0) + 0.004}&layer=mapnik&marker={b.get('lat') or 0}%2C{b.get('lon') or 0}"></iframe></section>""" if b.get("lat") else f"""<section><h2>Contact</h2><div class="facts">{facts}</div></section>
+<section><h2>Map</h2><iframe class="map" loading="lazy" title="map" src="https://www.openstreetmap.org/export/embed.html?bbox={(b.get('lon') or 0) - 0.006}%2C{(b.get('lat') or 0) - 0.004}%2C{(b.get('lon') or 0) + 0.006}%2C{(b.get('lat') or 0) + 0.004}&layer=mapnik&marker={b.get('lat') or 0}%2C{b.get('lon') or 0}"></iframe></section>""" if b.get("lat") else f"""<section><h2>Contact</h2><p class="lead">{reach}</p><div class="facts">{facts}</div></section>
 <section><h2>Send us a message</h2><form onsubmit="event.preventDefault();this.querySelector('button').textContent='Thanks — we will reply soon';"><input placeholder="Your name" required><input type="email" placeholder="Your e-mail" required><textarea rows="5" placeholder="How can we help?" required></textarea><button type="submit">Send</button></form></section>"""
         privacy = f"""<section><h2>Privacy</h2><p class="lead">{html.escape(b['name'])} only uses the information you send through the contact form to answer you. No tracking cookies are set by this website. To have your data removed, write to us at the address on the contact page.</p></section>"""
         for fn, body in (("index.html", home), ("about.html", about), ("services.html", services), ("gallery.html", gallery), ("contact.html", contact), ("privacy.html", privacy)):

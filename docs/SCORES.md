@@ -22,3 +22,12 @@
 | tests/live.txt — operator on REAL shops | 10 goals on real sites, re-runnable with `python3 engine/scripts/score_live.py` (10–15 min): MediaWorld returns page + return window (30 days, found via the footer link after closing the cookie wall); Unieuro standard delivery cost (shipping-conditions page, quotes the page's own "costo massimo 150 €" sentence); Unieuro search 'spazzolino elettrico' → first price; IKEA cheapest BILLY; Amazon.it first bamboo toothbrush price; books.toscrape open the first book → price + availability; MediaWorld how to contact customer service; 3 known walls that must be refused honestly within 60 s (expired IKEA product link → redirect, Etsy → DataDome, Decathlon → Cloudflare) | **10/10** in 571 s (7 answered, 3 walls refused; on that run Amazon.it and one MediaWorld page turned the robot away too and were reported honestly) | a site that turns the robot away on the day counts as an honest refusal, not a failure; a site unreachable from the machine is skipped. Never an invented figure: every number is checked against the page |
 | operator, desktop mode (milestone 8) | same shop page in a real Chromium window, pixels only (OCR + xdotool): price, add to cart (asked first), cart count, second product's price | **4/4** | 48–162 s per goal; the thinker sees only the OCR lines |
 
+## Phase 2 (1.6)
+
+| score | result | what it proves | harness |
+|---|---|---|---|
+| brief | 30/30 | plain sentences → kind / deliverable / pace / deadline / budget / topic, counterfeit flag, amend while pending, Italian pace words | `python3 engine/scripts/score_brief.py` |
+| sellers | 27/27 | deep seller check on a fake marketplace: listing, reviews (right seller), social page + comments, reliability grades, document with pictures + links, store proposal | `timeout 280 python3 engine/scripts/score_sellers.py` |
+| accounts | 12/12 | own-account sign-up on a fake site (identity, terms, code from mail, checkbox CAPTCHA), login, never-sign-up list, no double sign-up | `timeout 280 python3 engine/scripts/score_accounts.py` |
+| sites | 28/28 | website builder: sentence → brief, 6-page self-contained site, facts grounded, own-browser check (broken links, leftovers, mobile overflow), zip + screenshot, all 15 kinds, training switch | `timeout 280 python3 engine/scripts/score_sites.py` |
+| phone | 23/23 | (re-run after Phase 2 changes) | `timeout 240 python3 engine/scripts/score_phone.py` |

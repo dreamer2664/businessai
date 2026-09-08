@@ -31,9 +31,9 @@ logs in or posts publicly. Owner's message: """
 _QUICK = r"\b(real quick|quick(ly)?|asap|right away|fast|hurry|in a hurry|subito|veloce|rapido)\b"
 _SLOW = r"\b(take (it|your time) (real |really )?slow|take your time|no rush|no hurry|slowly|whenever|con calma|piano)\b"
 _DEADLINE = r"\b(?:in|within|entro|tra)\s+(\d+|a|an|one|two|three|five|ten|fifteen|twenty|thirty|half an)\s*(min(?:ute)?s?|h(?:ou)?rs?|ore|minuti|day|days|giorni)\b"
-_AWAY = r"\b(?:(?:i(?:'m| am| will be| ll be)|gonna be|going to (?:be|work)|at work|out|away|busy|sleeping|asleep)\D{0,40}?)(\d+|a|an|one|two|three|four|five|six|eight|ten|half an)\s*(h(?:ou)?rs?|ore|min(?:ute)?s?|minuti)\b"
+_AWAY = r"\b(?:(?:i(?:'m| am| will be| ll be)|gonna be|going to (?:be|work)|at work|out|away|busy|sleeping|asleep|sono (?:fuori|via|al lavoro|occupat[oa])|torno|dormo)\D{0,40}?)(\d+|a|an|one|two|three|four|five|six|eight|ten|half an|un|una|due|tre|quattro|cinque|sei|otto)\s*(h(?:ou)?rs?|or[ae]|min(?:ute)?s?|minuti)\b"
 _NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "eight": 8, "ten": 10, "fifteen": 15,
-        "twenty": 20, "thirty": 30, "half an": 0.5}
+        "twenty": 20, "thirty": 30, "half an": 0.5, "un": 1, "una": 1, "due": 2, "tre": 3, "quattro": 4, "cinque": 5, "sei": 6, "otto": 8}
 
 
 def _minutes(n, unit):
@@ -41,7 +41,7 @@ def _minutes(n, unit):
     if n is None:
         return None
     u = unit.lower()
-    if u.startswith(("h", "ore")):
+    if u.startswith(("h", "ore", "ora")):
         return int(n * 60)
     if u.startswith(("day", "giorn")):
         return int(n * 60 * 24)
@@ -51,7 +51,7 @@ def _minutes(n, unit):
 _PACE_CLAUSES = [_QUICK, _SLOW, _DEADLINE, _AWAY,
                  r"\b(make it quick|i need it|i want it|i'?m (going to|gonna) (work|be out|be away|sleep)[^,.:;]*|take it (real |really )?slow|no rush)\b",
                  r"\b(for|in) (the next )?(\d+|a|an|one|two|three|four|five|six|eight|ten) ?(h(?:ou)?rs?|min(?:ute)?s?)\b"]
-_LEAD = r"^(?:(?:hey|hi|hello|ciao|ok|okay|so|please|per favore|also|and|then|now|real quick|quick(?:ly)?|can you|could you|would you|will you|i want you to|i need you to|i'?d like you to|i want|i need|i'?d like|find me|find|get me|look for|search for|search|show me|tell me|give me|make me|please)[ ,:]+)+"
+_LEAD = r"^(?:(?:hey|hi|hello|ciao|ok|okay|so|please|per favore|also|and|then|now|real quick|quick(?:ly)?|can you|could you|would you|will you|i want you to|i need you to|i'?d like you to|i want|i need|i'?d like|find me|find|get me|look for|search for|search|show me|tell me|give me|make me|compare|write me|trovami|cercami|trova|cerca)[ ,:]+)+"
 
 
 def topic_of(text):
@@ -96,11 +96,12 @@ def parse_pace(text):
                 pass                                                    # "in 5 hours" already read as the away-time
             else:
                 out.update(deadline_min=mins, why=f"you want it in {mins} minutes" if mins < 120 else f"you want it in {mins // 60} hours")
-                out["pace"] = "quick" if mins <= 20 else out["pace"]
+                out["pace"] = "quick" if mins <= 15 else out["pace"]
     if re.search(_QUICK, low) and out["pace"] != "slow":
         out["pace"] = "quick"
         out["why"] = out["why"] or "you said quick"
-        out["deadline_min"] = out["deadline_min"] or 10
+        if out["deadline_min"] is None and re.search(r"\b(in 10|10 min|ten min|real quick|make it quick)\b", low):
+            out["deadline_min"] = 10                                # a timer only when the owner gave (or clearly implied) minutes
     if re.search(_SLOW, low):
         out["pace"] = "slow"
         out["why"] = out["why"] or "you said to take it slow"
@@ -114,14 +115,16 @@ def _rule_brief(text, pace):
     goal = text.strip().rstrip(".!?")
     kind, deliverable = "ask", "answer"
     url = re.search(r"https?://\S+", text)
+    url = url or re.search(r"\b[a-z0-9.-]+\.(?:com|it|de|fr|es|net|org|co|io)(?:/\S*)?", low)
     if url and re.search(r"youtube\.com/watch|youtu\.be/|youtube\.com/shorts", url.group(0)):
         steps = ["Open the video and read the captions", "Note the concrete ideas and figures", "Send you the list"]
         return {"goal": goal, "deliverable": "list", "kind": "watch", "steps": steps, "questions": [], "counterfeit": False, "topic": url.group(0)}
     if url and len(re.sub(r"https?://\S+", "", low).split()) <= 3 or (url and re.search(r"\b(summari[sz]e|read|riassumi|tl;?dr|what does it say)\b", low)):
         steps = ["Open the page and read it fully", "Keep the key points with figures", "Write the summary"]
         return {"goal": goal, "deliverable": "answer", "kind": "summarize", "steps": steps, "questions": [], "counterfeit": False, "topic": url.group(0)}
-    if re.search(r"\b(find|look for|search|cerca|trova)\b.*\b(seller|sellers|shop|shops|store|stores|supplier|suppliers|listing|listings|options?|deals?|cheap|good)\b", low) \
-            or re.search(r"\b(reliable|trustworthy|legit|reviews?|complaints?)\b", low):
+    if re.search(r"\b(find|look for|search|cerca|trova|trovami|cercami)\b.*\b(seller|sellers|shop|shops|store|stores|supplier|suppliers|listing|listings|options?|deals?|cheap|good|venditor[ei]|fornitor[ei]|negoz[io])\b", low) \
+            or re.search(r"\b(reliable|trustworthy|legit|reviews?|complaints?|affidabil[ei]|recensioni)\b", low) \
+            or (url and re.search(r"\b(seller|shop|store|venditore|negozio|listing|member|profile|user)\b", low) and re.search(r"\b(ok|okay|good|legit|safe|trust|fine|serious|serio|affidabile|real|scam|fake)\b", low)):
         kind, deliverable = "seller_check", "document"
     elif re.search(r"\b(compare|comparison|vs\.?|versus|which is (better|cheaper))\b", low):
         kind, deliverable = "compare", "document"
