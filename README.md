@@ -6,7 +6,10 @@ and asking questions through Telegram.
 
 **Status: milestone 11 — practice store** (`/store open`): a working shop the agent serves on your machine — catalogue, cart,
 practice checkout, admin panel, simulated customers and days — where it ships, reorders and reprices *by proposal* (you tap
-Apply) and answers store customers from the store's own pages. Score 27/27. Before that, milestone 10 — real customer channels**: your shop e-mail (any provider) and Facebook Page / Instagram messages
+Apply) and answers store customers from the store's own pages. Score 40/40. Store extras by chat (all as proposals, undo-able):
+**discount codes** (“make a code WELCOME10 for 10 % off”, “which codes are active?”, “switch off the code …”), **gift wrap** at
+checkout (“add a gift wrap option at 2.90”), a **shop notice** on every page (“put a notice on the shop saying: …”) that customer
+replies repeat while it is up; customers asking for a discount are given the live code. Before that, milestone 10 — real customer channels**: your shop e-mail (any provider) and Facebook Page / Instagram messages
 are read every few minutes, every real customer message gets a drafted reply on your phone with **Approve & send / Edit /
 Reject**, and the answer goes out only after your tap (docs/CHANNELS.md; 36/36 on the channel checks). Before that: milestone 9,
 bigger jobs for the operator (`/do` compares several pages, fills in forms, closes cookie banners, 15/15), eyes (vision

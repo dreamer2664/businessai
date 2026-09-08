@@ -1010,7 +1010,7 @@ class Talk:
         if m:
             return {"store_change": {"kind": "gift_wrap", "active": False}}
         m = self.GIFT_WRAP.search(t)
-        if m:
+        if m and not (t.rstrip().endswith("?") or re.match(r"^\s*(should|shall|do you think|is it worth|would it|could we|what if|dovrei|conviene)\b", t, re.I)):
             price = _num(next((g for g in (m.group("price"), m.group("price2"), m.group("price3"), m.group("price4")) if g), 2.9))
             return {"store_change": {"kind": "gift_wrap", "active": True, "price": price}}
         m = self.NOTICE_OFF.search(t)

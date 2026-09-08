@@ -864,6 +864,93 @@ r = A.respond("who placed order 51003?")
 check("'who placed order 51003?' → the order card with the customer line", isinstance(r, str) and r.startswith("Order #51003") and "@" in r, (r or "")[:100])
 r = A.respond("how much did order 99999 pay?")
 check("unknown order → says so", isinstance(r, str) and r.startswith("There's no order #99999"), (r or "")[:100])
+# ---- round 17: discount codes, gift wrap, shop notice -------------------------------------------------------
+for p_ in [p for p in A.store.data["proposals"] if p["status"] == "open"]:
+    A.store.reject(p_["id"])
+A.bot.sent.clear(); A.last_brief = None; A.mind.queue.clear()
+r = A.respond("which codes are active?")
+check("'which codes are active?' with none → says none + how to make one", isinstance(r, str) and r.startswith("No discount codes exist yet"), (r or "")[:100])
+r = A.respond("make a code BIG for 70 % off")
+check("70 % code → refused with a reason, no proposal", isinstance(r, str) and "won't prepare" in r and not [p for p in A.store.data["proposals"] if p["status"] == "open"], (r or "")[:100])
+r = A.respond("make a code WELCOME10 for 10 % off"); time.sleep(0.2)
+last = A.bot.sent[-1][0] if A.bot.sent else ""
+check("'make a code WELCOME10 for 10 % off' → proposal with give-away per use + margin effect", r is None and last.startswith("🏷️ Code WELCOME10: 10 % off") and "given away per use" in last and "margin" in last and A.bot.sent[-1][1], last[:120])
+check("…code not live before the tap", A.store.code("WELCOME10") is None)
+r = A.respond("approve that")
+check("'approve that' → code live", isinstance(r, str) and r.startswith("✅ Applied: code WELCOME10") and A.store.code("WELCOME10")["active"], (r or "")[:100])
+disc, cd = A.store.discount_for("welcome10", 30.0)
+check("discount_for is case-insensitive and 10 % of 30 = 3", disc == 3.0 and cd["code"] == "WELCOME10", str(disc))
+r = A.respond("which codes are active?")
+check("codes list → WELCOME10 live, used 0×", isinstance(r, str) and r.startswith("Discount codes:") and "WELCOME10: 10 % off — live, used 0×" in r, (r or "")[:100])
+o_ = A.store.place_order([("stoneware-mug", "", 2)], {"name": "Test Buyer", "email": "tb@example.com", "address": "Via Roma 1"}, "IT", code="WELCOME10", wrap=True)
+check("order with the code → discount on the order, total lower, code use counted; wrap ignored while it's off",
+      o_ and o_.get("code") == "WELCOME10" and abs(o_["total"] - (o_["subtotal"] - o_["discount"] + o_["shipping"])) < 0.01 and A.store.code("WELCOME10")["uses"] == 1 and not o_.get("gift_wrap"), str(o_ and (o_["subtotal"], o_.get("discount"), o_["total"])))
+r = A.respond("how many people used the code?")
+check("'how many people used the code?' → uses + money given away", isinstance(r, str) and "used 1×" in r and "Given away so far: €" in r, (r or "")[:100])
+r = A.respond("create a code SPRING for 5 euro off over 40"); time.sleep(0.2)
+last = A.bot.sent[-1][0] if A.bot.sent else ""
+check("fixed-amount code with a minimum → proposal text", r is None and last.startswith("🏷️ Code SPRING: € 5,00 off on orders over € 40,00"), last[:100])
+r = A.respond("reject that")
+check("…rejected → SPRING never created", isinstance(r, str) and r.startswith("❌") and A.store.code("SPRING") is None, (r or "")[:100])
+A.inbox.add("store", "anna77@example.com", "Hi, is there a discount code for a first order?", subject="discount"); A.bot.sent.clear(); A.process_inbox()
+last = A.bot.sent[-1][0] if A.bot.sent else ""
+check("customer asks for a code while WELCOME10 is live → the draft gives WELCOME10, no warning flag", "enter the code WELCOME10 at checkout" in last and "10% off" in last and "⚠️" not in last, last[-160:])
+for it in A.inbox.items("new"):
+    A.inbox.decide(it["id"], "rejected") if hasattr(A.inbox, "decide") else None
+r = A.respond("switch off the code WELCOME10"); time.sleep(0.2)
+check("'switch off the code WELCOME10' → proposal", r is None and A.bot.sent[-1][0].startswith("🏷️ Switch off code WELCOME10"), (A.bot.sent[-1][0] if A.bot.sent else "")[:100])
+r = A.respond("approve that")
+check("…code off", isinstance(r, str) and "switched off" in r and not A.store.code("WELCOME10")["active"], (r or "")[:100])
+check("a switched-off code no longer discounts", A.store.discount_for("WELCOME10", 30.0)[0] == 0.0)
+r = A.respond("undo that")
+check("'undo that' after switching a code off → code back on", isinstance(r, str) and r.startswith("↩️ Undone: code WELCOME10") and A.store.code("WELCOME10")["active"], (r or "")[:100])
+r = A.respond("should I offer gift wrapping?")
+check("'should I offer gift wrapping?' stays advice (no proposal)", isinstance(r, str) and r.startswith("Gift wrapping — yes"), (r or "")[:80])
+r = A.respond("add a gift wrap option at 2.90"); time.sleep(0.2)
+last = A.bot.sent[-1][0] if A.bot.sent else ""
+check("'add a gift wrap option at 2.90' → proposal with cost and margin per wrapped order", r is None and last.startswith("🎁 Gift wrap at € 2,90") and "€ 2,10 extra per wrapped order" in last, last[:100])
+r = A.respond("approve that")
+check("…gift wrap on at € 2,90", isinstance(r, str) and "gift wrap on at € 2,90" in r and A.store.gift_wrap()["active"] and A.store.gift_wrap()["price"] == 2.9, (r or "")[:100])
+o2_ = A.store.place_order([("stoneware-mug", "", 1)], {"name": "Test Buyer", "email": "tb@example.com", "address": "Via Roma 1"}, "IT", wrap=True)
+check("wrapped order → € 2,90 on the order and in the total", o2_ and o2_.get("gift_wrap") == 2.9 and abs(o2_["total"] - (o2_["subtotal"] + 2.9 + o2_["shipping"])) < 0.01, str(o2_ and o2_["total"]))
+n_ = A.store.numbers()
+check("numbers() counts discounts, code orders and wraps", n_.get("code_orders", 0) >= 1 and n_.get("discounts", 0) > 0 and n_.get("wraps", 0) >= 1, str({k: n_.get(k) for k in ("discounts", "code_orders", "wraps")}))
+import urllib.request as _ur, urllib.parse as _up
+if not A.store.server:
+    A.respond("open the practice store"); time.sleep(0.5)
+_op = _ur.build_opener(_ur.HTTPCookieProcessor()); _base = A.store_url().rstrip("/")
+_op.open(_base + "/cart/add", _up.urlencode({"id": "stoneware-mug", "qty": "1"}).encode())
+_ck = _op.open(_base + "/checkout").read().decode()
+check("checkout page shows the code field and the gift-wrap tick box", "name=code" in _ck and "name=wrap" in _ck and "Gift wrap (+€ 2,90)" in _ck, _ck[:0])
+_rp = _op.open(_base + "/checkout/pay", _up.urlencode({"name": "Web Buyer", "email": "wb@example.com", "address": "x", "country": "IT", "code": "NOPE"}).encode()).read().decode()
+check("unknown code at checkout → refused politely, no order placed", "is not valid for this cart" in _rp and A.store.data["orders"][-1]["customer"]["email"] != "wb@example.com", _rp[:0])
+_rp = _op.open(_base + "/checkout/pay", _up.urlencode({"name": "Web Buyer", "email": "wb@example.com", "address": "x", "country": "IT", "code": "welcome10", "wrap": "1"}).encode()).read().decode()
+_o = A.store.data["orders"][-1]
+check("web checkout with code + wrap → order page shows both rows", _o["customer"]["email"] == "wb@example.com" and _o.get("code") == "WELCOME10" and _o.get("gift_wrap") == 2.9 and "Code WELCOME10" in _rp and "Gift wrap" in _rp, str((_o.get("code"), _o.get("gift_wrap"))))
+r = A.respond("put a notice on the shop saying: Orders placed after 20 December ship on 7 January"); time.sleep(0.2)
+last = A.bot.sent[-1][0] if A.bot.sent else ""
+check("'put a notice on the shop saying: …' → proposal with the clean text", r is None and last.startswith("📣 Notice on every shop page: “Orders placed after 20 December ship on 7 January”"), last[:120])
+r = A.respond("approve that")
+_fp = _op.open(_base + "/").read().decode()
+check("…notice live: banner on the front page", isinstance(r, str) and "shop notice" in r and "class=notice" in _fp and "Orders placed after 20 December" in _fp, (r or "")[:80])
+for _i in range(40):                                              # the shop-read thread from "open the practice store" may still hold 'busy'
+    if not A.busy:
+        break
+    time.sleep(0.25)
+A.inbox.add("store", "anna77@example.com", "Hello, how long does delivery to Germany take?", subject="delivery"); A.bot.sent.clear(); A.process_inbox()
+last = A.bot.sent[-1][0] if A.bot.sent else ""
+check("while the notice is up every customer draft repeats it above the sign-off", "Please note: Orders placed after 20 December ship on 7 January." in last and last.index("Please note") < last.index("Best regards"), repr(last[-300:]))
+r = A.respond("remove the notice"); time.sleep(0.2)
+r = A.respond("approve that")
+_fp = _op.open(_base + "/").read().decode()
+check("'remove the notice' + approve → banner gone", isinstance(r, str) and "notice removed" in r and "class=notice" not in _fp, (r or "")[:80])
+r = A.respond("what did I approve today?")
+check("decision log lists code / gift wrap / notice decisions", isinstance(r, str) and "code WELCOME10" in r and "gift wrap on at € 2,90" in r and "notice" in r, (r or "")[:160])
+r = A.respond("turn off gift wrap"); time.sleep(0.2)
+check("'turn off gift wrap' → proposal", r is None and A.bot.sent[-1][0].startswith("🎁 Remove the gift-wrap option"), (A.bot.sent[-1][0] if A.bot.sent else "")[:80])
+r = A.respond("approve that")
+_ck = _op.open(_base + "/checkout").read().decode() if _op.open(_base + "/cart/add", _up.urlencode({"id": "stoneware-mug", "qty": "1"}).encode()) else ""
+check("…gift wrap gone from checkout", isinstance(r, str) and "gift wrap off" in r and "name=wrap" not in _ck, (r or "")[:80])
 r = A.respond("customer says the mug arrived broken, photo attached")
 check("forwarded customer sentence without 'what do I answer' → inbox draft + asks for the photo", r is None and "photo" in A.bot.sent[-1][0].lower(), A.bot.sent[-1][0][:100])
 r = A.respond("does temu sell the cork case cheaper?")
