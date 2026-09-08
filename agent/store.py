@@ -351,7 +351,7 @@ class Store:
                     if p:
                         p["stock"] += l["qty"]
             o["status"] = status
-            o["events"].append({"t": _now(), "what": status + (f" — {note}" if note else "")})
+            o["events"].append({"t": _now(), "day": self.data.get("day", 0), "what": status + (f" — {note}" if note else "")})
             if status == "shipped":
                 o["tracking"] = "GLS" + hashlib.sha1(str(n).encode()).hexdigest()[:10].upper()
             self.save()

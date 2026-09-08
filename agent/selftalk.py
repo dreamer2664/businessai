@@ -52,6 +52,13 @@ class SelfTalk:
         (r"\bwhat (?:does|do) (?:the |our |my )?(?P<page>shipping|delivery|returns?|refunds?|faq|about|contact|privacy|terms) (?:page|policy|pages|section|text)(?: on the (?:site|shop|store))? (?:say|says|read|state|contain|look like)\b|\b(?:read|show|give|send) (?:me )?(?:the |our |my )?(?P<page2>shipping|delivery|returns?|refunds?|faq|about|contact|privacy|terms) (?:page|policy|text|wording)\b|\bcosa (?:dice|c'è scritto (?:nel|sulla|nella)) (?:la )?pagina (?P<page3>spedizioni|resi|faq|contatti|privacy|termini)\b|\bleggimi (?:la )?(?:pagina |politica )?(?:dei |delle |di )?(?P<page4>spedizioni|resi|rimborsi|faq)\b", "read_page"),
         (r"\b(?:change|set|make|update|move|put|extend|shorten|cambia|metti|porta|allunga|accorcia) (?:the |our |my |il |la |i )?(?:returns?|resi|reso|refund|withdrawal|recesso) (?:window|period|policy|time|days|term|deadline|periodo|termine|finestra)?\s*(?:to|at|a|di|from \d+ to)\s*(?P<n>\d{1,3})\s*(?:days?|giorni|d)\b|\b(?P<n2>\d{1,3})[- ]day returns?\b.{0,20}?\b(?:instead|from now|make it|set|switch)\b|\breturns? (?:within|entro) (?P<n3>\d{1,3}) (?:days|giorni) (?:instead of|invece di|from now on|d'ora in poi)\b", "returns_window"),
         (r"\b(?:which|what|who) (?:customers?|orders?|buyers?|people|clienti|ordini)\b.{0,20}?\b(?:waiting|wait|waited|been waiting|are waiting|is waiting|aspettano|in attesa)\b.{0,20}?\b(?:longest|most|long|the longest|più a lungo|da più tempo)\b|\bwho(?:'s| is| has) (?:been )?waiting (?:the )?longest\b|\boldest (?:unshipped|open|waiting|pending) orders?\b|\blongest[- ]waiting (?:customers?|orders?)\b|\bchi aspetta da più (?:tempo|giorni)\b", "waiting_longest"),
+        (r"\b(?:what(?:'s| is| was)|which (?:day|was)|our|the)\s+(?:our |the )?(?:best|biggest|strongest|top|record|busiest|worst|slowest|quietest|weakest)\s+(?:day|giorno|giornata)\b|\b(?:giorno|giornata) (?:migliore|peggiore|record)\b|\bbest day so far\b|\bbusiest day\b", "best_day"),
+        (r"\bhow much (?:stock|inventory|money|cash|capital|euro|€)\b.{0,25}?\b(?:sitting|tied up|tied|locked|stuck|on the shel(?:f|ves)|in stock|in inventory|in the warehouse|in goods|in products)\b|\b(?:stock|inventory) (?:value|worth)\b|\bvalue of (?:the |our |my )?(?:stock|inventory)\b|\bwhat(?:'s| is) (?:the |our |my )?(?:stock|inventory) worth\b|\bquanto (?:vale|abbiamo in) (?:il )?magazzino\b|\bcapitale (?:fermo|immobilizzato)\b", "stock_value"),
+        (r"\bwhen (?:do|will|would|does|am i going to|are we going to) (?:i|we|the shop)?\s*(?:run out of|sell out of|be out of|have no more|finish|exhaust)\s+(?:the |our |my )?(?P<what>[a-z][a-z \-]{2,40}?)\??\W*$|\bhow (?:long|many days|many weeks) (?:until|before|till) (?:i|we)?\s*(?:run out of|sell out of|are out of|have no)\s+(?:the |our |my )?(?P<what2>[a-z][a-z \-]{2,40}?)\??\W*$|\bhow (?:long|many days) (?:does|will|would) (?:the |our |my )?(?P<what3>[a-z][a-z \-]{2,40}?) (?:stock )?last\b|\b(?:days|weeks) of stock\b.{0,20}?\b(?:for|of) (?:the |our )?(?P<what4>[a-z][a-z \-]{2,40}?)\??\W*$|\bquando (?:finisc|finiamo|esaurisc)\w* (?:le |i |il |la |gli )?(?P<what5>[a-z][a-z \-]{2,40}?)\??\W*$", "run_out"),
+        (r"\b(?:compare|confronta|paragona)\s+(?:this|questa|the current)\s+(?:week|settimana|month|mese)\s+(?:with|to|against|con|e|a)\s+(?:the |la |il |lo )?(?:last|previous|scorsa|scorso|precedente)\b|\bthis week (?:vs\.?|versus|against|compared (?:to|with)) last week\b|\b(?:week|month)[- ]over[- ](?:week|month)\b|\bhow (?:does|did|is) this (?:week|month) compare\b|\b(?:better|worse) than last (?:week|month)\b\??\W*$|\bare we (?:up|down|growing|ahead|behind)\b.{0,15}?\b(?:on|vs|versus|compared to|from) last (?:week|month)\b|\bsettimana (?:scorsa|precedente) (?:vs|contro|rispetto)\b", "week_compare"),
+        (r"\b(?:average|mean|typical|avg|medio|media)\s+(?:time|days|hours|delay|tempo|giorni)\s+(?:to|before|until|per|di)\s+(?:ship|shipping|dispatch|send|spedire|spedizione|evasione)\b|\bhow (?:fast|quickly|long) (?:do|does|did) (?:we|i|the shop) (?:ship|dispatch|send (?:orders|parcels|them) out|take to ship)\b|\bhow long (?:do|did|does) (?:orders|parcels) (?:take|wait|sit) (?:before|until|to) (?:ship|shipping|dispatch|leaving|going out)\b|\b(?:ship|dispatch|handling|fulfil+ment) (?:time|speed|delay)\b\??\W*$|\bin quanto (?:tempo )?spediamo\b|\btempo medio di (?:spedizione|evasione)\b", "ship_speed"),
+        (r"\b(?:do|are|did) we (?:lose|losing|lost) money on (?:any|some|a|one|which|what)?\s*(?:products?|items?|things?|lines?|articoli|prodotti)\b|\b(?:which|what|any) (?:products?|items?|lines?|prodotti|articoli) (?:lose|loses|losing|make no|don'?t make|are losing) (?:us )?money\b|\bloss[- ]making (?:products?|items?|lines?)\b|\bnegative margin\b|\bunder ?water (?:products?|items?)\b|\bsell(?:ing)? (?:anything |something )?at a loss\b|\b(?:perdiamo|ci perdiamo) (?:soldi )?(?:su|con) (?:qualche|qualcosa|dei|un) (?:prodott\w*|articol\w*)?\b|\bmargine negativo\b", "loss_makers"),
+        (r"\bwhat did (?:the |our )?(?:last|latest|most recent|newest|previous) (?:customer|buyer|order|person|client|cliente|ordine) (?:buy|order|get|take|purchase|contain|include|have|comprare|comprato|ordinato)\b|\b(?:last|latest|most recent|newest) order\b\??\W*$|\bwhat(?:'s| is| was) (?:in )?(?:the |our )?(?:last|latest|most recent|newest) (?:order|sale|purchase)\b|\bwho (?:was|is) (?:the |our )?(?:last|latest|most recent|newest) (?:customer|buyer|order)\b|\bcosa ha (?:comprato|ordinato|preso) l'?ultimo (?:cliente|ordine)\b|\bultimo ordine\b\??\W*$", "last_order"),
         (r"\bhow much (?:did|has|was) (?:order|the order|ordine|l'?ordine)\s*#?\s*(?P<n>\d{4,6})\s*(?:pay|paid|cost|come to|total|worth|pagato|costava)?\b|\b(?:order|ordine)\s*#?\s*(?P<n2>\d{4,6})\b.{0,25}?\b(?:total|amount|value|how much|worth|paid|price|totale|importo|quanto)\b|\b(?:total|amount|value|totale|importo) (?:of|for|di|dell'?ordine)\s*(?:order )?#?\s*(?P<n3>\d{4,6})\b|\bwhat(?:'s| is| was) (?:in|on) (?:order|ordine)\s*#?\s*(?P<n4>\d{4,6})\b|\b(?:who|whose|chi)\b.{0,15}?\b(?:order|ordine)\s*#?\s*(?P<n5>\d{4,6})\b|\b(?:tell me about|show me|details of|dettagli) (?:order|ordine)\s*#?\s*(?P<n6>\d{4,6})\b", "order_lookup"),
         (r"\bwhat (?:happens|would happen|will happen|if) (?:if )?(?:i|we) (?:do|did) nothing\b|\bif (?:i|we) (?:do|did) nothing (?:for|this|next|all)\b|\bwhat if (?:i|we) (?:ignore|skip|leave) (?:it|the shop|everything) (?:for )?(?:a|this|one|the) (?:week|month|day)\b|\bse non faccio (?:niente|nulla)\b|\bwhat happens if (?:i|we) (?:stop|pause|take a break)\b", "do_nothing"),
         (r"\b(?:i'?m|i am|we'?re|we are|sono|vado|parto) (?:going |away )?(?:on|in) (?:holiday|holidays|vacation|vacanza|ferie)\b|\b(?:holiday|vacation|vacanza|ferie) (?:for|per|next|from|dal|da)\b|\b(?:i'?ll be|i will be|i'?m) (?:away|off|gone|out of town|abroad|unreachable|offline) (?:for|from|until|next|the whole|tutta|per) \b|\bgoing away for (?:a |two |three |\d+ )?(?:days?|weeks?|month)\b|\bsarò via\b|\bnon ci sono per\b", "holiday_plan"),
@@ -247,7 +254,7 @@ class SelfTalk:
 
     def reply(self, t):
         low = t.lower().strip()
-        if self.JOB_WORDS.search(low) and not re.search(self._rule("benchmark"), low, re.I):     # 'how do we compare to other small shops' is a ledger question, not a job
+        if self.JOB_WORDS.search(low) and not re.search(self._rule("benchmark"), low, re.I) and not re.search(self._rule("week_compare"), low, re.I):     # 'how do we compare to other small shops' / 'compare this week with last week' are ledger questions, not jobs
             return None
         fu = self.followup(t)
         if fu:
@@ -1914,6 +1921,168 @@ class SelfTalk:
             out.append(f"• #{o['n']} {c.get('name', '?')} ({o.get('country') or c.get('country', '?')}) — {wait} practice day(s), {_eur(o.get('total', 0))}" + (" ⚠️ past the promise" if wait >= 1 else ""))
         out.append("Say “print the shipping labels” and I prepare all of them.")
         return "\n".join(out)
+
+    def best_day(self, t, m):
+        if self.store is None:
+            return None
+        od, vd = self._days()
+        if not od:
+            return "No sales day to compare yet — run a practice day (say “run a practice day”) and I keep the tally."
+        worst_words = bool(re.search(r"\b(worst|slowest|quietest|weakest|peggiore)\b", t, re.I))
+        ranked = sorted(od.items(), key=lambda kv: (kv[1][1], kv[1][0]), reverse=not worst_words)
+        d, (n, sales) = ranked[0]
+        v = vd.get(d, 0)
+        top_line = f"{'Quietest' if worst_words else 'Best'} day so far: day {d} — {n} order(s), {_eur(sales)} in sales" + (f", {v} visits ({n / v * 100:.1f} % converted)" if v else "") + "."
+        rest = "; ".join(f"day {dd}: {nn} orders {_eur(ss)}" for dd, (nn, ss) in sorted(od.items()))
+        prods = {}
+        for o in self._paid():
+            if o.get("day") == d:
+                for l in o["lines"]:
+                    prods[l["name"].split(" (")[0]] = prods.get(l["name"].split(" (")[0], 0) + l["qty"]
+        what = ", ".join(f"{k} ×{q}" for k, q in sorted(prods.items(), key=lambda kv: -kv[1])[:3])
+        return top_line + (f" Sold that day: {what}." if what else "") + f"\nAll days: {rest}." + ("" if len(od) > 4 else "\nWith more days I can tell you which weekday works best — for now it's noise, not a pattern.")
+
+    def stock_value(self, t, m):
+        if self.store is None:
+            return None
+        rows = []
+        for p in self.store.products():
+            cost = p.get("cost", 0) * p["stock"]
+            retail = p["price"] * p["stock"]
+            rows.append((p["name"].split(" (")[0], p["stock"], cost, retail))
+        if not rows:
+            return None
+        tot_c = sum(r[2] for r in rows)
+        tot_r = sum(r[3] for r in rows)
+        rows.sort(key=lambda r: -r[2])
+        lines = "\n".join(f"• {n}: {q} × {_eur(c / q) if q else _eur(0)} = {_eur(c)} (sells for {_eur(r)})" for n, q, c, r in rows if q)
+        n = self._n() or {}
+        weeks = ""
+        days = self.store.data.get("day", 0)
+        if n.get("cogs") and days:
+            per_week = n["cogs"] / max(1, days) * 7
+            weeks = f" At the current pace ({_eur(per_week)} of goods sold per week) that's about {tot_c / per_week:.1f} weeks of stock." if per_week else ""
+        return (f"Money on the shelf: {_eur(tot_c)} at cost ({_eur(tot_r)} at shop prices, {sum(r[1] for r in rows)} units).{weeks}\n{lines}\n"
+                "Rule of thumb: keep 4–8 weeks of stock for things that sell every week and none for things that don't move — cash in boxes can't pay for ads.")
+
+    def run_out(self, t, m):
+        if self.store is None:
+            return None
+        what = next((g for g in (m.groupdict() or {}).values() if g), "") if m else ""
+        p = self.store.find_product(what) if what else None
+        st = self.store
+        day = st.data.get("day", 0)
+        sold = {}
+        for o in st.data["orders"]:
+            if o["status"] in ("paid", "shipped", "delivered") and o.get("day", 0) > day - 14:
+                for l in o["lines"]:
+                    sold[l["id"]] = sold.get(l["id"], 0) + l["qty"]
+        span = max(1, min(14, day))
+        if not p:
+            rows = []
+            for pr in st.products():
+                per_day = sold.get(pr["id"], 0) / span
+                rows.append((pr["name"].split(" (")[0], pr["stock"], per_day, (pr["stock"] / per_day) if per_day else None))
+            rows.sort(key=lambda r: (r[3] if r[3] is not None else 9e9))
+            lines = "\n".join(f"• {n}: {q} left" + (f", ~{pd:.1f}/day → about {dl:.0f} day(s)" if dl is not None else ", not selling lately → no date") for n, q, pd, dl in rows)
+            soon = [r for r in rows if r[3] is not None and r[3] < 14]
+            return "Days of stock left (from the last two weeks' pace):\n" + lines + ("\nReorder soon: " + ", ".join(r[0] for r in soon) + " — say “reorder the <product>” and I prepare it." if soon else "\nNothing runs out within two weeks.")
+        per_day = sold.get(p["id"], 0) / span
+        name = p["name"].split(" (")[0]
+        if p["stock"] == 0:
+            return f"{name} is already out — 0 in stock. Say “reorder the {name.lower()}” and I prepare the stock proposal."
+        if not per_day:
+            return f"{name}: {p['stock']} in stock and none sold in the last {span} day(s) — at this pace it doesn't run out; the question is rather whether to keep it."
+        days_left = p["stock"] / per_day
+        lead = 7
+        return (f"{name}: {p['stock']} left, selling about {per_day:.1f} a day → out in roughly {days_left:.0f} day(s) (around day {day + int(days_left)}).\n"
+                + (f"Supplier lead time is usually {lead}–14 days, so reorder {'now' if days_left <= 14 else 'in about ' + str(int(days_left - 14)) + ' days'}. Say “reorder the {name.lower()}” and I prepare it." if days_left <= 21 else f"No rush — more than three weeks of stock at this pace."))
+
+    def week_compare(self, t, m):
+        if self.store is None:
+            return None
+        od, vd = self._days()
+        day = self.store.data.get("day", 0)
+        this_days = [d for d in range(day - 6, day + 1) if d > 0]
+        last_days = [d for d in range(day - 13, day - 6) if d > 0]
+        if not last_days:
+            n_this = sum(od.get(d, (0, 0))[0] for d in this_days)
+            s_this = sum(od.get(d, (0, 0))[1] for d in this_days)
+            return f"There is no 'last week' yet — the practice shop is on day {day}. This week so far: {n_this} order(s), {_eur(s_this)}. Ask again after day 14 and I show both side by side."
+
+        def agg(days):
+            n = sum(od.get(d, (0, 0))[0] for d in days)
+            s = sum(od.get(d, (0, 0))[1] for d in days)
+            v = sum(vd.get(d, 0) for d in days)
+            return n, s, v
+
+        n1, s1, v1 = agg(this_days)
+        n0, s0, v0 = agg(last_days)
+
+        def pct(a, b):
+            return "n/a" if not b else f"{(a - b) / b * 100:+.0f} %"
+
+        verdict = "up" if s1 > s0 * 1.05 else ("down" if s1 < s0 * 0.95 else "flat")
+        return (f"This week vs last week ({len(this_days)} vs {len(last_days)} days):\n"
+                f"• orders: {n1} vs {n0} ({pct(n1, n0)})\n• sales: {_eur(s1)} vs {_eur(s0)} ({pct(s1, s0)})\n• visits: {v1} vs {v0} ({pct(v1, v0)})\n"
+                f"• basket: {_eur(s1 / n1) if n1 else _eur(0)} vs {_eur(s0 / n0) if n0 else _eur(0)}\n"
+                f"Verdict: {verdict}" + (" — sales grew faster than visits: the shop converts better." if verdict == "up" and v0 and v1 and (s1 / v1) > (s0 / v0) else
+                                         (" — fewer visits is the reason, not the shop: bring people in (a post, the code)." if verdict == "down" and v1 < v0 else ".")))
+
+    def ship_speed(self, t, m):
+        if self.store is None:
+            return None
+        gaps = []
+        late = 0
+        for o in self.store.data["orders"]:
+            if o["status"] in ("shipped", "delivered"):
+                sd = next((e.get("day") for e in reversed(o.get("events", [])) if "shipped" in e.get("what", "") and e.get("day") is not None), None)
+                if sd is None:
+                    continue
+                g = sd - o.get("day", sd)
+                gaps.append(g)
+                if g > 1:
+                    late += 1
+        waiting = [o for o in self.store.data["orders"] if o["status"] == "paid"]
+        day = self.store.data.get("day", 0)
+        if not gaps:
+            return ("No shipped orders to measure yet" + (f" — {len(waiting)} paid order(s) are waiting now (oldest from day {min(o.get('day', day) for o in waiting)}, promised next-day). Say “print the shipping labels”." if waiting else ".") )
+        avg = sum(gaps) / len(gaps)
+        same = sum(1 for g in gaps if g == 0)
+        return (f"Time to ship: on average {avg:.1f} day(s) from order to parcel out ({len(gaps)} shipped orders; {same} left the same day, {late} took more than the promised 1 business day)."
+                + (f" Right now {len(waiting)} paid order(s) are waiting." if waiting else " Nothing is waiting right now.")
+                + (" Under 1 day is what the shipping page promises — keep it there, late parcels are the #1 reason for 'where is my order' mails." if avg <= 1.2 else " That's slower than the shipping page promises — ship every morning and the 'where is my order' mails disappear."))
+
+    def loss_makers(self, t, m):
+        if self.store is None:
+            return None
+        rows = []
+        for p in self.store.products():
+            fee = p["price"] * 0.029 + 0.30
+            carrier_share = 2.90 + 0.35                                         # what the courier costs us per single-item parcel (practice figure)
+            ship_income = 0.0
+            net = p["price"] - p.get("cost", 0) - fee
+            rows.append((p["name"].split(" (")[0], p["price"], p.get("cost", 0), fee, net, net - carrier_share))
+        losers = [r for r in rows if r[4] <= 0]
+        thin = [r for r in rows if 0 < r[5] < 3]
+        lines = "\n".join(f"• {n}: {_eur(pr)} − cost {_eur(c)} − fee {_eur(f)} = {_eur(net)} per unit" + (f"; if you also eat the shipping ({_eur(3.25)}) → {_eur(nf)}" if nf < 3 else "") for n, pr, c, f, net, nf in sorted(rows, key=lambda r: r[4]))
+        if losers:
+            return "Yes — these lose money on every sale:\n" + lines + "\nRaise the price or drop the product; say “raise the price of <product> to <€>” and I prepare it."
+        head = "No — every product makes money after the payment fee." + (f" Thin ones once free shipping applies: {', '.join(r[0] for r in thin)}." if thin else "")
+        return head + "\n" + lines + "\nWatch for: free-shipping orders on the cheap items (shipping eats the margin) and returns (€ 4,90 + a re-pack) on the fragile ones."
+
+    def last_order(self, t, m):
+        if self.store is None:
+            return None
+        orders = [o for o in self.store.data["orders"] if o["status"] != "cancelled"]
+        if not orders:
+            return "No orders yet."
+        o = orders[-1]
+        items = ", ".join(f"{l['qty']}× {l['name'].split(' (')[0]}" + (f" ({l['option']})" if l.get("option") else "") for l in o["lines"])
+        c = o["customer"]
+        extras = (f", code {o['code']} −{_eur(o['discount'])}" if o.get("code") else "") + (", gift wrap" if o.get("gift_wrap") else "")
+        return (f"Last order #{o['n']} (day {o.get('day', '?')}): {items} — {_eur(o['total'])} incl. {_eur(o['shipping'])} shipping{extras}, to {c.get('name', '?')} in {o['country']} · status {o['status']}."
+                + (" Not shipped yet — say “print the shipping labels”." if o["status"] == "paid" else ""))
 
     def order_lookup(self, t, m):
         """'how much did order 51003 pay?', 'who placed order 51003?' — the phrasings talk.order_info doesn't catch; it stays the owner of 'status/total/details of order N'."""
