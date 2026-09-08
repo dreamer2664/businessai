@@ -13,6 +13,8 @@ python3 -c "import playwright, numpy, zstandard, PIL, aiosmtpd" 2>/dev/null || p
 [ -d "$HOME/.cache/ms-playwright/chromium_headless_shell-1234" ] || python3 -m playwright install chromium 2>&1 | tail -1
 ldconfig -p 2>/dev/null | grep -q libnspr4 || sudo python3 -m playwright install-deps chromium >/dev/null 2>&1
 [ -f /swapfile ] || { sudo fallocate -l 3G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile >/dev/null && sudo swapon /swapfile; }
+command -v tesseract >/dev/null 2>&1 || sudo apt-get install -y -qq tesseract-ocr >/dev/null 2>&1
+[ -s release/eyes/model.gguf ] || python3 -c "from agent.eyes import Eyes; print(Eyes().install())" 2>/dev/null | tail -1
 chmod +x scripts/*.sh
 ls -la release/llm/model.gguf release/packs | grep -v "^total\|^d"
 echo "RESTORE DONE"
