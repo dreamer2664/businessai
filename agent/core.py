@@ -928,11 +928,16 @@ class Agent:
         g = b["goal"]
         low = g.lower()
         kind = next((k for k in sorted(SITE_KINDS, key=len, reverse=True) if k in low), None)
+        label = None
+        if not kind:                                                        # "yoga studio", "tattoo parlour": the owner's words stay as the label
+            mk = re.search(r"\b(?:for|per)\s+(?:a|an|the|un|una|small|little|new|local)?\s*((?:[a-z][a-z'&-]*\s){0,2}(?:studio|parlou?r|school|agency|workshop|garage|clinic|practice|centre|center|club|academy|kitchen|farm|winery|brewery|gallery|boutique|atelier|nursery|market|deli|butcher|fishmonger|tailor|cobbler|jeweller|optician|photographer|architect|accountant|consultant|carpenter|electrician|painter|cleaner|mover|caterer|bakery|pizzeria))\b", low)
+            if mk:
+                label = mk.group(1).strip()
         if not kind:
             kind = {"pizzeria": "restaurant", "trattoria": "restaurant", "bar": "cafe", "coffee": "cafe", "barber": "hair salon", "hairdresser": "hair salon", "fitness": "gym",
                     "dental": "dentist", "b&b": "hotel", "bed and breakfast": "hotel", "flowers": "florist", "books": "bookshop", "bikes": "bike shop", "vet": "veterinary",
                     "lawyer": "lawyer", "studio legale": "lawyer", "store": "shop", "boutique": "shop"}.get(next((w for w in ("pizzeria", "trattoria", "coffee", "barber", "hairdresser", "fitness", "dental", "b&b", "bed and breakfast", "flowers", "books", "bikes", "vet", "studio legale", "lawyer", "boutique", "store", "bar") if w in low), ""), "shop")
-        m = re.search(r"\b(?:called|named|chiamat[oa]|di nome)\s+[\"“']?([A-Z][\w&'’ -]{1,40}?)[\"”']?(?:\s+(?:in|at|a|di|offering|that|which|with)\b|\s*[,.;:]|$)", g)
+        m = re.search(r"\b(?:called|named|chiamat[oa]|di nome)\s+[\"“']?([A-Z][\w&'’ -]{1,40}?)[\"”']?(?:\s+(?:in|at|a|di|offering|that|which|with)\b|\s*[,.;:—-]|$)", g)
         name = m.group(1).strip() if m else None
         if not name:                                                       # "for Studio Legale Rossi, a lawyer in Milan"
             m = re.search(r"\b(?:for|per)\s+((?:[A-Z][\w&'’-]*\s?){1,4})\s*,\s*(?:an?|the|un|una)\b", g)
@@ -941,16 +946,54 @@ class Agent:
         city = m2.group(1).strip() if m2 else ""
         country = (m2.group(2) or "").strip() if m2 else ""
         if not name:
-            name = f"{city} {kind.title()}".strip() if city else f"My {kind.title()}"
+            name = f"{city} {(label or kind).title()}".strip() if city else f"My {(label or kind).title()}"
         services = None
         m3 = re.search(r"\b(?:services|offering|that (?:sells|does|offers))\s*:?\s*(.+)$", g, re.I)
         if m3:
             services = [x.strip(" .") for x in re.split(r",|;| and ", m3.group(1)) if 2 < len(x.strip()) < 40][:6] or None
-        return {"name": name, "kind": kind, "city": city, "country": country, "services": services, "about": None, "tagline": None}
+        # everything else the owner wrote is a fact for the copy: "family bakery since 1962, sourdough, delivery to offices"
+        facts = []
+        m4 = re.search(r"\b(?:since|dal|founded in|est\.?)\s+(1[89]\d\d|20[0-2]\d)\b", g, re.I)
+        if m4:
+            facts.append(f"since {m4.group(1)}")
+        rest = re.sub(r"^.*?\b(?:website|web site|site|landing page)\b(?: for)?", " ", g, count=1, flags=re.I)
+        rest = re.sub(r"\b(?:called|named)\s+[\"“']?[A-Z][\w&'’ -]{1,40}?[\"”']?(?=\s*[,.;:]|\s+(?:in|at)\b|$)", " ", rest)
+        rest = re.sub(r"\b(?:in|at)\s+[A-Z][\w'’-]+(?: [A-Z][\w'’-]+)?(?:\s*,\s*[A-Z]\w+)?", " ", rest)
+        rest = re.sub(r"\b(?:services|offering|that (?:sells|does|offers))\s*:?.*$", " ", rest, flags=re.I)
+        rest = re.sub(r"\b(?:a|an|the|small|little|new|nice|local|please|me|us|for|of|with|also|mention that|mention)\b", " ", rest, flags=re.I)
+        rest = re.sub(r"\b" + re.escape(kind) + r"\b", " ", rest, flags=re.I)
+        if label:
+            rest = re.sub(r"\b" + re.escape(label) + r"\b", " ", rest, flags=re.I)
+        if name:
+            rest = rest.replace(name, " ")
+        rest = re.sub(r"\b(?:called|named)\b", " ", rest, flags=re.I)
+        def _add(piece):
+            piece = re.sub(r"\s{2,}", " ", piece).strip(" :-–—\"'")
+            if not (3 <= len(piece) <= 80) or re.fullmatch(r"[\W\d ]*", piece):
+                return
+            if m4 and m4.group(1) in piece:                                 # "family bakery since 1962" is already "since 1962"
+                piece = re.sub(r"\b(?:since|dal|founded in|est\.?)\s+\d{4}\b", " ", piece, flags=re.I).strip(" ,")
+                piece = {"family": "family-run", "familiar": "family-run", "traditional": "traditional recipes"}.get(piece.lower(), piece)
+                if len(piece) < 3:
+                    return
+            words = set(re.findall(r"[a-z]{3,}", piece.lower()))
+            for f in facts:                                                 # near-duplicates ("delivery to offices" vs "we deliver to offices")
+                fw = set(re.findall(r"[a-z]{3,}", f.lower()))
+                if words and fw and len({w[:5] for w in words} & {w[:5] for w in fw}) / max(1, min(len(words), len(fw))) >= 0.5:
+                    return
+            facts.append(piece)
+        for piece in re.split(r"[,;.]| — | - ", rest):
+            _add(piece)
+        if b.get("change"):
+            _add(re.sub(r"^\W*(also|and|please)?\s*(mention|say|add|include)( that)?\s*", "", b["change"], flags=re.I).strip(" ."))
+        facts = [f for f in facts if not (name and f.lower() == name.lower()) and f.lower() != (label or "").lower()]
+        return {"name": name, "kind": kind, "label": label, "city": city, "country": country, "services": services, "about": None, "tagline": None, "facts": facts[:6]}
 
     def run_build_site(self, b):
         self.busy = "building a website"
         try:
+            if self.mind.job and self.mind.job.get("change"):
+                b["change"] = self.mind.job["change"]
             brief = self._site_brief_from(b)
             self.viewer.plan_step(1, f"writing copy for {brief['name']}")
             report, built, shot = self.sites.build_for(brief)

@@ -231,7 +231,7 @@ Milestones (one per session, each with a score set; earlier scores must not drop
 | 16 own accounts / credential vault / mail codes | ✅ | accounts 12/12 |
 | 17 Drive library: PDF density judge, video ideas, long courses in chapters, brainstorm, quiet-time loop | ✅ | study 18/18 |
 | 18 social readiness: practice network + rehearsals (limits, photos, comments, replies) | ✅ | rehearsal 19/19 |
-| 19 website builder + Google-Maps-style auto-training (OpenStreetMap places) + Drive "Websites" | ✅ | sites 28/28 |
+| 19 website builder + auto-training (OpenStreetMap places) + Drive "Websites"; the owner's own words (since 1962, sourdough, delivery to offices) drive the copy; unknown kinds keep their label | ✅ | sites 34/34 |
 | 20 thinking: journal, interruptions, reflection, lessons, queue instead of 'busy', everyday talk | ✅ | mind 33/33 · talk 22/22 |
 | 14b research/compare deliver documents too (summary, one card per page with picture + link + points) | ✅ | practice day 27/27 |
 | 12 real store | ⏳ awaits platform choice (end of the road, per owner) | — |

@@ -131,6 +131,22 @@ check("agent: 'stop training' stops it", not A.site_training and "stop" in r.low
 r = A.respond("/train stop")
 check("agent: /train stop when idle is harmless", "stopping" in r.lower() or "0 built" in r or "built" in r, r[:60])
 
+# ---- the owner's own words end up in the copy (not generic filler) ---------------------------------------
+bb = A._site_brief_from({"goal": "build a website for a small bakery in Bergamo called Forno Bianchi, family bakery since 1962, sourdough and cakes, delivery to offices",
+                         "change": "also mention that we deliver to offices"})
+check("brief: facts pulled from the sentence", "since 1962" in bb["facts"] and any("sourdough" in f for f in bb["facts"]) and any("offices" in f for f in bb["facts"]), str(bb["facts"]))
+check("brief: near-duplicate change not repeated", sum(1 for f in bb["facts"] if "office" in f) == 1, str(bb["facts"]))
+built2 = A.sites.build(bb, out_dir="/tmp/bai_sites_state/facts_site")
+about = re.sub(r"<[^>]+>", " ", re.sub(r"<style.*?</style>", "", (built2["dir"] / "about.html").read_text(), flags=re.S))
+index = re.sub(r"<[^>]+>", " ", re.sub(r"<style.*?</style>", "", (built2["dir"] / "index.html").read_text(), flags=re.S))
+check("copy: 1962 and the owner's facts appear on the pages", "1962" in about and "sourdough" in about.lower() and "offices" in about.lower(), about[:200])
+check("copy: facts in 'why us' on the home page", "1962" in index or "sourdough" in index.lower(), index[:200])
+by = A._site_brief_from({"goal": "create a site for a yoga studio in Turin called Om Torino — small classes, first lesson free"})
+check("brief: unknown kind keeps the owner's label", by["label"] == "yoga studio" and by["name"] == "Om Torino" and by["city"] == "Turin", str(by))
+built3 = A.sites.build(by, out_dir="/tmp/bai_sites_state/label_site")
+idx3 = re.sub(r"<[^>]+>", " ", re.sub(r"<style.*?</style>", "", (built3["dir"] / "index.html").read_text(), flags=re.S))
+check("copy: a yoga studio is never called a shop, and no gift wrapping", "yoga studio" in idx3.lower() and "gift wrapping" not in idx3.lower() and not re.search(r"\bis a shop\b", idx3), idx3[:200])
+
 A.tasks.on_hands(A.tasks.close_browser, timeout=30)
 ok = sum(1 for _, o in checks if o)
 print(f"\nSCORE sites {ok}/{len(checks)}  ({time.time() - t_start:.0f}s)")

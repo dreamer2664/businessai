@@ -161,6 +161,25 @@ footer{background:var(--fg);color:#ddd;padding:28px 20px;margin-top:40px}footer 
 @media(max-width:720px){.nav nav{display:none;position:absolute;left:0;right:0;top:56px;background:#fff;padding:10px 20px;border-bottom:1px solid #eee}.nav nav.open{display:block}.nav nav a{display:block;margin:10px 0}.burger{display:block}.hero h1{font-size:2em}}"""
 
 
+def _service_text(title, name, kind):
+    """One honest sentence for a service we have no template for — names the business and the service, promises nothing invented."""
+    t = title.strip().rstrip(".")
+    low = t.lower()
+    if re.search(r"\bfree\b", low):
+        return f"{t[0].upper() + t[1:]} — come and try {name} with no commitment; just tell us when you would like to come."
+    if re.search(r"class|course|lesson|session|workshop", low):
+        return f"{t[0].upper() + t[1:]} at {name}: small groups, all levels welcome — ask us for the current timetable."
+    if re.search(r"price|package|rate|fee|tariff", low):
+        return f"Clear {low} with no surprises — ask and we send you the full list."
+    if re.search(r"voucher|gift", low):
+        return f"{t[0].upper() + t[1:]} for friends and family — any amount, valid for a year."
+    if re.search(r"hour|open", low):
+        return f"Our {low} are in the footer of every page; write to us if you need a different time."
+    if re.search(r"touch|contact|book|appointment", low):
+        return f"Write or call {name} — we answer within one working day."
+    return f"{t[0].upper() + t[1:]}: one of the things {name} does as a {kind} — ask us how it works and what it costs."
+
+
 class SiteBuilder:
     def __init__(self, planner=None, tasks=None, google=None, log=None, viewer=None, eyes=None):
         self.planner = planner
@@ -175,12 +194,17 @@ class SiteBuilder:
         """Text for every page. Model when available (grounded in the brief), templates otherwise."""
         k = KINDS.get(b["kind"], KINDS["shop"])
         name, city = b["name"], b.get("city") or ""
+        if b.get("label"):                                          # "yoga studio" on the shop template: say yoga studio, never "shop"
+            b = dict(b, kind=b["label"])
+            if not b.get("services"):
+                own = [f[0].upper() + f[1:] for f in (b.get("facts") or []) if not re.match(r"since \d{4}", f, re.I) and len(f) <= 40][:3]
+                b["services"] = (own + ["Prices & packages", "Gift vouchers", "Get in touch", "Opening hours"])[:4]
         base = {
             "tagline": b.get("tagline") or f"{k['verb'].capitalize()} with care in {city}" if city else f"{name} — {b['kind']}",
             "about": b.get("about") or (f"{name} is a {b['kind']} in {city}{', ' + b['country'] if b.get('country') else ''}. "
                                         f"We keep things simple: good work, honest prices and a friendly welcome. "
                                         f"Whether you are a regular or just passing by, you will find the same attention every time."),
-            "services": [{"title": s, "text": SERVICE_TEXT.get(s, f"Ask us about {s.lower()} — we are happy to explain what we offer and what it costs.")} for s in (b.get("services") or k["services"])],
+            "services": [{"title": s, "text": SERVICE_TEXT.get(s, _service_text(s, name, b["kind"]))} for s in (b.get("services") or k["services"])],
             "why": [f"Local and independent — {name} is run by people who live here", "Clear prices, no surprises", "Easy to reach: " + (b.get("address") or city or "in the centre")],
             "cta": k["cta"],
             "reviews": [{"text": f"Exactly what a {b['kind']} should be — friendly and reliable.", "who": "A regular customer"},
@@ -189,10 +213,25 @@ class SiteBuilder:
         }
         if b.get("cuisine"):
             base["about"] += f" The kitchen focuses on {b['cuisine'].replace(';', ', ').replace('_', ' ')}."
+        facts = [f for f in (b.get("facts") or []) if f]
+        if facts:                                                   # the owner's own words become the story, not filler
+            since = next((f for f in facts if re.match(r"since \d{4}", f, re.I)), None)
+            others = [f for f in facts if f is not since]
+            story = []
+            if since:
+                story.append(f"{name} has been part of {city or 'the neighbourhood'} {since} — a {b['kind']} built on the same care today as on day one.")
+            if others:
+                story.append("What sets us apart: " + ", ".join(others[:-1]) + (" and " if len(others) > 1 else "") + others[-1] + ".")
+            base["about"] = " ".join(story) + " " + base["about"].split(". ", 1)[-1] if story else base["about"]
+            base["why"] = ([f"{name}: {since}" if since else None] + [o[0].upper() + o[1:] for o in others[:2]] + base["why"])[:3]
+            base["why"] = [w for w in base["why"] if w]
+            if others and not b.get("tagline"):
+                base["tagline"] = (f"{b['kind'][0].upper() + b['kind'][1:]} in {city} — {others[0]}" if city else f"{b['kind'][0].upper() + b['kind'][1:]} — {others[0]}")[:90]
+            base["meta"] = f"{name} — {b['kind']} in {city}: " + ", ".join(others[:3] or [since or ""]) + "."
         if not (self.planner and self.planner.installed()):
             return base
         try:
-            facts = json.dumps({x: b.get(x) for x in ("name", "kind", "city", "country", "address", "phone", "hours", "cuisine", "services") if b.get(x)}, ensure_ascii=False)
+            facts = json.dumps({x: b.get(x) for x in ("name", "kind", "city", "country", "address", "phone", "hours", "cuisine", "services", "facts") if b.get(x)}, ensure_ascii=False)
             raw = self.planner.chat(
                 "You write website copy for small local businesses. Warm, concrete, short sentences. Use ONLY the facts given; never invent awards, years, prices or names. Output JSON only.",
                 f"Facts: {facts}\nWrite JSON: {{\"tagline\": max 9 words, \"about\": 2 short paragraphs (60-110 words total) separated by \\n\\n, "
@@ -230,7 +269,9 @@ class SiteBuilder:
     def build(self, b, out_dir=None):
         """Write the site. Returns {dir, index, pages, copy}."""
         b = dict(b)
-        b["kind"] = b.get("kind") if b.get("kind") in KINDS else "shop"
+        if b.get("kind") not in KINDS:                                    # unknown kind → nearest template, the owner's words stay as the label
+            b["label"] = b.get("label") or b.get("kind") or None
+            b["kind"] = "shop"
         if not b.get("lat") and (b.get("address") or b.get("city")):
             try:
                 b.update(geocode(b.get("address") or "", b.get("city") or "", b.get("country") or ""))
@@ -275,7 +316,7 @@ class SiteBuilder:
         self.log("site_built", name=b["name"], pages=len(pages), dir=str(d))
         try:
             from . import library
-            library.register("website", f"{b['name']} ({b['kind']}, {b.get('city') or '?'})", d / f"{slug}.zip", options=len(pages))
+            library.register("website", f"{b['name']} ({b.get('label') or b['kind']}, {b.get('city') or '?'})", d / f"{slug}.zip", options=len(pages))
         except Exception:
             pass
         return {"dir": d, "index": d / "index.html", "pages": [fn for fn, _ in pages] + ["privacy.html"], "copy": c, "slug": slug, "zip": d / f"{slug}.zip"}
@@ -340,7 +381,7 @@ class SiteBuilder:
             except Exception as e:
                 self.log("site_upload_failed", error=str(e)[:100])
         where = ", ".join(x for x in (brief.get("city"), brief.get("country")) if x)
-        report = (f"🌐 Built a website for {brief['name']} ({brief['kind']}{', ' + where if where else ''}) — {len(built['pages'])} pages"
+        report = (f"🌐 Built a website for {brief['name']} ({brief.get('label') or brief['kind']}{', ' + where if where else ''}) — {len(built['pages'])} pages"
                   + (f", {len(problems)} issue(s): {problems[0]}" if problems else ", checks passed") + f" ({time.time() - t0:.0f}s)"
                   + (f"\n☁️ Drive: {link}" if link else f"\n📁 {built['dir']}"))
         return report, built, shot
