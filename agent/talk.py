@@ -53,10 +53,23 @@ class Talk:
                            r"(?:(?:into|in|to|a) (?P<lang>english|italian|german|french|spanish|portuguese|chinese|dutch|inglese|italiano|tedesco|francese|spagnolo|portoghese|cinese|olandese))?\s*[:\-–—]?\s*(?P<text>.+)?$", re.I | re.S)
     SAY_IN = re.compile(r"^\W*(?:how (?:do|would) (?:you|i) say|come si dice)\s+[\"“']?(?P<text>.+?)[\"”']?\s+in (?P<lang>english|italian|german|french|spanish|portuguese|chinese|dutch|inglese|italiano|tedesco|francese|spagnolo|portoghese|cinese|olandese)\W*$", re.I | re.S)
     LANGS = {"inglese": "English", "italiano": "Italian", "tedesco": "German", "francese": "French", "spagnolo": "Spanish", "portoghese": "Portuguese", "cinese": "Chinese", "olandese": "Dutch"}
+    AWAY = re.compile(r"^\W*(?:i'?m |i am |sono |vado |going |off )?(?:off to|going to|heading to|away for|out for|back in|be back in|at|in|a|fuori per|torno tra|torno fra)\s+(?:lunch|dinner|the gym|gym|a meeting|meetings|work|bed|sleep|pranzo|cena|palestra|riunione|letto|(?:about |circa |~)?\d+ ?(?:min|minutes|minuti|h|hours?|ore|ora))\b.{0,40}?(?:back in|torno (?:tra|fra)|for)?\s*(?:about |circa |~)?(?P<n>\d+|an?|un[ao]?|half an|mezz')?\s*(?P<u>min(?:ute)?s?|minuti|h|hours?|ore|ora)?\W*$"
+                      r"|^\W*(?:brb|bbl|afk|gotta go|i have to go|talk later|ci sentiamo dopo|a dopo|torno dopo)\W*$", re.I)
+    HERE_Q = re.compile(r"^\W*(?:are you (?:there|here|awake|alive|online|around|still there|with me)|you there|ci sei|sei (?:lì|li|online|sveglio)|hello\?+|anyone (?:there|home))\W*$", re.I)
+    LAST_DOC = re.compile(r"\b(?:send|resend|show|give|forward|mandami|rimandami|inviami)\b.{0,20}\b(?:last|latest|previous|that|the) (?:doc(?:ument)?|report|file|pdf|comparison|seller check|research)\b|\b(?:last|latest) (?:doc(?:ument)?|report|file) (?:again|please)\b|\bupload\b.{0,20}\b(?:doc(?:ument)?|report|file)\b.{0,20}\b(?:drive|google)\b", re.I)
+    STORE_Q = re.compile(r"\b(?:how(?:'s| is| are) (?:the |my |our )?(?:practice |test |fake )?(?:store|shop|sales|orders|numbers)(?: doing| going)?|(?:store|shop) (?:numbers|stats|status|report)|come va (?:il negozio|lo shop)|quanti ordini)\b", re.I)
+    DECIDED = re.compile(r"\b(?:what did we (?:decide|say|agree)|what was (?:decided|agreed)|remind me what we (?:decided|said|agreed)|cosa avevamo (?:deciso|detto)|what were (?:the|our) (?:conclusions|findings))\b.{0,12}?(?:about|on|for|regarding|su|per)\s+(?P<topic>.+?)\W*$", re.I)
+    WHY_SLOW = re.compile(r"\bwhy (?:did|was|has) (?:the |that |my |your )?(?P<what>.{2,40}?) (?:take so long|so slow|take (?:that|so) much time|fail|not work|go wrong|break)\b|\bwhat (?:went wrong|happened) (?:with|on|during) (?:the |that )?(?P<what2>.{2,40}?)\W*$|\bperch[eé] (?:ci hai messo tanto|è andata male)\b", re.I)
     OPINION = re.compile(r"\b(?:what do you think(?: about| of)?|what(?:'s| is) (?:your (?:take|opinion|view)|better)|which (?:is|one is|would you) (?:better|pick|choose|recommend)|should i (?:use|go with|pick|choose)|would you (?:recommend|suggest)|is it worth|che ne pensi|cosa ne pensi|secondo te|meglio)\b", re.I)
     VS = re.compile(r"\b(?P<a>[a-z0-9][a-z0-9 .'+-]{1,30}?)\s+(?:vs\.?|versus|or|o|oppure)\s+(?P<b>[a-z0-9][a-z0-9 .'+-]{1,30}?)(?=[\s?.!,]|$)", re.I)
 
-    def __init__(self, memory=None, mind=None, library=None, inbox=None, store=None, log=None):
+    WRITE_DESC = re.compile(r"\b(?:write|draft|make|create|give|scrivi|scrivimi|fammi)\b.{0,20}?\b(?:product )?(?:description|descrizione|listing text|product text|blurb|copy)\b.{0,20}?\b(?:for|of|about|per|di)\s+(?:a |an |the |our |my |un |una |il |la )?(?P<what>.+?)(?:,\s*(?P<lines>\d+)\s*(?:lines?|righe|sentences?|frasi))?\W*$", re.I)
+    NAME_SHOP = re.compile(r"\b(?:what (?:should|could|do) i (?:name|call)|name ideas? for|names? for|suggest (?:a )?names?|come (?:chiamo|lo chiamo)|nome per)\b.{0,20}?\b(?:shop|store|brand|business|negozio|marchio)\b", re.I)
+    LAUNCH_LIST = re.compile(r"\b(?:make|write|give|prepare|build|fammi|scrivi)\b.{0,12}?\b(?:to-?do|todo|check-?list|task list|plan)\b.{0,30}?\b(?:launch|launching|opening|open|go live|lancio|apertura|aprire)\b", re.I)
+    MAIL_CODE = re.compile(r"\b(?:check|look (?:in|at)|read|open|controlla|guarda)\b.{0,12}?\b(?:my |the |your |la |il )?(?:e-?mail|gmail|inbox|posta|mail)\b.{0,30}?\b(?:code|codice|verification|verifica|otp|link|conferma|confirmation)\b|\b(?:verification|confirmation) (?:code|link|mail|email)\b.{0,20}?\b(?:e-?mail|gmail|inbox|posta|arrived|check)\b", re.I)
+
+    def __init__(self, memory=None, mind=None, library=None, inbox=None, store=None, log=None, planner=None):
+        self.planner = planner
         self.memory = memory
         self.mind = mind
         self.library = library
@@ -134,6 +147,32 @@ class Talk:
                 left = len(self.memory.open_items())
                 return f"Ticked off: {x['text']}" + (f" — {left} left." if left else " — list empty, nice.")
             return "I couldn't find that on the list. Say “my to-do list” and then “done <number>”." if n else None
+        if self.HERE_Q.match(t):
+            return self.here()
+        if self.MAIL_CODE.search(t):
+            return {"mail_code": True, "hint": self._sender_hint(t)}
+        m = self.WRITE_DESC.search(t)
+        if m and len(t.split()) <= 30:
+            return self.description(m.group("what"), int(m.group("lines") or 0), t)
+        if self.NAME_SHOP.search(t):
+            return self.shop_names(t)
+        if self.LAUNCH_LIST.search(t):
+            return self.launch_list(t)
+        if self.AWAY.match(t) and not re.search(r"\b(research|find|check|compare|build|write|look|cerca|trova)\b", low):
+            return {"away": self._away_minutes(t), "text": self.away_line(t)}
+        if self.LAST_DOC.search(t):
+            return {"last_doc": True, "to_drive": bool(re.search(r"\b(drive|google|upload)\b", low))}
+        if self.STORE_Q.search(t) and self.store is not None:
+            try:
+                return self.store.numbers_text() + "\n(/store for the pages and the orders to ship)"
+            except Exception:
+                return None
+        m = self.DECIDED.search(t)
+        if m:
+            return self.decided(m.group("topic"))
+        m = self.WHY_SLOW.search(t)
+        if m:
+            return self.why_slow((m.group("what") or m.group("what2") or "").strip())
         m = self.TIME_IN.search(t)
         if m:
             return self.clock(m.group("place"))
@@ -151,6 +190,191 @@ class Talk:
             if op:
                 return op
         return None
+
+    @staticmethod
+    def _sender_hint(t):
+        m = re.search(r"\b(?:from|da|di)\s+([a-z0-9][a-z0-9.-]{2,30})\b", t.lower())
+        if m and m.group(1) not in ("the", "my", "your", "gmail", "email", "mail", "inbox"):
+            return m.group(1)
+        m = re.search(r"\b(shopify|etsy|ebay|amazon|vinted|tiktok|instagram|facebook|meta|paypal|stripe|aliexpress|alibaba|cj|wix|canva|pinterest|x|twitter|linkedin|google|apple)\b", t.lower())
+        return m.group(1) if m else ""
+
+    def _fact_lines(self, what):
+        """Facts the owner or the shop already gave about a product — the only material a description may use."""
+        facts = []
+        try:
+            p = self.store.find_product(what) if self.store is not None else None
+            pw = [w for w in re.findall(r"[a-z]{4,}", p["name"].lower()) if w not in ("with", "pack")] if p else []
+            ww = [w.rstrip("s") for w in re.findall(r"[a-z]{4,}", what.lower())]
+            # the request's own head noun (last word: "cork SANDAL") must be in the product name — "cork" alone is not the same product
+            if p and ww and any(ww[-1] == w.rstrip("s") for w in pw) and sum(w.rstrip("s") in ww for w in pw) >= max(1, len(pw) // 2):
+                facts.append(p.get("short") or p["name"])
+                facts += [d for d in p.get("details", [])[:4] if d.lower()[:25] not in (p.get("short") or "").lower()]
+        except Exception:
+            pass
+        try:
+            for r in (self.memory.notes(what, limit=2) if self.memory else []):
+                if r.get("kind") in ("research", "summary", "study", "learned"):
+                    facts.append(r["text"][:200])
+        except Exception:
+            pass
+        return facts
+
+    def description(self, what, lines, full_text):
+        """'write me a product description for a cork sandal, 2 lines' — from the facts I have; never invented specs."""
+        what = what.strip(" .,'\"")
+        given = re.search(r"^(.*?)[,;:\-–—]\s*(?:it'?s|they'?re|it is|made (?:of|from|in)|features?|with|has|comes? with)\b\s*(.{6,160})$", what, re.I)
+        if given:                                                         # "linen apron, it's made of washed linen with two pockets"
+            what, extra = given.group(1).strip(" ,"), given.group(2).strip(" .")
+        else:
+            extra = ""
+        lines = lines or 3
+        facts = self._fact_lines(what)
+        if extra:
+            facts.append(extra)
+        text = ""
+        if self.planner is not None and self.planner.installed():
+            try:
+                text = self.planner.chat("You write short, honest product descriptions for a small online shop. Use ONLY the facts given; no prices, no delivery promises, no health or 'best' claims, no invented materials.",
+                                         f"Product: {what}\nFacts:\n" + ("\n".join(f"- {f}" for f in facts) if facts else "- (none beyond the name)") + f"\nWrite {lines} short sentence(s), plain words, no hashtags, no emoji.",
+                                         max_tokens=60 * lines + 40, temperature=0.3, timeout=120).strip().strip('"“”')
+            except Exception:
+                text = ""
+        if text and re.search(r"[$€£]\s?\d|\d\s?(?:€|eur)|\b(free shipping|guaranteed|best|cures?|100 ?%)\b|ships? (in|within)", text, re.I):
+            text = ""                                                     # the model slipped in a price/claim → fall back to the template
+        note = ""
+        if not text:
+            core = what[0].upper() + what[1:]
+            fl = [f for f in facts if len(f) < 140][:max(1, lines - 1)]
+            if fl:
+                first = fl[0].rstrip(".")
+                text = f"{core} — {first}." + (" " + " ".join(f.rstrip('.') + "." for f in fl[1:]) if fl[1:] else "")
+            else:
+                text = f"{core} — made for everyday use, in a simple design that goes with anything."
+            text += " Tell us which one you'd like and we prepare it with care."
+            note = "\n(Plain version — my thinking model is off, or I have no facts on it yet. Give me 2–3 facts — material, size, what makes it different — and I rewrite it.)" if not facts else "\n(Built only from the facts I have on it. Add a detail and I rewrite it.)"
+        return f"Description for {what}:\n{text}{note}"
+
+    def shop_names(self, t):
+        """'what should I name my shop? it sells cork sandals' → 6 name ideas built from what it sells + how to check them."""
+        m = re.search(r"\b(?:sells?|selling|for|vende|di)\s+(?:my |our |the )?([a-z][a-z \-]{2,40}?)(?:\s+online|\s*[,.?!]|$)", t, re.I)
+        what = (m.group(1).strip() if m else "").lower()
+        words = [w for w in re.findall(r"[a-z]{3,}", what) if w not in ("shop", "store", "online", "products", "things", "stuff", "and", "the")]
+        core = (words[0] if words else "shop").rstrip("s")
+        core2 = (words[1] if len(words) > 1 else "").rstrip("s")
+        cap = core.capitalize(); cap2 = core2.capitalize()
+        ideas = [f"{cap}&Co", f"Casa {cap}", f"{cap} Studio", f"The {cap} Room", f"Ciao {cap}", f"{cap}{cap2 or 'Lab'}", f"Piccolo {cap}", f"{cap} Milano"]
+        ideas = list(dict.fromkeys(i for i in ideas if len(i) <= 18))[:6]
+        return (f"Name ideas for a shop that sells {what or 'this'}:\n" + "\n".join(f"  • {i}" for i in ideas) +
+                "\nHow to pick: say it out loud (easy to spell over the phone?), then check in this order — .com/.it domain free, Instagram and TikTok handle free, "
+                "no identical trademark (EUIPO search), no famous brand inside the name. Tell me your favourite two and I check the handles and domains for you.")
+
+    def launch_list(self, t):
+        """'make a to-do list for launching the store next monday' → the launch checklist, on the to-do list, in order."""
+        when = re.search(r"\b(next (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month)|tomorrow|this (?:week|weekend|friday)|on \w+day|in \d+ days?|lunedì|domani)\b", t, re.I)
+        when = when.group(0) if when else "launch day"
+        todo = ["Final check of every product page: photos, honest description, price, stock, options",
+                "Shipping set: prices per country, free-shipping threshold, delivery days written on the shipping page",
+                "Legal pages live: terms, privacy, returns (14-day EU withdrawal), contact with a real address and email",
+                "Test order end to end with a real card (then refund it): checkout, confirmation mail, order in admin",
+                "Payment methods on: card + PayPal; confirm the payout account",
+                "Launch posts drafted for Instagram/TikTok (3 posts + 1 story) — I draft, you approve",
+                "Customer replies ready: shipping times, returns, 'where is my order' — I answer from the policy, you approve",
+                f"{when.capitalize()}: open the shop, publish post 1, watch the first orders and messages together"]
+        return {"todo": todo, "text": f"Launch list for {when} — in the order I'd do it, and it's on your to-do list now:\n" +
+                "\n".join(f"{i + 1}. {s}" for i, s in enumerate(todo)) + "\nTell me which ones you want me to do (2, 3, 6 and 7 are mine to prepare)."}
+
+    def here(self):
+        """'are you there?' → yes, plus what I'm doing — the honest one-liner an assistant gives."""
+        try:
+            if self.mind and self.mind.job:
+                return "Yes, here — " + self.mind.status_line()
+        except Exception:
+            pass
+        bits = []
+        try:
+            n = len(self.inbox.items("new")) if self.inbox else 0
+            if n:
+                bits.append(f"{n} customer message(s) wait for your tap")
+        except Exception:
+            pass
+        try:
+            k = len(self.memory.open_items()) if self.memory else 0
+            if k:
+                bits.append(f"{k} open to-do(s)")
+        except Exception:
+            pass
+        return "Yes, here and free." + (" " + " · ".join(bits) + "." if bits else "") + " What do you need?"
+
+    @staticmethod
+    def _away_minutes(t):
+        low = t.lower()
+        m = re.search(r"(\d+|an?|un[ao]?|half an|mezz')\s*(min(?:ute)?s?|minuti|h|hours?|ore|ora)\b", low)
+        if m:
+            n = m.group(1)
+            n = 30 if n.startswith(("half", "mezz")) else 1 if n in ("a", "an", "un", "una", "uno") else int(n)
+            return n * 60 if m.group(2).startswith(("h", "or")) else n
+        return {"lunch": 60, "pranzo": 60, "dinner": 90, "cena": 90, "gym": 90, "palestra": 90, "meeting": 60, "riunione": 60, "work": 300, "bed": 480, "sleep": 480, "letto": 480}.get(
+            next((w for w in ("lunch", "pranzo", "dinner", "cena", "gym", "palestra", "meeting", "riunione", "work", "bed", "sleep", "letto") if w in low), ""), 45)
+
+    def away_line(self, t):
+        mins = self._away_minutes(t)
+        span = f"{mins // 60} h" if mins >= 120 else f"{mins} min" if mins < 60 else "1 h"
+        busy = ""
+        try:
+            if self.mind and self.mind.job:
+                busy = f" I keep going on “{self.mind.job['goal'][:50]}” and the result waits here."
+        except Exception:
+            pass
+        return f"Enjoy — I'll count on about {span}.{busy} If nothing is running I use the time to study (PDFs, business videos) and I only ping you for something urgent. Say hi when you're back."
+
+    def decided(self, topic):
+        """'what did we decide about shipping prices?' → my notes and lessons on it, dated — not a fresh guess."""
+        topic = topic.strip(" ?.!")
+        out = []
+        try:
+            for r in (self.memory.notes(topic, limit=3) if self.memory else []):
+                out.append(f"• {r['t'][:10]} ({r.get('kind', 'note')} on {r.get('topic', '')[:40]}): {r['text'][:220]}")
+        except Exception:
+            pass
+        try:
+            from . import mind as _m
+            words = set(re.findall(r"[a-z0-9]{3,}", topic.lower()))
+            for j in _m._load(_m.LESSONS)[-40:]:
+                hay = (j.get("goal", "") + " " + j.get("outcome", "")).lower()
+                if words and sum(w in hay for w in words) >= max(1, len(words) - 1):
+                    out.append(f"• {j.get('t', '')[:10]} job “{j.get('goal', '')[:50]}”: {j.get('outcome', '')[:200]}")
+        except Exception:
+            pass
+        try:
+            docs = [d for d in (self.library.recent(30) if self.library else []) if all(w in d.get("title", "").lower() for w in topic.lower().split()[:2])]
+            for d in docs[:2]:
+                out.append(f"• {str(d.get('t', ''))[:10]} document: {d.get('title', '')} (/library)")
+        except Exception:
+            pass
+        if not out:
+            return f"I have nothing written down about “{topic}” — we never settled it with me, or it was before my notes. Want me to look into it now?"
+        return f"What I have on “{topic}”:\n" + "\n".join(dict.fromkeys(out[:6])) + "\nIf that's not what you meant, tell me the angle."
+
+    def why_slow(self, what):
+        """'why did the seller check take so long yesterday?' → the reflected job: time, snags, lesson."""
+        try:
+            from . import mind as _m
+            recs = _m._load(_m.LESSONS)
+        except Exception:
+            recs = []
+        words = set(re.findall(r"[a-z0-9]{3,}", what.lower())) - {"the", "that", "this", "job", "task", "yesterday", "today", "last"}
+        kinds = {"seller": "seller_check", "sellers": "seller_check", "check": "seller_check", "research": "research", "comparison": "compare", "compare": "compare", "website": "build_site", "site": "build_site", "video": "watch", "summary": "summarize"}
+        want_kind = next((kinds[w] for w in words if w in kinds), None)
+        cands = [r for r in recs if (want_kind and r.get("kind") == want_kind) or (words and any(w in r.get("goal", "").lower() for w in words))]
+        if not cands:
+            return f"I can't find a job like “{what}” in my journal — say 'what did you do today' or /lessons and I'll show what I have."
+        r = cands[-1]
+        mins = r.get("seconds", 0) / 60
+        snags = [s for s in r.get("snags", []) if s]
+        why = ("; ".join(snags[:3]) if snags else "no snags noted — it was simply the amount of pages to read (each listing means the page, its reviews and a social page)")
+        return (f"The {r.get('kind', 'job')} “{r.get('goal', '')[:60]}” on {r.get('t', '')[:10]} took {mins:.0f} min" + (" and ran late" if r.get("late") else "") +
+                f". What slowed it: {why}. Lesson I kept: {r.get('lesson') or 'none'}. Next time say a time limit and I trim the checks to fit.")
 
     CITY_TZ = {"milan": "Europe/Rome", "milano": "Europe/Rome", "rome": "Europe/Rome", "roma": "Europe/Rome", "italy": "Europe/Rome", "italia": "Europe/Rome",
                "london": "Europe/London", "londra": "Europe/London", "uk": "Europe/London", "england": "Europe/London", "paris": "Europe/Paris", "parigi": "Europe/Paris", "berlin": "Europe/Berlin", "berlino": "Europe/Berlin", "germany": "Europe/Berlin",

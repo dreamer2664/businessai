@@ -131,7 +131,7 @@ class Agent:
         self.site_training = False          # "start auto training on website building" → loop until "stop"
         self.sites_built = 0
         self.mind = Mind(planner=self.planner, log=self.log, pace=self.pace, viewer=self.viewer)
-        self.talk = Talk(memory=self.memory, mind=self.mind, library=library, inbox=self.inbox, store=self.store, log=self.log)
+        self.talk = Talk(memory=self.memory, mind=self.mind, library=library, inbox=self.inbox, store=self.store, log=self.log, planner=self.planner)
         self.viewer.listener = self.mind.on_event
         self.stop_flag = False
         self.rehearsal = Rehearsal(self.tasks, accounts=self.accounts, social=self.social, inbox=self.inbox, log=self.log, viewer=self.viewer, eyes=self.eyes)
@@ -819,6 +819,47 @@ class Agent:
             self.notify(f"⚠️ My thinking model isn't running: {self.planner.last_error}\nI'll keep working in simple mode (worse understanding and answers) until it is fixed. /status shows the state.")
         return self.understand(text)
 
+    def fetch_mail_code(self, hint=""):
+        """'check my email for the verification code' → Gmail (official API), newest code or link, pasted to the owner."""
+        if not self.google.connected():
+            self.notify("My Gmail isn't connected here — /google connect once, then I can read verification codes myself.")
+            return
+        try:
+            code, mail = self.google.find_code(hint, since_minutes=30, tries=6, wait=20)
+            if code:
+                self.notify(f"📧 Code: {code}\n(from {mail['from'][:60]} — “{mail['subject'][:60]}”)")
+                return
+            link, mail = self.google.find_link(hint, since_minutes=30, tries=1, wait=1)
+            if link:
+                self.notify(f"📧 No code, but a confirmation link arrived from {mail['from'][:60]}:\n{link}")
+                return
+            self.notify(f"📧 Nothing with a code{' from ' + hint if hint else ''} in the last 30 minutes (I looked 6 times over 2 minutes). Ask me again when it should have arrived, or check the spam folder.")
+        except Exception as e:
+            self.notify(f"📧 Gmail check failed: {str(e)[:120]}")
+
+    def resend_last_doc(self, to_drive=False):
+        """'send me the last document again' / 'upload the last document to drive'."""
+        rows = library.recent(1)
+        if not rows:
+            return "I haven't written any document yet — ask for research, a seller check or a comparison and it lands in /library."
+        r = rows[0]
+        path = library.LIB_DIR / r["file"] if not str(r["file"]).startswith("/") else Path(r["file"])
+        if not path.exists():
+            return f"The last document ({r.get('title', '?')}) is no longer on disk — sorry. /library lists what's left."
+        if to_drive:
+            if not self.google.connected():
+                return "My Google Drive isn't connected here — /google connect first; then every document goes there by itself."
+            try:
+                up = self.google.upload(str(path), folder="Research", convert_to_doc=True)
+                return f"Uploaded “{r.get('title', path.name)}” to my Drive → {up.get('link') or up.get('webViewLink') or 'Research folder'}"
+            except Exception as e:
+                return f"Drive upload failed: {str(e)[:120]}"
+        try:
+            self.bot.send_document(self.owner_id, str(path), caption=f"{r.get('title', path.name)} — {str(r.get('t', ''))[:10]}")
+        except Exception as e:
+            return f"I couldn't send the file: {str(e)[:100]}"
+        return None
+
     def translate(self, body, lang):
         """Short translations with the thinking model (a supplier's message, a reply to a customer). Honest when it isn't there."""
         if not self.planner.installed():
@@ -843,7 +884,8 @@ class Agent:
         if self.busy and self.mind.job and not self.last_brief:                       # a message while I'm working
             quick = self.talk.quick(text.strip())                                     # to-do, clock, opinions, translations: answered live, job untouched
             if isinstance(quick, dict):
-                quick = quick.get("text") or (self.translate(quick["translate"], quick["to"]) if quick.get("translate") else None)
+                quick = (quick.get("text") or (self.translate(quick["translate"], quick["to"]) if quick.get("translate") else None)
+                         or (self.resend_last_doc(to_drive=quick.get("to_drive")) if quick.get("last_doc") else None))
             if quick:
                 self.log("talk", text=text[:60], while_busy=True)
                 return quick
@@ -889,6 +931,16 @@ class Agent:
                 return direct["text"]
             if direct.get("translate"):
                 return self.translate(direct["translate"], direct["to"])
+            if direct.get("away"):                                                    # "off to lunch, back in an hour" → quiet time to study
+                if not self.busy:
+                    self.pace.set({"pace": "slow", "deadline_min": None, "budget_min": int(direct["away"]), "why": "you said you're away"}, "owner away")
+                    self.last_quiet = 0
+                return direct["text"]
+            if direct.get("last_doc"):
+                return self.resend_last_doc(to_drive=direct.get("to_drive"))
+            if direct.get("mail_code"):
+                threading.Thread(target=self.fetch_mail_code, args=(direct.get("hint") or "",), daemon=True).start()
+                return f"Looking in my Gmail for a fresh verification code{' from ' + direct['hint'] if direct.get('hint') else ''} — I'll paste it here as soon as it lands (I check for about 2 minutes)."
             if direct.get("text"):                                                    # e.g. a to-do item already added by talk
                 return direct["text"]
         if direct:

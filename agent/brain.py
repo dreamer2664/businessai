@@ -91,14 +91,21 @@ class Brain:
         dense = max((h.get("dense", 0) for h in hits), default=0)      # meaning match of the best passage (0..1)
         return d.get("confidence", 0) * dense
 
-    def ask(self, question, min_conf=0.35):
-        """Best answer across packs, formatted for the owner. None if the brain isn't confident."""
+    MIN_QUALITY = 0.30      # confidence × meaning match. Scan over tests/business + operations (96 q): every correct answer scores ≥ 0.33,
+                            # off-topic "answers" to owner chatter sit below ("send me the last document" → abandoned-cart mails 0.18,
+                            # "how's the store doing" → store location 0.15, "why so slow yesterday" → checkout length 0.27).
+
+    def ask(self, question, min_conf=0.35, min_quality=None):
+        """Best answer across packs, formatted for the owner. None if the brain isn't confident — or if the passage merely
+        contains confident words without matching the question's meaning (that is what produced off-topic 'answers')."""
         best = None
         for pack in self.refresh():
             d = self.ask_raw(question, pack)
             if d and d.get("answer") and (best is None or self._quality(d) > self._quality(best)):
                 best = d
         if not best or best.get("confidence", 0) < min_conf or not best.get("answer"):
+            return None
+        if self._quality(best) < (self.MIN_QUALITY if min_quality is None else min_quality):
             return None
         sent = (best.get("sentence") or best["answer"]).strip()
         ans = best["answer"].strip()
