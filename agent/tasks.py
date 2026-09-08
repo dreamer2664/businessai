@@ -149,9 +149,10 @@ class Tasks:
                 raise
 
     # ---- tasks ---------------------------------------------------------
-    def research(self, topic, n_pages=3):
+    def research(self, topic, n_pages=3, want_doc=False):
         t0 = time.time()
         report = [f"Research: {topic}"]
+        images = {}
         # 1) what the local pack already knows
         if self.brain and self.brain.ready:
             local = self.brain.ask(topic)
@@ -178,6 +179,8 @@ class Tasks:
                 ks = key_sentences(text, topic)
                 if ks:
                     opened.append((b.page.title()[:80] or r["url"], r["url"], ks))
+                    if want_doc:
+                        images[r["url"]] = self._page_image(b)
         brief = None
         self._release_page()
         if opened and self.planner and self.planner.installed():
@@ -194,7 +197,55 @@ class Tasks:
         out = "\n".join(report)
         if self.memory and opened:
             self.memory.note("research", topic, brief or out, [u for _, u, _ in opened])
+        if want_doc and opened:
+            self.last_doc = self._research_doc(topic, brief, opened, images)
+            out = (f"Research: {topic}\n\n{brief}" if brief else f"Research: {topic} — {len(opened)} pages read; the document has the key points per page with links and pictures.") + f"\n({len(opened)} pages read in {time.time() - t0:.0f}s)"
         return out
+
+    def _page_image(self, b):
+        """A representative picture of the page (og:image or biggest image), ≤ 250 KB, or None."""
+        try:
+            d = b.page.evaluate("""() => { const og = document.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
+                const imgs = Array.from(document.images).filter(i => i.naturalWidth >= 300 && i.naturalHeight >= 200 && !/logo|icon|sprite|avatar|badge/i.test(i.src));
+                imgs.sort((a, b) => b.naturalWidth * b.naturalHeight - a.naturalWidth * a.naturalHeight);
+                return og && og.content ? new URL(og.content, document.baseURI).href : (imgs[0] ? imgs[0].currentSrc || imgs[0].src : null); }""")
+            if not d:
+                return None
+            if d.startswith("file://"):
+                with open(urllib.parse.unquote(d[7:]), "rb") as f:
+                    data = f.read()
+            else:
+                data = b.page.request.get(d, timeout=12000).body()
+            if not data or len(data) > 1500000:
+                return None
+            try:
+                from PIL import Image
+                import io as _io
+                im = Image.open(_io.BytesIO(data)).convert("RGB")
+                im.thumbnail((480, 480))
+                buf = _io.BytesIO()
+                im.save(buf, "JPEG", quality=70)
+                return buf.getvalue()
+            except Exception:
+                return data if len(data) <= 250000 else None
+        except Exception:
+            return None
+
+    def _research_doc(self, topic, brief, opened, images):
+        """Write the research as a library document: summary, one option per page (picture, link, key points), sources."""
+        from . import library
+        doc = library.Doc(f"Research: {topic}", f"{len(opened)} pages read · {time.strftime('%Y-%m-%d %H:%M')}", kind="research")
+        if brief:
+            doc.summary(brief)
+        else:
+            doc.summary("Key points per page below; the most useful pages come first. Links open the original.")
+        for i, (title, url, ks) in enumerate(opened):
+            doc.option(title, url, image=images.get(url), facts={f"Point {j + 1}": k for j, k in enumerate(ks[:5])}, grade="ok")
+        for title, url, _ in opened:
+            doc.source(url, title)
+        path = doc.save(f"research-{topic[:40]}")
+        self.log("doc_saved", title=doc.title, options=len(opened))
+        return path
 
     def summarize(self, url, max_points=8):
         with self._session() as b:
@@ -232,7 +283,7 @@ class Tasks:
             self.memory.note("summary", title or url, "\n".join(ks), [url])
         return "\n".join(out)
 
-    def compare_suppliers(self, product, n_pages=3):
+    def compare_suppliers(self, product, n_pages=3, want_doc=False):
         rows = []
         with self._session() as b:
             queries = [f"{product} dropshipping supplier", f"{product} wholesale supplier Europe"]
@@ -266,6 +317,17 @@ class Tasks:
         out.append("Note: read-only research; nothing was contacted or ordered.")
         if self.memory:
             self.memory.note("suppliers", product, "\n".join(out[2:-1]), [f"https://{r[0]}" for r in rows])
+        if want_doc:
+            from . import library
+            doc = library.Doc(f"Comparison: {product}", f"{len(rows)} sites · {time.strftime('%Y-%m-%d %H:%M')}", kind="compare")
+            doc.summary(f"{len(rows)} sites compared for {product}. Prices, shipping times and minimum-order notes are exactly as the pages state them; "
+                        "nothing was contacted or ordered. Supplier sites are more useful than directory lists.")
+            doc.table("Side by side", [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows], header=["site", "kind", "page", "prices seen", "shipping times", "MOQ notes"])
+            for r in rows:
+                doc.source(f"https://{r[0]}", r[2])
+            self.last_doc = doc.save(f"compare-{product[:40]}")
+            self.log("doc_saved", title=doc.title, options=len(rows))
+            out = [f"Supplier comparison: {product} — {len(rows)} sites, best-looking first in the document (table with prices, shipping, MOQ, links)."]
         return "\n".join(out)
 
     def exam(self, bank, n=40, seed=1):
@@ -497,7 +559,12 @@ class Tasks:
         return angle, out
 
     # ---- dispatcher ----------------------------------------------------
-    def run(self, command):
+    want_doc = False          # set by the agent per job: the owner asked for a document (links + pictures), not a chat dump
+    last_doc = None           # path of the last document written by research/compare
+
+    def run(self, command, want_doc=False):
+        self.want_doc = bool(want_doc)
+        self.last_doc = None
         return self.on_hands(self._run, command)
 
     def _run(self, command):
@@ -508,9 +575,9 @@ class Tasks:
         self.log("task_start", cmd=cmd, arg=arg)
         try:
             if cmd == "research" and arg:
-                out = self.research(arg)
+                out = self.research(arg, want_doc=self.want_doc)
             elif cmd in ("compare", "suppliers") and arg:
-                out = self.compare_suppliers(arg)
+                out = self.compare_suppliers(arg, want_doc=self.want_doc)
             elif cmd in ("summarize", "summarise", "read") and arg:
                 out = self.summarize(arg)
             elif cmd in ("watch", "video") and arg:

@@ -886,7 +886,7 @@ class Agent:
             return head
         if kind in ("research", "compare", "summarize", "visit", "watch"):
             threading.Thread(target=self.run_task, args=(f"{kind} {topic}", b), daemon=True).start()
-            return head
+            return head + ("\n\nYou'll get the document here (and in my Drive if it's connected)." if b["deliverable"] == "document" else "")
         if kind == "build_site":
             threading.Thread(target=self.run_build_site, args=(b,), daemon=True).start()
             return head + "\n\nBuilding it now — you'll get a screenshot and the files (and a Drive link if connected)."
@@ -1282,13 +1282,26 @@ class Agent:
     def run_task(self, command, brief=None):
         self.busy = command[:60]
         out = ""
+        want_doc = bool(brief and brief.get("deliverable") == "document")
         try:
-            out = self.tasks.run(command)
+            out = self.tasks.run(command, want_doc=want_doc)
         finally:
             self.busy = None
             if brief is not None:
                 self._finish_job(out[:200], delivered=not out.startswith("Task failed"))
         self.log("out", text=out[:300])
+        path = self.tasks.last_doc
+        if want_doc and path:
+            link = ""
+            if self.google.connected():
+                try:
+                    up = self.google.upload(path, folder="Research", convert_to_doc=True)
+                    link = f"\n📄 Google Doc: {up['link']}"
+                except Exception as e:
+                    self.log("drive_upload_failed", error=str(e)[:120])
+            self.bot.send(self.owner_id, f"✅ {out[:2500]}{link}")
+            self.bot.send_document(self.owner_id, str(path), caption="The document — open it in any browser (links, pictures, key points).")
+            return
         self.bot.send(self.owner_id, out)
 
     def idle_work(self):
