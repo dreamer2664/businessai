@@ -22,13 +22,18 @@ from . import config
 LESSONS = config.STATE_DIR / "lessons.jsonl"
 JOURNAL = config.STATE_DIR / "journal.jsonl"
 
-STATUS_Q = re.compile(r"\b(what are you doing|what('s| is) (going on|happening|the status)|how('s| is) it going|are you (still )?(there|working|alive|on it)|status\??|progress|"
-                      r"how long( still| more)?|how much (longer|time)|when (will|are) you (be )?(done|finished)|update\??|where are you( at)?|che stai facendo|a che punto sei|quanto manca|come va)\b", re.I)
+STATUS_Q = re.compile(r"\b(what are you doing|what('s| is) (going on|happening|the status)|how('s| is) it going|is it going (well|ok|okay|fine)|are you (still )?(there|working|alive|on it)|status\??|progress|"
+                      r"how long( still| more)?( will it take)?|how much (longer|time)|when (will|are) you (be )?(done|finished)|update\??|where are you( at)?|(did|have) you (find|found|got|get) (anything|something|it)( yet)?|"
+                      r"any(thing)? (luck|news|results?)( yet)?|che stai facendo|a che punto sei|quanto manca|come va|hai trovato (qualcosa|niente))\b", re.I)
 HURRY = re.compile(r"\b(hurry( up)?|faster|quick(er|ly)?|speed (it )?up|wrap (it )?up|finish (it )?(up|now)|i need it now|come on|sbrigati|veloce|fai presto|concludi)\b", re.I)
 STOP = re.compile(r"^\W*(stop|cancel|abort|enough|forget it|never ?mind|drop it|basta|ferma(ti)?|annulla|lascia (stare|perdere))\b", re.I)
 WHY = re.compile(r"\b(why|what for|perch[eé]|how come)\b", re.I)
-CHAT = re.compile(r"^\W*(hi|hello|hey|ciao|thanks?( you)?|grazie|ok(ay)?|good|nice|great|cool|lol|haha|👍|❤️|🙏)\W*$", re.I)
-CHANGE = re.compile(r"\b(also|and also|instead|rather|only|but|actually|make it|change|switch to|add|include|exclude|not|no more than|max(imum)?|min(imum)?|under|below|above|cheaper|in italy|europe|anche|invece|solo|cambia)\b", re.I)
+CHAT = re.compile(r"^\W*((ok(ay)?|alright|fine|good|nice|great|cool|perfect|super|wow|lol|haha|thanks?( you)?( a lot| so much)?|thank you|grazie( mille)?|ottimo|perfetto|bene|hi|hello|hey|ciao|👍|❤️|🙏|👌|😊|🙂)[\s,!.]*)+"
+                  r"((job|work) so far|so far|then|keep going|go on|continue|carry on|no rush|no hurry|take your time|whenever|con calma|vai pure|continua)?\W*$", re.I)
+NO_RUSH = re.compile(r"\b(take your time|no rush|no hurry|whenever( you can)?|when you can|no stress|con calma|fai con calma|quando puoi|non c'è fretta)\b", re.I)
+CHANGE = re.compile(r"\b(also|and also|instead|rather|only|but|actually|make it|change|switch to|add|include|exclude|not|no more than|max(imum)?|min(imum)?|under|below|above|cheaper|in italy|europe|anche|invece|solo|cambia|"
+                    r"don'?t forget|remember (to|the)|make sure|be sure|focus on|prefer|preferably|skip|leave out|ignore|without|non dimenticare|ricordati)\b", re.I)
+AFTERWARDS = re.compile(r"\b(when (you'?re |it'?s )?(done|finished|ready)|afterwards|after that|once (you'?re |it'?s )?(done|finished)|at the end|quando (hai finito|finisci)|alla fine)\b", re.I)
 
 
 def _append(path, rec):
@@ -191,8 +196,15 @@ class Mind:
             return "hurry", "Speeding up — I'll skip the nice-to-haves and hand you what I have as soon as it's usable."
         if WHY.search(t) and len(t.split()) <= 8:
             return "why", self.why_line()
+        if NO_RUSH.search(t) and len(t.split()) <= 8:
+            if self.job:
+                self.job["hurry"] = False
+            return "chat", "Thanks — I'll do it properly then, and tell you when it's ready."
         if CHAT.search(t):
             return "chat", None
+        if self.job and AFTERWARDS.search(t) and len(t.split()) <= 16 and not re.search(r"https?://", t):
+            self.job.setdefault("after", []).append(t.strip())
+            return "after", f"Will do, right after this job: “{t.strip()[:80]}”."
         if self.job and len(t.split()) <= 14 and CHANGE.search(t) and not re.search(r"https?://", t):
             return "change", None
         return "new", None

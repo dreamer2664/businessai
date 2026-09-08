@@ -886,12 +886,25 @@ class Agent:
             if isinstance(quick, dict):
                 quick = (quick.get("text") or (self.translate(quick["translate"], quick["to"]) if quick.get("translate") else None)
                          or (self.resend_last_doc(to_drive=quick.get("to_drive")) if quick.get("last_doc") else None))
+            if not quick and (self.talk.PRICE.search(text) or self.talk.SHIP_OK.search(text)):   # pricing maths: no browsing, answer now
+                p = self.talk.reply(text)
+                quick = p if isinstance(p, str) else None
             if quick:
                 self.log("talk", text=text[:60], while_busy=True)
                 return quick
             what, reply = self.mind.interrupt(text)
-            if what in ("status", "why", "hurry"):
+            if what in ("status", "why", "hurry", "after"):
                 return reply
+            if what == "chat" and reply:
+                return reply
+            if what == "new" and re.match(r"^\W*(what (is|are|does|do)|what'?s (a|an|the)|define|explain|cos'?[èe]|che cos'?[èe]|come funziona)\b", low) and len(low.split()) <= 12 and not re.search(r"https?://", low):
+                try:                                                                   # a plain knowledge question: the brain answers in a second
+                    ans = self.brain.ask(text) if self.brain.ready else None
+                except Exception:
+                    ans = None
+                if ans:
+                    self.log("talk", text=text[:60], while_busy=True)
+                    return ans + "\n(answered from my own knowledge — the job goes on)"
             if what == "stop":
                 self.stop_flag = True
                 self.site_training = False
@@ -899,7 +912,9 @@ class Agent:
                 self.mind.snag("owner said stop")
                 return f"Stopping “{self.mind.job['goal'][:60]}” — I'll hand you what I have so far in a moment."
             if what == "chat":
-                return None if re.fullmatch(r"\W*(ok(ay)?|👍|❤️|🙏)\W*", low) else "🙂 (still working on it — ask me 'status' any time)"
+                if re.fullmatch(r"\W*(ok(ay)?|👍|❤️|🙏|👌)\W*", low):
+                    return None
+                return "🙂 Thanks — still on it; the result comes here when it's ready (ask 'status' any time)."
             if what == "change":
                 self.mind.job["snags"].append(f"owner changed course: {text[:80]}")
                 self.mind.job["change"] = text
@@ -1419,13 +1434,22 @@ class Agent:
 
     def _finish_job(self, outcome, delivered=True):
         """Every job ends here: reflect (one lesson), clear the clocks, then start whatever the owner queued meanwhile."""
+        after = []
         try:
             if self.mind.job:
                 if self.mind.job.get("change"):
                     outcome = (outcome or "") + f" | owner's mid-job change: {self.mind.job['change'][:80]}"
+                after = list(self.mind.job.get("after") or [])
                 self.mind.reflect(outcome or "", delivered=delivered)
         except Exception as e:
             self.log("reflect_failed", error=str(e)[:100])
+        for a in after:                                                   # "send it to my drive when done" → handled now
+            try:
+                r = self.after_job(a)
+                if r:
+                    self.bot.send(self.owner_id, r)
+            except Exception as e:
+                self.log("after_failed", error=str(e)[:100])
         self.pace.finish()
         self.viewer.plan_done()
         self.active_brief = None
@@ -1435,6 +1459,18 @@ class Agent:
             label = item.get("goal", "") if isinstance(item, dict) else item
             self.bot.send(self.owner_id, f"▶ Now the request you queued: “{str(label)[:80]}”")
             threading.Thread(target=self._start_queued, args=(item,), daemon=True).start()
+
+    def after_job(self, text):
+        """The owner's 'when you're done, …' asks: Drive upload, resend the document, or a to-do — anything else is queued as a request."""
+        low = text.lower()
+        if re.search(r"\b(drive|google)\b", low) and re.search(r"\b(send|upload|put|save|copy)\b", low):
+            return self.resend_last_doc(to_drive=True)
+        if re.search(r"\b(send|resend|forward)\b.{0,20}\b(it|doc|document|report|file)\b", low) and re.search(r"\b(again|me|here)\b", low):
+            return self.resend_last_doc()
+        if re.search(r"\bpdf\b", low):
+            return "About the PDF: my documents are HTML files (they open in any browser and in Google Docs from my Drive). A PDF export is not something I can do yet — I've noted it as a wish."
+        self.mind.queue.append((re.sub(r"\b(when (you'?re |it'?s )?(done|finished|ready)|afterwards|after that|once (you'?re |it'?s )?(done|finished)|at the end)\b", "", text, flags=re.I).strip(" ,"), time.time()))
+        return None
 
     def _start_queued(self, item):
         """A queued item is either the owner's text (goes through understanding again) or an already-approved brief (runs as is)."""
