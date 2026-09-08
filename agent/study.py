@@ -228,7 +228,7 @@ class Study:
             prog.update(text=text, title=meta.get("title", url)[:100], seconds=meta.get("seconds", 0))
         chunks = [prog["text"][i:i + 9000] for i in range(0, len(prog["text"]), 9000)]
         n_total = len(chunks)
-        budget = max_chunks or (6 if (self.planner and self.planner.installed()) else n_total)
+        budget = max_chunks or (6 if (self.planner and self.planner.installed()) else 12)      # ≈ 1-2 h of video per session
         t0 = time.time()
         if self.viewer:
             self.viewer.task = f"studying course: {prog['title'][:50]} ({prog['done']}/{n_total})"
@@ -275,12 +275,12 @@ class Study:
         sents = re.split(r"(?<=[.!?])\s+", chunk)
         def score(x):
             sc = 0
-            sc += 3 * len(re.findall(r"\d+\s?%|\$\s?\d|€\s?\d|\d+\s?(?:x|times)\b", x))
-            sc += 2 * len(re.findall(r"\b\d+\s?(?:days?|hours?|weeks?|products?|orders?|dollars?|euros?|seconds?|words?)\b", x, re.I))
+            sc += 3 * len(re.findall(r"\d+\s?%|\$\s?\d|€\s?\d|\d+\s?(?:x|times)\b|\d+\s?(?:percent|per cent)\b", x, re.I))
+            sc += 2 * len(re.findall(r"\b\d+\s?(?:(?:thousand|million|billion|k)\s?)?(?:days?|hours?|weeks?|months?|products?|orders?|dollars?|euros?|bucks|seconds?|words?|customers?|sales)\b", x, re.I))
             sc += len(re.findall(r"\b(margin|profit|supplier|shipping|conversion|rule of thumb|never|always|make sure|the key is|you (?:should|need to|want to)|at least|no more than)\b", x, re.I))
             sc -= 3 * len(re.findall(r"\b(subscribe|like this video|my course|link in|comment below|congrats|welcome|in this video|I'?ve made|hundreds of videos)\b", x, re.I))
             return sc
-        picks = [x.strip() for x in sents if 50 <= len(x.strip()) <= 220]
+        picks = [x.strip() for x in sents if 40 <= len(x.strip()) <= 220]
         picks = sorted(dict.fromkeys(picks), key=lambda x: -score(x))
         return [x for x in picks[:3] if score(x) >= 3]
 

@@ -229,7 +229,7 @@ Milestones (one per session, each with a score set; earlier scores must not drop
 | 14 deliverables + deep seller check (document with pictures/links, store proposal) | ✅ | sellers 27/27 |
 | 15 eyes on listings + CAPTCHA attempts | ✅ (inside sellers/accounts) | — |
 | 16 own accounts / credential vault / mail codes | ✅ | accounts 12/12 |
-| 17 Drive library: PDF density judge, video ideas, long courses in chapters, brainstorm, quiet-time loop | ✅ | (smoke) |
+| 17 Drive library: PDF density judge, video ideas, long courses in chapters, brainstorm, quiet-time loop | ✅ | study 18/18 |
 | 18 social readiness: practice network + rehearsals (limits, photos, comments, replies) | ✅ | rehearsal 19/19 |
 | 19 website builder + Google-Maps-style auto-training (OpenStreetMap places) + Drive "Websites" | ✅ | sites 28/28 |
 | 20 thinking: journal, interruptions, reflection, lessons | ✅ | mind 29/29 |
