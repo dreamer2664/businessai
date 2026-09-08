@@ -138,6 +138,28 @@ check("next plan of the same kind carries 'From last time'", "From last time" in
 gate.set()
 time.sleep(1)
 
+# ---- ▶ Go tapped while another job runs → queued (never "I'm still busy, ask again") ----
+gate2 = threading.Event(); seen = []
+def slow_run2(command):
+    seen.append((command, A.tasks.want_doc)); gate2.wait(20); return f"done: {command}"
+A.tasks.run = slow_run2
+A.bot.sent.clear()
+threading.Thread(target=A.run_task, args=("research bamboo toothbrush suppliers", {"deliverable": "answer", "goal": "research bamboo toothbrush suppliers", "kind": "research", "steps": ["a"], "pace": {"pace": "quick"}, "topic": "bamboo"}), daemon=True).start()
+time.sleep(0.6)
+A.handle_callback({"id": "9", "from": {"id": 1, "username": "dreamer2664"}, "message": {"chat": {"id": 1}, "message_id": 5}, "data": "b:go"})   # the pending "shipping options" plan
+time.sleep(0.5)
+g = A.bot.sent[-1][0] if A.bot.sent else ""
+check("▶ Go while busy → queued with a number, not refused", "queued" in g and "#1" in g and "still busy" not in g and len(A.mind.queue) == 1, g[:120])
+v = A.respond("/visit https://example.com") or ""
+check("/visit while busy → queued as #2", "#2" in v and len(A.mind.queue) == 2, v[:120])
+gate2.set()
+for _ in range(60):
+    if len(seen) >= 3 and not A.busy:
+        break
+    time.sleep(0.5)
+check("queued brief ran as approved (document wanted), then the /visit", [c for c, _ in seen][1:] == ["research the shipping options from china to italy", "visit https://example.com"] and seen[1][1] is True, str(seen))
+check("owner told each time a queued request starts", sum(1 for t, _ in A.bot.sent if "Now the request you queued" in t) == 2, [t[:50] for t, _ in A.bot.sent])
+
 ok = sum(1 for _, o in checks if o)
 print(f"\nSCORE mind {ok}/{len(checks)}  ({time.time() - t_start:.0f}s)")
 sys.exit(0 if ok == len(checks) else 1)

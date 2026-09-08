@@ -722,7 +722,8 @@ class Agent:
             if not arg:
                 return self.shopfacts.sheet_text()
             if self.busy:
-                return f"I'm still busy with: {self.busy}. Ask me again in a minute."
+                self.mind.queue.append((f"/shop {arg}", time.time()))
+                return f"I'm still on: {self.busy}. Queued the shop read as #{len(self.mind.queue)} — it starts right after."
             self.start_shop_read(arg)
             return f"Reading {arg} now — its help, shipping, returns and contact pages. About a minute; I'll show you what I found."
         if low.startswith("/policy"):
@@ -862,8 +863,10 @@ class Agent:
         return self.execute(b)
 
     def execute(self, b, prefix=""):
-        if self.busy:
-            return f"I'm still busy with: {self.busy}. Ask me again in a minute (or /cancel it)."
+        if self.busy:                                  # e.g. ▶ Go tapped while another job runs → queue it, never a dead end
+            self.mind.queue.append((b, time.time()))
+            return (f"I'm still on: {self.busy}. I queued “{(b.get('goal') or '')[:60]}” as #{len(self.mind.queue)} and start it right after "
+                    f"(say 'stop' to switch now).")
         self.pace.set(b["pace"], b["goal"])
         self.active_brief = b
         self.stop_flag = False
@@ -1116,7 +1119,8 @@ class Agent:
                     "/do desktop what is written on my screen right now?\nI look, decide one step, click or type, check, repeat — "
                     "and ask you before any click that costs money, publishes, signs in or deletes.")
         if self.busy:
-            return f"I'm still busy with: {self.busy}. Ask me again in a minute."
+            self.mind.queue.append((f"/do {arg}", time.time()))
+            return f"I'm still on: {self.busy}. Queued this /do as #{len(self.mind.queue)} — it starts right after (say 'stop' to switch now)."
         if not self.planner.installed():
             return "My thinking model isn't installed here yet — run: sh scripts/get_model.sh"
         where = "browser"
@@ -1240,7 +1244,8 @@ class Agent:
 
     def start_task(self, kind, arg, prefix=""):
         if self.busy:
-            return f"I'm still busy with: {self.busy}. Ask me again in a minute."
+            self.mind.queue.append((f"/{kind} {arg}".strip(), time.time()))
+            return f"I'm still on: {self.busy}. Queued “{kind} {arg[:50]}” as #{len(self.mind.queue)} — it starts right after (say 'stop' to switch now)."
         if not arg:
             return f"What should I {kind}?"
         threading.Thread(target=self.run_task, args=(f"{kind} {arg}",), daemon=True).start()
@@ -1266,14 +1271,16 @@ class Agent:
         self.active_brief = None
         self.stop_flag = False
         if self.mind.queue:
-            text, _ = self.mind.queue.pop(0)
-            self.bot.send(self.owner_id, f"▶ Now the request you queued: “{text[:80]}”")
-            threading.Thread(target=self._start_queued, args=(text,), daemon=True).start()
+            item, _ = self.mind.queue.pop(0)
+            label = item.get("goal", "") if isinstance(item, dict) else item
+            self.bot.send(self.owner_id, f"▶ Now the request you queued: “{str(label)[:80]}”")
+            threading.Thread(target=self._start_queued, args=(item,), daemon=True).start()
 
-    def _start_queued(self, text):
+    def _start_queued(self, item):
+        """A queued item is either the owner's text (goes through understanding again) or an already-approved brief (runs as is)."""
         time.sleep(1)
         try:
-            r = self.respond(text)
+            r = self.execute(item) if isinstance(item, dict) else self.respond(item)
             if r:
                 self.bot.send(self.owner_id, r)
         except Exception as e:
@@ -1283,14 +1290,18 @@ class Agent:
         self.busy = command[:60]
         out = ""
         want_doc = bool(brief and brief.get("deliverable") == "document")
+        self.tasks.want_doc = want_doc            # attribute, not argument: test doubles replace run(command)
+        self.tasks.last_doc = None
         try:
-            out = self.tasks.run(command, want_doc=want_doc)
+            out = self.tasks.run(command)
         finally:
             self.busy = None
             if brief is not None:
                 self._finish_job(out[:200], delivered=not out.startswith("Task failed"))
         self.log("out", text=out[:300])
         path = self.tasks.last_doc
+        if path and not want_doc:                  # a doc came out anyway (e.g. seller list in a compare) → still hand it over
+            want_doc = True
         if want_doc and path:
             link = ""
             if self.google.connected():

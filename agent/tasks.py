@@ -562,10 +562,14 @@ class Tasks:
     want_doc = False          # set by the agent per job: the owner asked for a document (links + pictures), not a chat dump
     last_doc = None           # path of the last document written by research/compare
 
-    def run(self, command, want_doc=False):
-        self.want_doc = bool(want_doc)
+    def run(self, command, want_doc=None):
+        if want_doc is not None:
+            self.want_doc = bool(want_doc)
         self.last_doc = None
-        return self.on_hands(self._run, command)
+        try:
+            return self.on_hands(self._run, command)
+        finally:
+            self.want_doc = False
 
     def _run(self, command):
         """'research <topic>' | 'compare <product>' | 'summarize <url>' | 'visit <site> [, question]' | 'exam [n]'"""
