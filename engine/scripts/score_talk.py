@@ -95,6 +95,19 @@ r = A.respond("shopify vs woocommerce, what do you think?")
 check("opinion: shopify vs woocommerce → a real take, no job", r and "My take on Shopify vs Woocommerce" in r and "Shopify if" in r and not A.busy, (r or "")[:80])
 r = A.respond("is it worth holding stock or dropshipping?")
 check("opinion: stock vs dropshipping", r and "Dropshipping =" in r and "Own stock =" in r, (r or "")[:80])
+r = T.reply("translate to english: la merce parte lunedì, tracking entro 48 ore")
+check("translate: request understood → text + language", isinstance(r, dict) and r.get("to") == "English" and r["translate"].startswith("la merce"), str(r))
+r = T.reply("how do you say 'thanks for your order' in italian?")
+check("translate: 'how do you say X in Y'", isinstance(r, dict) and r.get("to") == "Italian" and r["translate"] == "thanks for your order", str(r))
+r = T.reply("traduci: where is my parcel?")
+check("translate: language guessed from the text (English → Italian)", isinstance(r, dict) and r.get("to") == "Italian", str(r))
+r = A.respond("translate to english: la merce parte lunedì")
+check("agent: no thinking model → honest line, no job", r and "can't translate without my thinking model" in r and not A.busy, r)
+_inst, _chat = A.planner.installed, A.planner.chat
+A.planner.installed = lambda: True; A.planner.chat = lambda *a, **k: "The goods leave on Monday"
+r = A.respond("translate to english: la merce parte lunedì")
+check("agent: with the model → the translation, prefixed with the language", r == "In English:\nThe goods leave on Monday", r)
+A.planner.installed, A.planner.chat = _inst, _chat
 r = A.respond("is 9 € shipping to Germany normal?")
 check("shipping sanity: '9 € shipping to Germany normal' → EU verdict", r and "normal for EU" in r, r)
 # while busy: quick things are answered live, real requests are queued

@@ -106,6 +106,7 @@ class Planner:
         env = dict(os.environ, LD_LIBRARY_PATH=str(LLM_DIR) + ":" + os.environ.get("LD_LIBRARY_PATH", ""))
         self.last_error = ""
         self._self_repair(env)
+        config.LOG_DIR.mkdir(parents=True, exist_ok=True)
         logf = open(config.LOG_DIR / "llm.log", "ab")
         args = [str(SERVER_BIN), "-m", str(MODEL_FILE), "--host", "127.0.0.1", "--port", str(PORT),
                 "-c", "4096", "-np", "1", "-t", THREADS, "--no-warmup"]

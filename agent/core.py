@@ -819,6 +819,20 @@ class Agent:
             self.notify(f"⚠️ My thinking model isn't running: {self.planner.last_error}\nI'll keep working in simple mode (worse understanding and answers) until it is fixed. /status shows the state.")
         return self.understand(text)
 
+    def translate(self, body, lang):
+        """Short translations with the thinking model (a supplier's message, a reply to a customer). Honest when it isn't there."""
+        if not self.planner.installed():
+            return f"I can't translate without my thinking model (it isn't installed here — sh scripts/get_model.sh). The text was: “{body[:200]}”."
+        try:
+            out = self.planner.chat(f"You are a precise translator. Translate the user's text into {lang}. Output only the translation, nothing else.",
+                                    body[:1200], max_tokens=400, timeout=120).strip().strip('"“”')
+        except Exception as e:
+            self.log("translate_failed", error=str(e)[:100])
+            return "My thinking model didn't answer just now — try again in a moment."
+        if not out:
+            return "I couldn't produce a translation for that — try a shorter piece."
+        return f"In {lang}:\n{out}"
+
     # ---- milestone 13: understand → plan → do -------------------------------------------
     GO_WORDS = re.compile(r"^(go|ok go|yes go|do it|go ahead|start|proceed|vai|procedi|sì vai|yes|yep|ok|okay|sure)\W*$", re.I)
 
@@ -827,9 +841,9 @@ class Agent:
         shown; long ones (documents, sites) show the plan first with Go / Change / Cancel buttons."""
         low = text.strip().lower()
         if self.busy and self.mind.job and not self.last_brief:                       # a message while I'm working
-            quick = self.talk.quick(text.strip())                                     # to-do, clock, opinions: answered live, job untouched
+            quick = self.talk.quick(text.strip())                                     # to-do, clock, opinions, translations: answered live, job untouched
             if isinstance(quick, dict):
-                quick = quick.get("text")
+                quick = quick.get("text") or (self.translate(quick["translate"], quick["to"]) if quick.get("translate") else None)
             if quick:
                 self.log("talk", text=text[:60], while_busy=True)
                 return quick
@@ -873,6 +887,8 @@ class Agent:
                 for item in direct["todo"]:
                     self.memory.add(item)
                 return direct["text"]
+            if direct.get("translate"):
+                return self.translate(direct["translate"], direct["to"])
             if direct.get("text"):                                                    # e.g. a to-do item already added by talk
                 return direct["text"]
         if direct:
