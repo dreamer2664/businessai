@@ -183,14 +183,74 @@ class Store:
         return best
 
     # ---- orders --------------------------------------------------------------------
+    EU_OTHER = ("AT", "NL", "BE", "PT", "IE", "PL", "SE", "DK", "FI", "GR", "CZ", "HU", "RO", "HR", "SI", "SK", "LT", "LV", "EE", "LU", "MT", "CY", "BG")
+
+    def ship_rules(self):
+        """The live shipping table: [[code, cost, free_over], …] from the ledger (owner-editable), else the seed."""
+        rules = self.data.get("shipping")
+        if not rules:
+            rules = [list(r) for r in SHIP]
+            self.data["shipping"] = rules
+        return rules
+
     def shipping_for(self, country, subtotal):
         c = country.upper()
-        for code, cost, free_over in SHIP:
+        rules = self.ship_rules()
+        for code, cost, free_over in rules:
             if code == c:
-                return 0.0 if (free_over and subtotal >= free_over) else cost
-        if c in ("AT", "NL", "BE", "PT", "IE", "PL", "SE", "DK", "FI", "GR", "CZ", "HU", "RO", "HR", "SI", "SK", "LT", "LV", "EE", "LU", "MT", "CY", "BG"):
-            return SHIP[-1][1]
-        return None                                                     # outside the EU: not offered
+                return 0.0 if (free_over and subtotal >= free_over) else float(cost)
+        if c in self.EU_OTHER:
+            eu = next((r for r in rules if r[0] == "EU"), None)
+            return float(eu[1]) if eu else None
+        return None                                                     # outside the EU (and not listed): not offered
+
+    def _it_ship_line(self):
+        it = next((r for r in self.ship_rules() if r[0] == "IT"), None)
+        return (f"Italy {money(it[1])}" + (f", free over {money(it[2])}" if it[2] else "")) if it else "see the shipping page"
+
+    def ship_rules_text(self):
+        names = {"IT": "Italy", "DE": "Germany", "FR": "France", "ES": "Spain", "EU": "other EU", "CH": "Switzerland", "GB": "UK", "US": "USA", "AT": "Austria", "NL": "Netherlands", "BE": "Belgium", "PT": "Portugal"}
+        return " · ".join(f"{names.get(c, c)} {money(cost)}" + (f" (free over {money(fo)})" if fo else "") for c, cost, fo in self.ship_rules())
+
+    def set_shipping(self, code, cost=None, free_over=None):
+        """Change one row of the shipping table (used when a 'shipping' proposal is applied). Returns the new row."""
+        rules = self.ship_rules()
+        row = next((r for r in rules if r[0] == code), None)
+        if row is None:
+            row = [code, float(cost or 0), None]
+            rules.insert(len(rules) - 1 if rules and rules[-1][0] == "EU" else len(rules), row)
+        if cost is not None:
+            row[1] = round(float(cost), 2)
+        if free_over is not None:
+            row[2] = None if free_over in (0, "0", "none", "off") else round(float(free_over), 2)
+        # keep the shipping page in step with the rule (the page is what the customer reads)
+        try:
+            pg = self.data["pages"].get("shipping", "")
+            if code == "IT" and pg:
+                pg = re.sub(r"Italy · € ?[\d.,]+(?: \(free over € ?[\d.,]+\))?", f"Italy · {money(row[1])}" + (f" (free over {money(row[2])})" if row[2] else ""), pg)
+                self.data["pages"]["shipping"] = pg
+            elif pg and code not in ("EU",):
+                name = {"CH": "Switzerland", "GB": "United Kingdom", "US": "USA", "NO": "Norway", "CA": "Canada", "DE": "Germany", "FR": "France", "ES": "Spain", "AT": "Austria", "NL": "Netherlands", "BE": "Belgium", "PT": "Portugal"}.get(code, code)
+                if code in ("DE", "FR", "ES") and "Germany, France, Spain" in pg:
+                    others = [r for r in rules if r[0] in ("DE", "FR", "ES")]
+                    if len({round(r[1], 2) for r in others}) == 1:
+                        pg = re.sub(r"Germany, France, Spain · € ?[\d.,]+", f"Germany, France, Spain · {money(row[1])}", pg)
+                    else:
+                        pg = re.sub(r"Germany, France, Spain · € ?[\d.,]+ · 4–6 business days", "\n".join(f"{ {'DE': 'Germany', 'FR': 'France', 'ES': 'Spain'}[r[0]]} · {money(r[1])} · 4–6 business days" for r in others), pg)
+                elif f"{name} ·" in pg:
+                    pg = re.sub(re.escape(name) + r" · € ?[\d.,]+", f"{name} · {money(row[1])}", pg)
+                else:
+                    days = {"CH": "4–7", "GB": "5–8", "NO": "5–8", "US": "7–12", "CA": "7–12"}.get(code, "5–7")
+                    extra = " (import VAT/duties may be charged on delivery)" if code in ("CH", "GB", "US", "NO", "CA") else ""
+                    line = f"{name} · {money(row[1])} · {days} business days{extra}"
+                    if "We do not ship outside the EU yet" in pg and code in ("CH", "GB", "US", "NO", "CA"):
+                        pg = re.sub(r"We do not ship outside the EU yet[^\n]*", line, pg)
+                    else:
+                        pg = pg.replace("\nOrders ship within", f"\n{line}\nOrders ship within", 1) if "\nOrders ship within" in pg else pg.rstrip("\n") + "\n" + line
+                self.data["pages"]["shipping"] = pg
+        except Exception:
+            pass
+        return row
 
     def place_order(self, items, customer, country, simulated=False, day=None):
         """items: [(product_id, option_text, qty)] → order dict; stock is reserved at once (like a real shop)."""
@@ -344,6 +404,10 @@ class Store:
             elif k == "page":
                 self.data["pages"][t] = str(ch)[:4000]
                 out = f"page '{t}' updated"
+            elif k == "shipping":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                row = self.set_shipping(t, d.get("cost"), d.get("free_over", None) if "free_over" in d else None)
+                out = f"shipping {t}: {money(row[1])}" + (f", free over {money(row[2])}" if row[2] else "") + " — live at checkout and on the shipping page"
             elif k == "product":
                 d = json.loads(ch) if isinstance(ch, str) else dict(ch)
                 pid = re.sub(r"[^a-z0-9]+", "-", d["name"].lower()).strip("-")[:40]
@@ -755,7 +819,7 @@ class Handler(BaseHTTPRequestHandler):
             total += p["price"] * l["qty"]
             n += l["qty"]
         body = (f"<p>{n} item{'s' if n != 1 else ''} in your cart.</p><table><tr><th>Item</th><th>Qty</th><th>Price</th><th></th></tr>{''.join(rows)}</table>"
-                f"<p>Subtotal: <b>{money(total)}</b> · shipping is calculated at checkout (Italy € 3,90, free over € 39)</p><p><a class=btn href='/checkout'>Checkout</a></p>")
+                f"<p>Subtotal: <b>{money(total)}</b> · shipping is calculated at checkout ({self.store._it_ship_line()})</p><p><a class=btn href='/checkout'>Checkout</a></p>")
         self._send(page("Your cart", body, s), extra={"Set-Cookie": self._new_cookie} if self._new_cookie else None)
 
     def _checkout(self):
@@ -764,10 +828,14 @@ class Handler(BaseHTTPRequestHandler):
         if not cart:
             return self._redirect("/cart")
         sub = sum(s.product(l["id"])["price"] * l["qty"] for l in cart if s.product(l["id"]))
-        body = (f"<p>Subtotal {money(sub)}. Shipping: Italy {money(s.shipping_for('IT', sub))}, Germany/France/Spain € 6,90, other EU € 8,90.</p>"
+        _rules = s.ship_rules()
+        _names = {"IT": "Italy", "DE": "Germany", "FR": "France", "ES": "Spain", "EU": "other EU", "CH": "Switzerland", "GB": "United Kingdom", "US": "USA", "AT": "Austria", "NL": "Netherlands", "BE": "Belgium", "PT": "Portugal", "NO": "Norway", "CA": "Canada"}
+        _ship_txt = ", ".join(f"{_names.get(c, c)} " + ("free" if (fo and sub >= fo) else money(cost) + (f" (free over {money(fo)})" if fo else "")) for c, cost, fo in _rules)
+        body = (f"<p>Subtotal {money(sub)}. Shipping: {_ship_txt}.</p>"
                 "<form method=post action='/checkout/pay'><label>Name <input name=name required></label><label>E-mail <input name=email type=email required></label>"
                 "<label>Address <input name=address size=40></label><label>Country <select name=country><option value=IT>Italy</option><option value=DE>Germany</option>"
-                "<option value=FR>France</option><option value=ES>Spain</option><option value=AT>Austria</option><option value=NL>Netherlands</option><option value=CH>Switzerland</option><option value=GB>United Kingdom</option></select></label>"
+                "<option value=FR>France</option><option value=ES>Spain</option><option value=AT>Austria</option><option value=NL>Netherlands</option><option value=CH>Switzerland</option><option value=GB>United Kingdom</option>"
+                + "".join(f"<option value={c}>{_names.get(c, c)}</option>" for c, _, _ in _rules if c not in ("IT", "DE", "FR", "ES", "EU", "AT", "NL", "CH", "GB")) + "</select></label>"
                 "<p><button type=submit>Pay now (practice payment — no real money)</button></p></form>")
         self._send(page("Checkout", body, s), extra={"Set-Cookie": self._new_cookie} if self._new_cookie else None)
 

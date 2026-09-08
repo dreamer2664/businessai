@@ -102,7 +102,9 @@ class Talk:
     VAT_ON = re.compile(r"\b(?:what(?:'s| is) the |how much |quanto è l'|quanta )?(?:vat|iva|sales tax)\b.{0,20}?\b(?:on|of|in|su|per|for)\s+(?:a |an |the |un |una |il |la )?" + _MONEY.replace("(\\d", "(?P<amt>\\d") + r"(?:\s+(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?))?\W*$|\b(?:vat|iva)\s+(?:included|inclusa|compresa)\b.{0,20}?" + _MONEY.replace("(\\d", "(?P<amt2>\\d"), re.I)
     FEES_PAID = re.compile(r"\b(?:how much (?:did|have|do) we (?:pay|paid|spend|spent|lose|lost) (?:in|on) (?:payment |card |stripe |paypal |gateway |transaction )?fees|(?:payment |card |gateway |transaction )?fees (?:so far|this week|this month|paid|total)|quanto abbiamo pagato di commissioni|commissioni (?:pagate|totali))\b", re.I)
     BIO_Q = re.compile(r"\b(?:write|draft|make|create|suggest|scrivi|scrivimi|fammi|crea)\b.{0,20}?\b(?:instagram|tiktok|ig|social|profile|profilo)?\s*(?:bio|biography|profile text|about text|tagline|slogan)\b", re.I)
-    SET_FREE_SHIP = re.compile(r"\b(?:set|make|put|change|offer|introduce|metti|imposta|offri)\b.{0,15}?\bfree (?:shipping|delivery)\b.{0,20}?\b(?:over|above|from|for orders over|from orders of|sopra|oltre|da)\s*" + _MONEY.replace("(\\d", "(?P<amt>\\d") + r"|\bspedizione gratuita\b.{0,15}?\b(?:sopra|oltre|da)\s*" + _MONEY.replace("(\\d", "(?P<amt2>\\d"), re.I)
+    SET_FREE_SHIP = re.compile(r"\b(?:set|make|put|change|offer|introduce|metti|imposta|offri)\b.{0,15}?\bfree (?:shipping|delivery)\b.{0,20}?\b(?:over|above|from|for orders over|from orders of|sopra|oltre|da)\s*" + _MONEY.replace("(\\d", "(?P<amt>\\d") + r"|\bspedizione gratuita\b.{0,15}?\b(?:sopra|oltre|da)\s*" + _MONEY.replace("(\\d", "(?P<amt2>\\d")
+                               + r"|^\W*free (?:shipping|delivery)\s+(?:over|above|from)\s*" + _MONEY.replace("(\\d", "(?P<amt3>\\d") + r"\W*(?:from now on|please|in italy)?\W*$"
+                               + r"|\b(?:free (?:shipping|delivery) threshold|soglia (?:della )?spedizione gratuita)\s*(?:to|at|→|=|a)\s*" + _MONEY.replace("(\\d", "(?P<amt4>\\d"), re.I)
     WHY_NOBODY = re.compile(r"\b(?:why (?:did|has|does|is) (?:nobody|no one|no-one|noone) (?:buy|bought|buying|order|ordered|want)|why (?:isn'?t|doesn'?t|aren'?t|don'?t) (?:the |our |my )?(?P<what0>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?) (?:sell|selling|move|moving)|why (?:are|is) (?:the |our |my )?(?P<what00>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?) not selling|perch[eé] nessuno compra|perch[eé] non (?:si )?vend(?:e|ono))\b(?:\s+(?:the |our |my |i |le |il |la )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?))?\W*$", re.I)
     PAGE_LANG = re.compile(r"\b(?:translate|traduci)\b.{0,12}?\b(?:the |la |le )?(?P<page>shipping|returns?|faq|contact|about|spedizioni?|resi|contatti)\s+(?:page|policy|pagina)\b.{0,12}?\b(?:into|in|to) (?P<lang>english|italian|german|french|spanish|dutch|inglese|italiano|tedesco|francese|spagnolo|olandese)\b|\bmake the (?:shop|store|negozio) (?:bilingual|in (?:english|italian|german|french|spanish)( too| as well)?|multilingual)\b|\b(?:negozio|shop|store) (?:bilingue|anche in inglese|anche in italiano)\b", re.I)
     CHECK_IN = re.compile(r"^\W*(?:so |hey |ok |ciao |hi )?(?:how (?:r|are) (?:we|things|you guys|we doing)|how(?:'s| is) (?:it|everything|business|the shop|the store|the day) ?(?:going|doing)?|(?:is )?everything (?:ok|okay|fine|alright|good)(?: with the (?:shop|store))?|all (?:good|ok|fine|quiet)|any (?:problems?|issues?|trouble|news|updates?)|"
@@ -858,7 +860,21 @@ class Talk:
             return self.fees_paid(t)
         m = self.SET_FREE_SHIP.search(t)
         if m:
-            return self.set_free_shipping(_num(m.group("amt") or m.group("amt2")))
+            return self.set_free_shipping(_num(m.group("amt") or m.group("amt2") or m.group("amt3") or m.group("amt4")))
+        m = re.search(r"\b(?:set|make|change|put|charge|lower|raise|update|metti|cambia|porta)\s+(?:the )?(?:shipping|delivery|postage|spedizione)\s+(?:cost |price |fee )?(?:to|for|in|per|verso)\s+(?P<where>[a-zà-ú ]{2,25}?)\s+(?:to|at|a|→|=)\s*" + _MONEY.replace("(\\d", "(?P<v>\\d") +
+                      r"|\b(?:shipping|delivery|spedizione)\s+(?:to|for|in|per)\s+(?P<where2>[a-zà-ú ]{2,25}?)\s*(?:should be|becomes|is now|at|=|:|→)\s*" + _MONEY.replace("(\\d", "(?P<v2>\\d") + r"\W*(?:from now on|d'ora in poi)?\W*$"
+                      r"|\b(?:open|add|enable|start|offer|apri|aggiungi|attiva)\s+(?:shipping|delivery|deliveries|spedizioni?)\s+(?:to|for|in|per|verso)\s+(?P<where3>[a-zà-ú ]{2,25}?)(?:\s+(?:at|for|a)\s*" + _MONEY.replace("(\\d", "(?P<v3>\\d") + r")?\W*$", t, re.I)
+        if m and not re.search(r"\bfree\b", low):
+            where = (m.group("where") or m.group("where2") or m.group("where3") or "").strip().lower()
+            code = next((c for w, c in (("italy", "IT"), ("italia", "IT"), ("germany", "DE"), ("germania", "DE"), ("france", "FR"), ("francia", "FR"), ("spain", "ES"), ("spagna", "ES"), ("switzerland", "CH"), ("svizzera", "CH"), ("the uk", "GB"), ("uk", "GB"), ("united kingdom", "GB"), ("england", "GB"), ("usa", "US"), ("the usa", "US"), ("america", "US"), ("united states", "US"),
+                                         ("austria", "AT"), ("netherlands", "NL"), ("belgium", "BE"), ("portugal", "PT"), ("the rest of the eu", "EU"), ("rest of eu", "EU"), ("other eu", "EU"), ("eu", "EU"), ("europe", "EU"), ("europa", "EU"), ("norway", "NO"), ("canada", "CA")) if re.fullmatch(r"(?:the )?" + re.escape(w), where) or re.search(r"\b" + re.escape(w) + r"\b", where)), None)
+            v = m.group("v") or m.group("v2") or m.group("v3")
+            if code and v:
+                return self.set_ship_price(code, round(_num(v), 2))
+            if code and m.group("where3"):
+                sug = {"CH": 19.90, "GB": 19.90, "US": 34.90, "NO": 19.90, "CA": 34.90}.get(code, 8.90)
+                return (f"Opening shipping to {code}: what should the customer pay? A small parcel costs us about " + {"CH": "€ 20–25 (+ the buyer pays Swiss VAT on delivery)", "GB": "€ 20–25 (+ UK VAT/customs; under £ 135 you should collect UK VAT at checkout)", "US": "€ 40+ (customs form, 7–12 days)", "NO": "€ 20–25 (+ import VAT)", "CA": "€ 35+"}.get(code, "€ 9–13") +
+                        f". Say “open shipping to {where} at {sug:.2f}” and I prepare it for your tap (checkout + shipping page).")
         m = self.WHY_NOBODY.search(t)
         if m:
             r = self.why_not_selling(m.group("what") or m.group("what0") or m.group("what00") or "")
@@ -1084,7 +1100,10 @@ class Talk:
         code = next((c for w, c in (("germany", "DE"), ("germania", "DE"), ("france", "FR"), ("francia", "FR"), ("spain", "ES"), ("spagna", "ES"), ("italy", "IT"), ("italia", "IT"),
                                      ("austria", "AT"), ("netherlands", "NL"), ("olanda", "NL"), ("belgium", "BE"), ("portugal", "PT"), ("poland", "PL"), ("uk", "GB"), ("united kingdom", "GB"), ("england", "GB"), ("switzerland", "CH"), ("svizzera", "CH"), ("usa", "US"), ("america", "US"), ("stati uniti", "US"), ("united states", "US"),
                                      ("ireland", "IE"), ("greece", "GR"), ("grecia", "GR"), ("sweden", "SE"), ("denmark", "DK"), ("finland", "FI"), ("czech", "CZ"), ("croatia", "HR"), ("hungary", "HU"), ("romania", "RO"), ("slovenia", "SI"), ("slovakia", "SK"), ("luxembourg", "LU"), ("norway", "NO"), ("canada", "CA"), ("australia", "AU"), ("japan", "JP"), ("china", "CN"), ("brazil", "BR"), ("turkey", "TR"), ("russia", "RU"), ("san marino", "SM"), ("sicily", "IT"), ("sardinia", "IT"), ("sicilia", "IT"), ("sardegna", "IT")) if re.search(r"\b" + w + r"\b", low)), None)
-        rules = "Italy € 3,90 (free over € 39) · Germany/France/Spain € 6,90 · other EU € 8,90 · outside the EU: not offered yet"
+        try:
+            rules = self.store.ship_rules_text() + " · elsewhere: not offered yet"
+        except Exception:
+            rules = "Italy € 3,90 (free over € 39) · Germany/France/Spain € 6,90 · other EU € 8,90 · outside the EU: not offered yet"
         if not code:
             return f"Our shipping prices (practice store): {rules}. Orders ship within 1 business day with GLS from Bergamo."
         cost = self.store.shipping_for(code, 0)
@@ -1095,10 +1114,14 @@ class Talk:
                    "US": "customs paperwork + € 40 shipping for 2 kg: the maths doesn't work under ~€ 60 orders"}.get(code, "outside the EU every parcel needs a customs declaration and the buyer may pay import VAT on delivery")
             return f"Not yet — we don't ship to {names.get(code, code)}: {why}. The shop covers the EU: {rules}. If a customer asks, say “not yet, we're working on it — leave your e-mail and we tell you when”; say “open shipping to {names.get(code, code)}” when you want me to prepare the rule and prices for your tap."
         days = {"IT": "2–3 business days", "DE": "4–6 business days", "FR": "4–6 business days", "ES": "4–6 business days"}.get(code, "5–7 business days")
-        free = " (free over € 39)" if code == "IT" else ""
+        _row = next((r for r in self.store.ship_rules() if r[0] == code), None)
+        free = f" (free over {_eur(_row[2])})" if _row and _row[2] else ""
         if re.search(r"\b(how long|how many days|quanto ci mette|tempi|when (?:does|will) it arrive)\b", low):
             return (f"To {code}: {days} door to door with GLS (we hand it over within 1 business day, so order Monday → delivered by about {'Thursday' if code == 'IT' else 'the following Monday' if code in ('DE', 'FR', 'ES') else 'the middle of the following week'}); "
                     f"tracked; the customer pays {_eur(cost)}{free}. Tell them the range, not the best case — a day early delights, a day late gets a complaint.")
+        if code in ("CH", "GB", "US", "NO", "CA"):
+            days = {"CH": "4–7 business days", "GB": "5–8 business days", "NO": "5–8 business days"}.get(code, "7–12 business days")
+            return f"Shipping to {code}: {_eur(cost)}{free}, {days}, tracked. That's what the customer pays; a small parcel costs us about " + {"CH": "€ 20–25", "GB": "€ 20–25", "NO": "€ 20–25"}.get(code, "€ 40+") + " plus a customs declaration — the buyer may pay import VAT on delivery, say so on the shipping page."
         return f"Shipping to {code}: {_eur(cost)}{free}, {days}, GLS with tracking. That's what the customer pays; it costs us about € 6–9 for a small EU parcel, so on a € 12,90 item the margin gets thin — a free-shipping threshold for the EU (~€ 60) helps."
 
     def sell_out(self, what):
@@ -1925,16 +1948,33 @@ class Talk:
                 f"The fixed € 0,30 hurts on small baskets — a higher average order (bundles, free-shipping threshold) lowers the percentage. "
                 f"Above ~€ 5.000 a month ask the provider for a lower rate; European cards via a local acquirer often cost 1,4–1,8 %.")
 
-    def set_free_shipping(self, amt):
+    def set_free_shipping(self, amt, code="IT"):
         st = self.store
-        pages = st.data.get("pages", {})
-        cur = pages.get("shipping", "")
-        if not cur:
-            return "The practice store has no shipping page to change yet."
-        new = re.sub(r"free over € ?[\d.,]+", f"free over {_eur(amt).replace(',00', '')}", cur)
-        if new == cur:
-            new = cur.replace("Italy · € 3,90", f"Italy · € 3,90 (free over {_eur(amt).replace(',00', '')})", 1)
-        return {"store_change": {"kind": "page", "page": "shipping", "value": new, "text": f"Shipping page: free shipping in Italy over {_eur(amt)} (was over € 39)"}}
+        row = next((r for r in st.ship_rules() if r[0] == code), None)
+        if row is None:
+            return f"We don't ship to {code} yet — say “open shipping to {code} at <price>” first."
+        old = row[2]
+        if old and abs(old - amt) < 0.01:
+            return f"Free shipping over {_eur(amt)} is already the rule for {code}."
+        paid = [o for o in st.data["orders"] if o["status"] in ("paid", "shipped", "delivered") and o.get("country") == code]
+        aov = sum(o["total"] for o in paid) / len(paid) if paid else None
+        note = ""
+        if aov:
+            hit = len([o for o in paid if o.get("subtotal", o["total"]) >= amt]) / len(paid) * 100
+            note = f" With the orders so far ({code} average basket {_eur(aov)}), {hit:.0f} % of them would have shipped free"
+            note += " — it eats margin without changing behaviour." if hit > 60 else " — fine: it's reachable but not a giveaway." if hit >= 20 else " — almost nobody reaches it; it won't move baskets."
+        return {"store_change": {"kind": "shipping", "code": code, "cost": row[1], "free_over": amt,
+                                 "text": f"Free shipping in {code} over {_eur(amt)}" + (f" (was over {_eur(old)})" if old else " (was: never free)") + f"; the cart, checkout and shipping page follow.{note}"}}
+
+    def set_ship_price(self, code, cost, free_over=None):
+        st = self.store
+        row = next((r for r in st.ship_rules() if r[0] == code), None)
+        if row is not None and abs(row[1] - cost) < 0.01 and free_over is None:
+            return f"Shipping to {code} is already {_eur(cost)}."
+        real = {"IT": "€ 5–7", "DE": "€ 8–10", "FR": "€ 9–11", "ES": "€ 9–11", "EU": "€ 9–13", "CH": "€ 20–25 + customs", "GB": "€ 20–25 + customs", "US": "€ 40+"}.get(code, "€ 9–13")
+        return {"store_change": {"kind": "shipping", "code": code, "cost": cost, "free_over": free_over,
+                                 "text": (f"Shipping to {code}: {_eur(row[1])} → {_eur(cost)}" if row is not None else f"Open shipping to {code} at {_eur(cost)}") +
+                                         (f", free over {_eur(free_over)}" if free_over else "") + f" — live at checkout and on the shipping page. (A real courier costs about {real} for a small parcel there; the difference is yours to absorb or not.)"}}
 
     def why_not_selling(self, what):
         st = self.store

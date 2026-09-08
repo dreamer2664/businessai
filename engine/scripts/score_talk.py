@@ -308,7 +308,7 @@ check("'who bought the lamp?' → orders for that product (or nobody yet)", r an
 r = A.respond("what's my margin on the cork case?")
 check("'what's my margin on the cork case?' → gross, after fee, with free shipping", r and r.startswith("Phone Case Cork at € 19,90") and "69 %" in r and "after the payment fee" in r, (r or "")[:100])
 n0 = len(A.bot.sent); r = A.respond("set free shipping over 49")
-check("'set free shipping over 49' → shipping page proposal with the new text + Publish button", r is None and "free shipping in Italy over € 49,00" in A.bot.sent[-1][0] and "free over € 49" in A.bot.sent[-1][0], A.bot.sent[-1][0][:100])
+check("'set free shipping over 49' → shipping-rule proposal (checkout + page) with an Apply button", r is None and "Free shipping in IT over € 49,00" in A.bot.sent[-1][0] and any("s:ok:" in b[1] for row in (A.bot.sent[-1][1] or []) for b in row), A.bot.sent[-1][0][:100])
 r = A.respond("why did nobody buy the wraps?")
 check("'why did nobody buy the wraps?' → out of stock is the first reason", r and "OUT OF STOCK" in r, (r or "")[:100])
 r = A.respond("how much money is tied up in stock?")
@@ -438,6 +438,24 @@ r = A.respond("lower the lamp to 35 and remind me tomorrow at 9 to call the supp
 check("two requests in one message → both done (price proposal sent + reminder set)", isinstance(r, str) and "Reminder set" in r and any("35" in x[0] and "Apply" in x[0] for x in A.bot.sent), (r or "")[:100] + " | " + " || ".join(x[0][:60] for x in A.bot.sent[-2:]))
 r = A.respond("mark the lamp as sold out")
 check("'mark the lamp as sold out' → stock proposal or already-out note", (r is None and "sold out" in A.bot.sent[-1][0]) or (isinstance(r, str) and "sold out" in r), (r or A.bot.sent[-1][0])[:100])
+# round 8: the shipping table is live — free-shipping threshold, price per country, opening a country
+A.last_brief = None; A.mind.queue.clear(); A.bot.sent.clear()
+r = A.respond("free shipping over 50")
+props_ = [p for p in A.store.data["proposals"] if p["status"] == "open" and p["kind"] == "shipping"]
+check("'free shipping over 50' → a shipping proposal (checkout + page), with the basket maths", r is None and props_ and "Free shipping in IT over € 50,00" in A.bot.sent[-1][0] and "average basket" in A.bot.sent[-1][0], A.bot.sent[-1][0][:120])
+if props_:
+    A.store.apply(props_[-1]["id"])
+check("applied → checkout charges € 3,90 under 50 and € 0 over 50", A.store.shipping_for("IT", 45) == 3.9 and A.store.shipping_for("IT", 55) == 0.0, f"{A.store.shipping_for('IT', 45)} / {A.store.shipping_for('IT', 55)}")
+check("applied → the shipping page says 'free over € 50,00'", "free over € 50,00" in A.store.data["pages"]["shipping"], A.store.data["pages"]["shipping"][:80])
+A.bot.sent.clear()
+r = A.respond("open shipping to switzerland at 19.90")
+props_ = [p for p in A.store.data["proposals"] if p["status"] == "open" and p["kind"] == "shipping"]
+check("'open shipping to switzerland at 19.90' → proposal", r is None and props_ and "CH" in A.bot.sent[-1][0] and "19,90" in A.bot.sent[-1][0], A.bot.sent[-1][0][:100])
+if props_:
+    A.store.apply(props_[-1]["id"])
+check("applied → CH is shippable at € 19,90 and on the page", A.store.shipping_for("CH", 10) == 19.9 and "Switzerland · € 19,90" in A.store.data["pages"]["shipping"], A.store.data["pages"]["shipping"][-160:])
+r = A.respond("how much is shipping to switzerland?")
+check("'shipping to switzerland?' now answers from the live table", isinstance(r, str) and "Shipping to CH: € 19,90" in r, (r or "")[:80])
 r = A.respond("customer says the mug arrived broken, photo attached")
 check("forwarded customer sentence without 'what do I answer' → inbox draft + asks for the photo", r is None and "photo" in A.bot.sent[-1][0].lower(), A.bot.sent[-1][0][:100])
 r = A.respond("does temu sell the cork case cheaper?")

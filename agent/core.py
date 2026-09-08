@@ -1654,6 +1654,10 @@ class Agent:
             label = {"ship": "✅ Mark shipped", "cancel": "✅ Cancel & refund", "refund": "✅ Refund"}[k]
             self.bot.send(self.owner_id, f"🏪 {ch['text']}.\nDo it?", buttons=[[(label, f"s:ok:{prop['id']}"), ("❌ No", f"s:no:{prop['id']}")]])
             return None
+        if k == "shipping":
+            prop = st.propose("shipping", ch["code"], json.dumps({"cost": ch["cost"], "free_over": ch.get("free_over")}), "you asked in chat")
+            self.bot.send(self.owner_id, f"🚚 {ch['text']}\nApply it?", buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
         if k == "page":
             prop = st.propose("page", ch["page"], ch["value"], "you asked in chat")
             self.bot.send(self.owner_id, f"🏪 {ch['text']}.\nNew text:\n{ch['value'][:900]}\nPublish it on the practice store?", buttons=[[("✅ Publish", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
