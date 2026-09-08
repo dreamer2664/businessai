@@ -96,6 +96,44 @@ messages and social media, reports to the owner and asks questions via phone.
    restart, own-page reading, operator on the store front, 5 store-customer replies from its pages).
 12. Real store — owner handles accounts, payments, legal; AI operates with approval gates on money and public posts.
 
+## Phase 2 — "an assistant you talk to" (owner's brief, 2026-09-08)
+The owner's words, condensed: no more relying on commands — understand what I wrote, make a to-do list to fulfil it, then
+do it; hand me a finished document (links, pictures, a walk-through of each option), not a page dump; research sellers
+properly (their page, reviews, social media, complaints, shipping, origin, materials) and offer to add good ones to the
+shop; be prepared on social media before it goes live; respect my pace ("I need it in 10 minutes" → a visible timer and
+a reminder, not a stop; "I'm away 5 hours, take it slow" → use the time, then study, brainstorm, troubleshoot); look at the
+screen, not only the text (a "never worn" listing whose photo shows damage); try CAPTCHAs before giving up and if stuck
+try something else; sign up where useful with its own account (credentials in the secrets file, never in git or logs;
+fetch verification codes from its own mailbox by itself); keep its library in its own Google Drive (PDFs it found, trimmed
+to the information-dense ones; business ideas from short-form video); learn to build websites by itself and auto-train by
+picking random places on Google Maps and building them a site, with a short notification per site; and above all think
+better — "it doesn't even know what it's doing".
+
+Ground rules that do not change: everything free; the owner is in the loop for money, public posts, customer messages,
+account creation the first time on a platform, and anything a CAPTCHA blocks twice; official APIs for Google/Meta (robot
+logins to Google get the account locked); counterfeit goods ("reps") are never sourced or listed — the *research skill* is
+trained on genuine products.
+
+Milestones (one per session, each with a score set; earlier scores must not drop):
+13. Understanding & planning — free text → intent + a written to-do list the owner sees and can edit ("plan first, then
+    do"); pace words ("quick", "10 minutes", "take it slow", "I'm away 5 hours") set a deadline/budget shown on the live
+    screen and in /status; the AI narrates what it is doing and why in plain words (no more "robotic" one-liners).
+14. Deliverables — research produces a document (HTML/Markdown with pictures and links, per-option walk-through, sources)
+    saved to its library and sent as a file; "seller check" skill (page + reviews + social + shipping + origin + materials
+    → reliability verdict); with the store open: "add this to the shop?" proposal with price and shipping.
+15. Eyes on listings — the vision model judges photos, not only text (condition, damage, mismatch with the description);
+    CAPTCHA attempts (checkbox, simple text/image puzzles, retry with a fresh page) with a one-tap fallback to the owner.
+16. Own accounts — sign-up flow with its own e-mail (secrets), verification codes fetched from the mailbox (IMAP), a
+    credential vault (encrypted at rest, never logged), owner confirms the first sign-up per platform.
+17. Own library — Google Drive via the official API (owner does a 10-minute one-time setup): upload research docs, PDFs,
+    websites; long idle time = read PDFs, keep the dense ones, note business ideas from videos (incl. the two the owner sent).
+18. Social media readiness — dry runs on each platform's real posting screen (practice account), interface maps, scores.
+19. Website builder — brief → complete static site (pages, copy, images, contact form) scored by a rubric; auto-training on
+    random Google Maps places; each site saved to Drive + one-line notification.
+20. Smarter thinking — a reflection loop (what am I doing, what do I know, what is missing, what next), self-critique
+    before delivering, and a bigger local model when the machine allows.
+
+
 ## Defaults chosen (override anytime)
 - Engine: hybrid (local + paid model for hard steps), swappable.
 - Autonomy: automatic for research and drafts; ask for money, public posts,
