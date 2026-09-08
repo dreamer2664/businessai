@@ -52,7 +52,7 @@ class Talk:
     # ---- the practice store in plain words ----
     STORE_NUM = re.compile(r"\b(?:how ?many (?:orders|sales|visitors|visits|customers)|^\W*(?:orders?|sales|profit|revenue|visits|visitors|conversion|best[- ]?sellers?|ordini|vendite|profitto|incasso|fatturato|visite)(?: (?:today|this week|so far|this month|oggi|di oggi|della settimana|questa settimana|del mese|finora))?(?=\W*$)|total (?:sales|revenue|orders|profit)(?: so far)?|(?:what(?:'s| is| are) )?(?:our|my|the) (?:best[- ]?sellers?|top (?:product|seller)s?|conversion(?: rate)?|revenue|turnover|profit|margin|numbers|visitors|visits)|how much (?:profit|money|revenue) (?:did|have) (?:we|i) (?:make|made|earn|earned)|(?:profit|revenue|sales) (?:so far|this week|today|this month)|summary of (?:the|this|my) (?:week|day|month)|(?:weekly|daily) summary|how(?:'s| is| are) (?:business|sales|things) going|quanti ordini|quante visite|quanto abbiamo (?:guadagnato|venduto|incassato)|qual è il (?:più venduto|best seller)|riepilogo (?:della |di questa )?(?:settimana|giornata)|riassunto (?:della |di questa |del |di )?(?:settimana|giornata|mese)|(?:our|my|the) (?:average (?:order|basket)(?: value| size)?|aov)|scontrino medio|what (?:did|have) (?:we|i) (?:earn|make|made|earned|sell|sold|take|taken)(?: in)?(?: this week| today| this month| so far| yesterday)?|are we (?:profitable|making money|in profit|losing money|in the black|in the red)|is (?:the|our|my|this) (?:shop|store|business) (?:profitable|making money|losing money|in profit)|does (?:the|our|my|this) (?:shop|store|business) make (?:any )?money|do we make (?:any )?money|siamo in (?:utile|perdita|attivo|passivo)|how much (?:did|have|do) (?:we|i) (?:spend|spent|pay|paid) (?:on|for) (?:shipping|postage|goods|stock|fees|payment fees|the goods)|quanto (?:abbiamo speso|spendiamo) (?:in|di|per) spedizioni|how many (?:customers|buyers|clients|clienti) (?:do (?:we|i) have|have we had|so far|in total|have bought)|quanti clienti abbiamo|which (?:product|item|one) (?:makes|earns|brings|gives)(?: us| me)? the most (?:money|profit|margin)|(?:most profitable|highest[- ]margin|biggest earner) (?:product|item)|what(?:'s| is) (?:our|the) (?:most profitable|highest[- ]margin) (?:product|item)|which product (?:earns|makes) (?:the )?most|(?:how are we doing|how did we do|come (?:siamo andati|è andata)) (?:compared to|vs\.?|versus|against|rispetto a(?:lla)?) (?:last|the previous|la scorsa|la settimana scorsa)|compared to last week|rispetto alla settimana scorsa)\b", re.I)
     SHIP_COST_Q = re.compile(r"\b(?:(?:can|could|do|does|will) (?:we|i|you|the shop|it) (?:also )?(?:ship|deliver|send|be shipped|be sent) to [a-zà-ú ]{2,25}\??|(?:spediamo|spedite|spedisci|consegnate) (?:in|a|anche in) [a-zà-ú ]{2,25}|how long (?:does|will|would) (?:it|shipping|delivery|a parcel|an order) take (?:to (?:ship|deliver|arrive|get|reach))?(?: (?:to|in) [a-zà-ú ]{2,25})?|how (?:long|many days) (?:to|for) [a-zà-ú ]{2,25}\??|quanto ci mette (?:a arrivare )?(?:in|a) [a-zà-ú ]{2,25}|how much (?:is|does|do we charge for|costs?) (?:the )?(?:shipping|delivery|postage)|(?:shipping|delivery) (?:cost|price|fee)s?(?: to| for)?|what do we charge (?:for )?(?:shipping|delivery)|quanto (?:costa|chiediamo per) (?:la )?spedizione|quanto costa spedire|what are (?:our|the|my) (?:shipping|delivery) (?:days|times|options|rules|prices|rates)|how long (?:does|is) (?:our |the )?(?:shipping|delivery)(?: take)?|(?:our|my) (?:shipping|delivery) (?:times|days|rules)|(?:tempi|giorni) di (?:spedizione|consegna)|spedizione (?:in|per|verso) [a-zà-ú]+ quanto costa|spedire in [a-zà-ú]+ quanto costa)\b", re.I)
-    SELLOUT_Q = re.compile(r"\b(?:how long (?:until|before|till) (?:the |our )?(?P<what>[a-z][a-z \-]{2,40}?) (?:sells? out|runs? out|is gone|is sold out)|when (?:will|does) (?:the |our )?(?P<what2>[a-z][a-z \-]{2,40}?) (?:sell out|run out)|(?:stock|units) (?:left )?(?:of |for )?(?:the )?(?P<what3>[a-z][a-z \-]{2,40}?) (?:last|lasts|will last)|quanto dura(?:no)? (?:le |la |il |lo |gli |i )?(?P<what4>[a-zà-ú][a-zà-ú \-]{2,40}?)\?)", re.I)
+    SELLOUT_Q = re.compile(r"\b(?:how (?:long|many days|many weeks) (?:until|before|till) (?:the |our )?(?P<what>[a-z][a-z \-]{2,40}?) (?:sells? out|runs? out|is gone|is sold out)|when (?:will|does) (?:the |our )?(?P<what2>[a-z][a-z \-]{2,40}?) (?:sell out|run out)|(?:stock|units) (?:left )?(?:of |for )?(?:the )?(?P<what3>[a-z][a-z \-]{2,40}?) (?:last|lasts|will last)|quanto dura(?:no)? (?:le |la |il |lo |gli |i )?(?P<what4>[a-zà-ú][a-zà-ú \-]{2,40}?)\?)", re.I)
     MATHS = re.compile(r"^\W*(?:what(?:'s| is)|quanto (?:fa|è)|calcola|calculate|compute)?\s*(?P<a>\d+(?:[.,]\d+)?)\s*%\s*(?:of|di|del|della)\s*(?P<b>\d+(?:[.,]\d+)?)\W*$"
                        r"|^\W*(?:what(?:'s| is)|quanto fa)?\s*(?P<c>\d+(?:[.,]\d+)?)\s*(?:€|eur|euro)?\s*(?:plus|più|\+)\s*(?P<d>\d+(?:[.,]\d+)?)\s*%\W*$"
                        r"|^\W*(?:what(?:'s| is)|quanto fa)?\s*(?P<e>\d+(?:[.,]\d+)?)\s*(?:€|eur|euro)?\s*(?:minus|meno|less|-)\s*(?P<f>\d+(?:[.,]\d+)?)\s*%\W*$"
@@ -1221,12 +1221,26 @@ class Talk:
         except Exception:
             pass
         cover = f" — about {n / weekly:.0f} weeks of sales at {weekly}/week" if weekly else ""
-        i = None
-        try:
-            i = self.memory.add(f"Order {n} × {p['name'].split(' (')[0]} from the supplier ({_eur(cost)} at {_eur(p.get('cost', 0))} each)") if self.memory else None
+        sup, sup_note = "the supplier", ""
+        try:                                                                    # 'remember that the mug supplier is called Terra Ceramics' → the name goes on the line
+            key = p["name"].split(" (")[0].lower().split()
+            for r in (self.memory.notes(" ".join(key), limit=8) if self.memory else []):
+                txt = (r.get("topic", "") + " " + r.get("text", "")).lower()
+                if r.get("kind") == "owner" and re.search(r"supplier|fornitore|vendor|factory", txt) and any(k in txt for k in key if len(k) >= 3 and not k.isdigit()):
+                    mm = re.search(r"\b(?:is called|is named|si chiama|called|named|is|are|=|:)\s+([A-Za-z][\w&'\-]*(?: [A-Za-z][\w&'\-]*){0,3})", r["text"])
+                    if mm and not re.match(r"^(?:the|a|an|closed|open|not|in|on|at|going|very|also)\b", mm.group(1).lower()):
+                        sup = mm.group(1).strip().rstrip(".")
+                    if re.search(r"clos|holiday|chiuso|ferie|vacation|august|agosto|lead time|weeks? to ship|min(?:imum)? order", txt):
+                        sup_note = f" (your note: “{r['text'][:80]}”)"
+                    break
         except Exception:
             pass
-        return (f"Ordering is your money, so I don't place it — but here's the line ready to send: “{n} × {p['name'].split(' (')[0]} at {_eur(p.get('cost', 0))} = {_eur(cost)}”{cover}. "
+        i = None
+        try:
+            i = self.memory.add(f"Order {n} × {p['name'].split(' (')[0]} from {sup} ({_eur(cost)} at {_eur(p.get('cost', 0))} each)") if self.memory else None
+        except Exception:
+            pass
+        return (f"Ordering is your money, so I don't place it — but here's the line ready to send to {sup}{sup_note}: “{n} × {p['name'].split(' (')[0]} at {_eur(p.get('cost', 0))} = {_eur(cost)}”{cover}. "
                 + (f"It's #{i} on your to-do list. " if i else "") +
                 f"When the parcel arrives say “we received {n} more {p['name'].split(' (')[0].lower()}” and I update the stock (now {p['stock']}). "
                 + ("Meanwhile the product is sold out on the site — say “mark it back in 2 weeks” and I put a 'ships in 2 weeks' note on the page instead of hiding it." if p["stock"] == 0 else ""))
