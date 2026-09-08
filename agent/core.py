@@ -37,6 +37,7 @@ from . import library
 from .brief import Brief
 from .pace import Pace
 from .sellers import SellerCheck
+from .accounts import Accounts
 
 
 def money_list(orders):
@@ -62,6 +63,8 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
 /do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do <page1> <page2> | which is cheaper? (compare several pages) · /do <page> | fill in the form: name = …, email = …, message = … (I type, you send) · /do desktop <goal> — same on my own screen. Any click that costs money, publishes, signs in or deletes waits for your tap.
 /google — my own Google account (Drive library + reading my own mailbox for sign-up codes): /google connect · /google test · /google ls
+/accounts — the site accounts I created with my own e-mail (I sign up when a task needs it and tell you in one line; never money sites)
+/library — the documents I've written (seller checks, research, comparisons); they also land in my Drive folder
 /screen · /watch on|off — see my browser · /status · /selftest
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
@@ -97,12 +100,16 @@ class Agent:
         self.google_reconnect_told = 0
         self.pace = Pace(log=self.log)
         self.briefer = Brief(planner=self.planner, log=self.log)
+        self.accounts = Accounts(google=self.google, log=self.log, notify=self.notify, ask=self.ask)
+        self.accounts.eyes = self.eyes
         self.sellers = SellerCheck(self.tasks, planner=self.planner, log=self.log, viewer=self.viewer, pace=self.pace, eyes=self.eyes)
+        self.sellers.accounts = self.accounts
         self.active_brief = None            # the plan being worked on (shown in /status)
         self.last_brief = None              # last plan proposed, for "go" / "change step 2 …"
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
         self.operator = Operator(self.planner, eyes=self.eyes, tasks=self.tasks, desktop=self.desktop, log=self.log,
                                  notify=self.notify, ask_owner=lambda q, opts: self.ask(q, opts, timeout=900), viewer=self.viewer)
+        self.operator.accounts = self.accounts
         self.posts = {}             # post id -> draft dict awaiting the owner's tap
         self.editing_post = None    # post id whose text the owner is typing
         self.drafts = {}            # message id -> draft dict awaiting the owner's tap
@@ -704,6 +711,10 @@ class Agent:
             had = self.editing or self.editing_post
             self.editing = self.editing_post = None
             return "Okay, edit cancelled — the draft is still waiting with its buttons." if had else "Nothing to cancel."
+        if low.startswith("/library"):
+            return library.list_text(10) + ("\n\nDrive folder: " + self.google.folder_link() if self.google.connected() else "")
+        if low.startswith("/accounts") or low.startswith("/account"):
+            return self.accounts.list_text()
         if low.startswith("/google") or re.fullmatch(r"(please )?(connect|link|reconnect|set ?up) (to )?(my |your )?google( drive| account)?( please)?", low.strip(" .!")):
             return self.google_command(text[7:].strip() if low.startswith("/google") else "connect")
         if low.startswith("http://localhost") and "code=" in low:
@@ -1104,7 +1115,7 @@ class Agent:
                 f"practice store: {'open at ' + self.store_url() + ' · day ' + str(self.store.data['day']) + ' · ' + str(len(self.store.data['orders'])) + ' orders' if self.store.server else 'closed (/store open)'}\n"
                 f"channels: {', '.join(c.describe().split(' (')[0] for c in self.channels.active()) or 'none connected (/channels)'}\n"
                 f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
-                f"{self.google.status()}\n"
+                f"{self.google.status()} · {self.accounts.id.describe()} · {len(self.accounts.data['accounts'])} site account(s)\n"
                 f"{self.pace.text()}" + (f" · plan: {self.active_brief['goal'][:60]} (step {self.viewer.plan['step'] + 1 if self.viewer.plan else '?'}/{len(self.active_brief['steps'])})" if self.active_brief else "") + "\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"

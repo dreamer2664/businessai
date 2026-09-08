@@ -68,7 +68,7 @@ class Operator:
         self.history = []
 
     # ---- public --------------------------------------------------------------------------
-    NEVER = re.compile(r"\b(sign in|log ?in|password|passcode|captcha|verify (?:i am|you are) (?:a )?human|enter (?:my|the) (?:card|credit card|iban|cvv)|"
+    NEVER = re.compile(r"\b(enter (?:my|the) (?:card|credit card|iban|cvv)|(?:my|the owner'?s?) (?:password|account|login)|"
                        r"pay(?:ment)? (?:with|by|using) (?:my )?(?:card|paypal)|checkout|check out|place (?:the |my )?order|complete (?:the |my )?(?:purchase|order))\b", re.I)
 
     def run(self, goal, where="browser", start_url=None, allow=None):
@@ -76,8 +76,13 @@ class Operator:
         Returns a plain-language report."""
         self.history = []
         if self.NEVER.search(goal):
-            return ("I stopped before starting: that goal means logging in, paying or handling a password/captcha, and I never do those by "
+            return ("I stopped before starting: that goal means paying or using your own account/password, and I never do those by "
                     "myself. Do that step yourself, then give me the goal that comes after it.")
+        if re.search(r"\b(sign ?up|register|create (?:an )?account|log ?in|sign ?in)\b", goal, re.I) and getattr(self, "accounts", None) and start_url and where == "browser":
+            def _acc(b):
+                return self.accounts.ensure_account(b, start_url if isinstance(start_url, str) else start_url[0], why="you asked me to")
+            ok, note = self.tasks.on_hands(_acc, timeout=300)
+            return ("✅ " if ok else "❌ ") + note
         if isinstance(start_url, (list, tuple)) and len(start_url) > 1 and where == "browser":
             return self._run_pages(goal, list(start_url))
         if isinstance(start_url, (list, tuple)):

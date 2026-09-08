@@ -1,0 +1,405 @@
+"""The agent's own identity and accounts (milestone 16) + CAPTCHA attempts (milestone 15).
+
+Identity: BAI_ACCOUNT_EMAIL / BAI_ACCOUNT_PASSWORD in .secrets/env (never in git, never logged). The agent uses them to sign
+up on sites that need an account (marketplaces to read reviews, Canva-like tools, forums), remembers each account in
+state/accounts.json (site, username, when, status) and fetches e-mail verification codes/links through its own Gmail (google.py).
+
+Rules the owner set:
+  • sign-ups are encouraged; the FIRST sign-up on any new site is announced (one line) — the owner can say stop.
+  • never the owner's own accounts, never money, never a customer message: those stay owner-in-the-loop.
+  • CAPTCHAs: try (simple checkbox / image-text via eyes / audio not attempted); if it fails twice, try another route
+    (another site, another search engine) and, when the task really needs it, ask the owner for one tap.
+
+Everything here drives the Browser through the numbered-item API (b.read/click/type) on the hands thread.
+"""
+import json
+import os
+import re
+import time
+
+from . import config
+
+ACCOUNTS = config.STATE_DIR / "accounts.json"
+NEVER_SIGN_UP = re.compile(r"paypal|stripe|bank|banca|revolut|wise\.com|coinbase|binance|amazon\.(?:com|it|de|fr|es|co\.uk)/ap/register|apple\.com|icloud|google\.com/accounts|accounts\.google|microsoft\.com|live\.com|facebook\.com/r\.php|instagram\.com/accounts/emailsignup|tiktok\.com/signup|x\.com/i/flow/signup", re.I)
+
+
+class Identity:
+    def __init__(self):
+        self.email = os.environ.get("BAI_ACCOUNT_EMAIL", "").strip()
+        self.password = os.environ.get("BAI_ACCOUNT_PASSWORD", "").strip()
+        self.first_name = os.environ.get("BAI_ACCOUNT_FIRST", "Business")
+        self.last_name = os.environ.get("BAI_ACCOUNT_LAST", "AI")
+        self.username = os.environ.get("BAI_ACCOUNT_USERNAME", "") or (self.email.split("@")[0] if self.email else "")
+        self.birthday = os.environ.get("BAI_ACCOUNT_BIRTHDAY", "1995-06-15")
+        self.country = os.environ.get("BAI_ACCOUNT_COUNTRY", "Italy")
+        self.city = os.environ.get("BAI_ACCOUNT_CITY", "Milano")
+
+    def ready(self):
+        return bool(self.email and self.password)
+
+    def describe(self):
+        if not self.ready():
+            return "my own account: not set (add BAI_ACCOUNT_EMAIL and BAI_ACCOUNT_PASSWORD to .secrets/env)"
+        return f"my own account: {self.email} (password kept in .secrets/env)"
+
+    def value_for(self, label):
+        """What to type into a sign-up field, from its label/placeholder/name."""
+        l = (label or "").lower()
+        if re.search(r"e-?mail|mail address|indirizzo", l):
+            return self.email
+        if re.search(r"confirm.*pass|repeat.*pass|ripeti|conferma.*pass|password again|re-?enter", l):
+            return self.password
+        if re.search(r"pass(word|code)?|parola", l):
+            return self.password
+        if re.search(r"user ?name|nickname|nome utente|handle|display name", l):
+            return self.username
+        if re.search(r"first ?name|given|nome\b|vorname|prénom", l) and "last" not in l and "full" not in l:
+            return self.first_name
+        if re.search(r"last ?name|surname|family|cognome|nachname", l):
+            return self.last_name
+        if re.search(r"full ?name|your name|nome e cognome|^name$|\bname\b", l):
+            return f"{self.first_name} {self.last_name}"
+        if re.search(r"birth|nascita|dob|age", l):
+            return self.birthday
+        if re.search(r"country|paese|nazione", l):
+            return self.country
+        if re.search(r"city|città|town", l):
+            return self.city
+        if re.search(r"phone|telefono|mobile|cellulare", l):
+            return None                                             # no phone: skip; the owner decides if a site insists
+        if re.search(r"company|azienda|business name|shop name|store name", l):
+            return "Business AI"
+        return None
+
+
+class Accounts:
+    def __init__(self, google=None, log=None, notify=None, ask=None):
+        self.id = Identity()
+        self.google = google
+        self.log = log or (lambda kind, **f: None)
+        self.notify = notify or (lambda t: None)
+        self.ask = ask                                              # callable(question, options, timeout) -> label|None
+        self.data = self._load()
+
+    # ---- memory of accounts -----------------------------------------------------------
+    def _load(self):
+        try:
+            return json.loads(ACCOUNTS.read_text())
+        except Exception:
+            return {"accounts": []}
+
+    def _save(self):
+        ACCOUNTS.parent.mkdir(parents=True, exist_ok=True)
+        ACCOUNTS.write_text(json.dumps(self.data, indent=1))
+
+    def site_of(self, url):
+        return re.sub(r"^www\.", "", re.sub(r"^https?://", "", url).split("/")[0]).lower()
+
+    @staticmethod
+    def _base(url):
+        m = re.match(r"^(https?://[^/]+)", url)
+        return m.group(1) if m else "https://" + url.split("/")[0]
+
+    def known(self, url):
+        site = self.site_of(url)
+        return next((a for a in self.data["accounts"] if a["site"] == site), None)
+
+    def remember(self, url, status, note=""):
+        site = self.site_of(url)
+        a = self.known(url)
+        if a:
+            a.update(status=status, note=note[:200], t=time.strftime("%Y-%m-%d %H:%M"))
+        else:
+            self.data["accounts"].append({"site": site, "email": self.id.email, "status": status, "note": note[:200], "t": time.strftime("%Y-%m-%d %H:%M")})
+        self._save()
+        self.log("account", site=site, status=status)
+
+    def list_text(self):
+        if not self.data["accounts"]:
+            return self.id.describe() + "\nNo site accounts yet — I create them when a task needs one (you get one line when I do)."
+        rows = "\n".join(f"• {a['site']} — {a['status']} ({a['t']})" + (f" · {a['note']}" if a.get("note") else "") for a in self.data["accounts"][-20:])
+        return f"{self.id.describe()}\nSites where I have an account:\n{rows}"
+
+    # ---- the sign-up / login skill (runs on the hands thread with a Browser) --------------------
+    SIGNUP_WORDS = re.compile(r"\b(sign ?up|create (?:an |your )?account|register|registrati|crea (?:un )?account|iscriviti|join (?:free|now)|get started)\b", re.I)
+    LOGIN_WORDS = re.compile(r"\b(log ?in|sign ?in|accedi|entra|login)\b", re.I)
+    SUBMIT_WORDS = re.compile(r"^(sign ?up|create (?:my )?account|register|registrati|crea account|continue|continua|next|avanti|submit|join|get started|agree (?:and|&) (?:continue|join)|log ?in|sign ?in|accedi|verify|verifica|confirm|conferma)$", re.I)
+    CODE_WORDS = re.compile(r"\b(verification code|codice di verifica|enter (?:the )?code|inserisci il codice|we sent (?:you )?(?:a|an) (?:code|e-?mail)|check your (?:e-?mail|inbox)|confirm your e-?mail|6-digit|one-time)\b", re.I)
+
+    def ensure_account(self, b, url, why="", allow_signup=True):
+        """Make sure the agent is logged in on the site of `url`. Returns (ok, note)."""
+        if not self.id.ready():
+            return False, "I have no account credentials of my own (BAI_ACCOUNT_EMAIL/PASSWORD missing)."
+        if NEVER_SIGN_UP.search(url):
+            return False, "that site is on my never-sign-up list (money, big platforms with strict robot bans)."
+        a = self.known(url)
+        if a and a["status"] == "active":
+            ok, note = self.login(b, url)
+            if ok:
+                return True, "logged in"
+            self.log("login_failed", site=a["site"], note=note[:80])
+            return False, f"I have an account on {a['site']} but could not log in: {note}"
+        if not allow_signup:
+            return False, "no account there and sign-up not allowed for this task"
+        if not a:
+            self.notify(f"🆕 I'm creating an account on {self.site_of(url)} with my own e-mail ({self.id.email}){' — ' + why if why else ''}. Say 'stop' if you don't want that.")
+        return self.signup(b, url)
+
+    def _fill_visible_form(self, b, max_fields=8):
+        """Type identity values into the visible form fields by label. Returns (filled labels, unknown labels)."""
+        b.read()
+        filled, unknown = [], []
+        for it in b.items:
+            if it["role"] not in ("textbox", "input", "email", "password", "tel", "combobox", "select") or len(filled) >= max_fields:
+                continue
+            label = it.get("label") or ""
+            v = self.id.value_for(label)
+            if v is None:
+                if label and not re.search(r"search|cerca|promo|coupon|referral", label, re.I):
+                    unknown.append(label[:30])
+                continue
+            try:
+                b.type(it["n"], v)
+                filled.append(label[:30])
+            except Exception as e:
+                self.log("signup_type_failed", label=label[:30], error=str(e)[:60])
+        # tick consent boxes (terms), never marketing boxes
+        for it in b.items:
+            if it["role"] == "checkbox" and re.search(r"terms|conditions|privacy|agree|accetto|condizioni|age|18", it.get("label") or "", re.I) and not re.search(r"newsletter|marketing|offers|promo", it.get("label") or "", re.I):
+                try:
+                    b.click(it["n"])
+                except Exception:
+                    pass
+        return filled, unknown
+
+    def _submit(self, b):
+        b.read()
+        for it in b.items:
+            if it["role"] in ("button", "submit") and self.SUBMIT_WORDS.match((it.get("label") or "").strip()):
+                b.click(it["n"])
+                return it.get("label")
+        for it in b.items:                                                   # Enter in the last field as a fallback
+            if it["role"] in ("textbox", "input", "password", "email"):
+                last = it
+        try:
+            b.page.keyboard.press("Enter")
+            return "Enter"
+        except Exception:
+            return None
+
+    def _open_signup(self, b, url):
+        b.open(url)
+        b.read()
+        for it in b.items:
+            if it["role"] in ("link", "button") and self.SIGNUP_WORDS.search(it.get("label") or ""):
+                b.click(it["n"])
+                return True
+        for path in ("/signup", "/register", "/sign-up", "/account/register", "/users/sign_up", "/registrati"):
+            try:
+                b.open(f"{self._base(url)}{path}")
+                if b.status() == "ok" and re.search(r"password", b.extract_text(), re.I):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def signup(self, b, url):
+        site = self.site_of(url)
+        t0 = time.time()
+        try:
+            if not self._open_signup(b, url):
+                self.remember(url, "failed", "no sign-up form found")
+                return False, f"I couldn't find a sign-up form on {site}."
+            st = b.status()
+            if st == "captcha":
+                ok = self.solve_captcha(b, site)
+                if not ok:
+                    self.remember(url, "blocked", "captcha at sign-up")
+                    return False, f"{site} showed a CAPTCHA at sign-up that I couldn't pass."
+            filled, unknown = self._fill_visible_form(b)
+            if not any(re.search(r"mail", f, re.I) for f in filled) and not any(re.search(r"pass", f, re.I) for f in filled):
+                self.remember(url, "failed", "form fields not recognised: " + ", ".join(unknown[:4]))
+                return False, f"the sign-up form on {site} has fields I don't recognise ({', '.join(unknown[:4]) or 'none visible'})."
+            pressed = self._submit(b)
+            time.sleep(2)
+            for _round in range(3):                                          # multi-step forms: more fields, code, captcha
+                st = b.status()
+                text = b.extract_text()[:4000]
+                if st == "captcha" and not self.solve_captcha(b, site):
+                    self.remember(url, "blocked", "captcha after submit")
+                    return False, f"{site} asked for a CAPTCHA I couldn't pass."
+                if self.CODE_WORDS.search(text):
+                    if not self.enter_code(b, site):
+                        self.remember(url, "pending", "verification code not found in my mailbox")
+                        return False, f"{site} sent a verification code but I couldn't find it in my mailbox."
+                    time.sleep(2)
+                    continue
+                if re.search(r"already (?:registered|exists|in use|taken)|già registrat|esiste già", text, re.I):
+                    self.remember(url, "active", "already existed → logging in")
+                    return self.login(b, url)
+                more, _ = self._fill_visible_form(b)
+                if more:
+                    self._submit(b)
+                    time.sleep(2)
+                    continue
+                break
+            text = b.extract_text()[:3000]
+            if re.search(r"\b(error|invalid|non valido|errore|try again|riprova)\b", text, re.I) and re.search(r"password|e-?mail", text, re.I):
+                self.remember(url, "failed", "site rejected the form")
+                return False, f"{site} rejected my details."
+            self.remember(url, "active", f"signed up in {time.time() - t0:.0f}s")
+            self.check_confirmation_mail(b, site)
+            return True, f"signed up on {site} as {self.id.email}"
+        except Exception as e:
+            self.log("signup_error", site=site, error=str(e)[:120])
+            self.remember(url, "failed", str(e)[:80])
+            return False, f"sign-up on {site} failed: {str(e)[:80]}"
+
+    def login(self, b, url):
+        site = self.site_of(url)
+        try:
+            b.open(url)
+            b.read()
+            for it in b.items:
+                if it["role"] in ("link", "button") and self.LOGIN_WORDS.search(it.get("label") or "") and not self.SIGNUP_WORDS.search(it.get("label") or ""):
+                    b.click(it["n"])
+                    break
+            filled, _ = self._fill_visible_form(b, max_fields=3)
+            if not any(re.search(r"pass", f, re.I) for f in filled):
+                for path in ("/login", "/signin", "/sign-in", "/account/login", "/users/sign_in", "/accedi"):
+                    try:
+                        b.open(f"{self._base(url)}{path}")
+                        filled, _ = self._fill_visible_form(b, max_fields=3)
+                        if filled:
+                            break
+                    except Exception:
+                        continue
+            if not filled:
+                return False, f"no login form found on {site}"
+            self._submit(b)
+            time.sleep(2)
+            text = b.extract_text()[:3000]
+            if b.status() == "captcha" and not self.solve_captcha(b, site):
+                return False, f"{site} wants a CAPTCHA at login"
+            if self.CODE_WORDS.search(text) and not self.enter_code(b, site):
+                return False, f"{site} asked for a login code I couldn't find"
+            if re.search(r"incorrect|wrong password|invalid|non valid|errat", text, re.I):
+                self.remember(url, "failed", "login rejected")
+                return False, f"{site} rejected my password"
+            self.remember(url, "active", "logged in")
+            return True, "logged in"
+        except Exception as e:
+            return False, f"login on {site} failed: {str(e)[:80]}"
+
+    # ---- e-mail codes / links --------------------------------------------------------------------
+    def enter_code(self, b, site):
+        """Fetch the fresh code from my Gmail and type it in; True on success."""
+        if not (self.google and self.google.connected()):
+            self.log("code_needed_no_gmail", site=site)
+            return False
+        code, mail = self.google.find_code(sender_hint=site.split(".")[0], tries=8, wait=15)
+        if not code:
+            link, mail = self.google.find_link(sender_hint=site.split(".")[0], tries=2, wait=10)
+            if link:
+                b.open(link)
+                return True
+            return False
+        b.read()
+        boxes = [it for it in b.items if it["role"] in ("textbox", "input", "tel", "number") and re.search(r"code|codice|otp|digit|verif", (it.get("label") or "") + " " + (it.get("name") or ""), re.I)]
+        if not boxes:
+            boxes = [it for it in b.items if it["role"] in ("textbox", "input", "tel", "number")]
+        if len(boxes) >= len(code) and all(len(bx.get("value") or "") <= 1 for bx in boxes[:len(code)]):
+            for bx, ch in zip(boxes[:len(code)], code):                       # one box per digit
+                b.type(bx["n"], ch)
+        elif boxes:
+            b.type(boxes[0]["n"], code)
+        else:
+            return False
+        self._submit(b)
+        self.log("code_entered", site=site)
+        return True
+
+    def check_confirmation_mail(self, b, site):
+        """After a sign-up, open the confirmation link if one arrives (does not block long)."""
+        if not (self.google and self.google.connected()):
+            return False
+        link, mail = self.google.find_link(sender_hint=site.split(".")[0], tries=3, wait=15)
+        if link:
+            try:
+                b.open(link)
+                self.log("confirmation_link_opened", site=site)
+                return True
+            except Exception:
+                pass
+        return False
+
+    # ---- CAPTCHA attempts --------------------------------------------------------------------------
+    def solve_captcha(self, b, site, eyes=None):
+        """Try the simple kinds: a checkbox ("I'm not a robot"), a text-in-image with the eyes, a 'press and hold'.
+        Two failed attempts → give up (the caller picks another route or asks the owner)."""
+        eyes = eyes or getattr(self, "eyes", None)
+        for attempt in range(2):
+            try:
+                b.read()
+                box = next((it for it in b.items if it["role"] == "checkbox" or re.search(r"not a robot|non sono un robot|verify you are human|human", it.get("label") or "", re.I)), None)
+                if box:
+                    b.click(box["n"])
+                    time.sleep(2)
+                    if b.status() == "captcha":
+                        self._submit(b)
+                        time.sleep(3)
+                    if b.status() != "captcha":
+                        self.log("captcha_passed", site=site, how="checkbox")
+                        return True
+                # frames: reCAPTCHA / hCaptcha / Turnstile render the checkbox inside an iframe
+                for fr in b.page.frames:
+                    try:
+                        if re.search(r"recaptcha|hcaptcha|turnstile|challenges\.cloudflare", fr.url or "", re.I):
+                            el = fr.query_selector("#recaptcha-anchor, .recaptcha-checkbox, #checkbox, input[type=checkbox], .ctp-checkbox-label, label")
+                            if el:
+                                el.click(timeout=4000)
+                                time.sleep(4)
+                                if b.status() != "captcha":
+                                    self.log("captcha_passed", site=site, how="frame-checkbox")
+                                    return True
+                    except Exception:
+                        continue
+                # text-in-image captcha: read it with the eyes
+                if eyes and getattr(eyes, "ready", lambda: False)():
+                    img = next((it for it in b.items if it["role"] == "img" and re.search(r"captcha|code|verify", (it.get("label") or "") + (it.get("href") or ""), re.I)), None)
+                    field = next((it for it in b.items if it["role"] in ("textbox", "input") and re.search(r"captcha|code|characters|text", it.get("label") or "", re.I)), None)
+                    if img and field:
+                        shot = b.screenshot()
+                        txt = eyes.look(shot, "Read the distorted characters in the CAPTCHA image exactly. Reply with the characters only.", max_tokens=12) or ""
+                        txt = re.sub(r"[^A-Za-z0-9]", "", txt)
+                        if 3 <= len(txt) <= 8:
+                            b.type(field["n"], txt)
+                            self._submit(b)
+                            time.sleep(3)
+                            if b.status() != "captcha":
+                                self.log("captcha_passed", site=site, how="eyes")
+                                return True
+                # press-and-hold buttons
+                hold = next((it for it in b.items if re.search(r"press (?:and|&) hold|tieni premuto", it.get("label") or "", re.I)), None)
+                if hold:
+                    el = b._el(hold["n"])
+                    box_ = el.bounding_box()
+                    if box_:
+                        b.page.mouse.move(box_["x"] + box_["width"] / 2, box_["y"] + box_["height"] / 2)
+                        b.page.mouse.down(); time.sleep(6); b.page.mouse.up()
+                        time.sleep(3)
+                        if b.status() != "captcha":
+                            self.log("captcha_passed", site=site, how="hold")
+                            return True
+            except Exception as e:
+                self.log("captcha_attempt_error", site=site, error=str(e)[:80])
+            time.sleep(2)
+        self.log("captcha_failed", site=site)
+        return False
+
+    def captcha_fallback(self, site, url, timeout=180):
+        """The task truly needs this page: ask the owner for one tap, wait up to `timeout` s."""
+        if not self.ask:
+            return False
+        ans = self.ask(f"🧩 {site} shows a CAPTCHA I can't solve. Could you open it on my live screen and tick it for me? ({url[:80]})", ["Done", "Skip it"], timeout)
+        return ans == "Done"
