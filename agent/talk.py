@@ -145,6 +145,8 @@ class Talk:
     MAIL_CODE = re.compile(r"\b(?:check|look (?:in|at)|read|open|controlla|guarda)\b.{0,12}?\b(?:my |the |your |la |il )?(?:e-?mail|gmail|inbox|posta|mail)\b.{0,30}?\b(?:code|codice|verification|verifica|otp|link|conferma|confirmation)\b|\b(?:verification|confirmation) (?:code|link|mail|email)\b.{0,20}?\b(?:e-?mail|gmail|inbox|posta|arrived|check)\b", re.I)
 
     def __init__(self, memory=None, mind=None, library=None, inbox=None, store=None, log=None, planner=None):
+        from .advice import Advice
+        self.advice = Advice(store=store, inbox=inbox, memory=memory)
         self.planner = planner
         self.memory = memory
         self.mind = mind
@@ -177,6 +179,9 @@ class Talk:
             return q
         m = self.CUSTOMER.search(t)
         if m:
+            adv = self.advice.reply(t, only=self.advice.SITUATIONS)     # "a customer wants an invoice / asks where it's made" → guidance first; forwarding the message still gets a draft
+            if adv:
+                return adv
             return {"customer": self._customer_text(t, m)}
         m = self.MATHS.match(t)
         if m:
@@ -216,6 +221,9 @@ class Talk:
         sense = self.shop_sense(t)                                     # bad review, free shipping, couriers, hashtags, video ideas
         if sense is not None:
             return sense
+        adv = self.advice.reply(t)                                     # incidents and decisions a shopkeeper meets (lost parcel, chargeback, wholesale, influencer…)
+        if adv is not None:
+            return adv
         if self.PRICE.search(t) or (self.COST.search(t) and re.search(r"\b(price|charge|sell|margin|markup|prezzo)\b", low)):
             p = self.pricing(t)
             if p:

@@ -984,6 +984,8 @@ class Agent:
                 return f"Looking in my Gmail for a fresh verification code{' from ' + direct['hint'] if direct.get('hint') else ''} — I'll paste it here as soon as it lands (I check for about 2 minutes)."
             if direct.get("domain"):                                                 # "is greennest.it free?" → RDAP lookup, no browser
                 return self.domain_check(direct["domain"])
+            if direct.get("weather"):                                                # "what's the weather in bergamo" → Open-Meteo (free, no key)
+                return self.weather(direct["weather"], direct.get("when", "now"))
             if direct.get("store_cmd"):                                              # "open the practice store", "print the labels", "all shipped"
                 return self.store_plain(direct["store_cmd"])
             if direct.get("store_change"):                                           # "lower the price of the lamp to 35" → proposal + Apply button
@@ -1521,6 +1523,45 @@ class Agent:
             return f"I couldn't check {dom} (registry answered {e.code}) — try again in a minute or look it up at a registrar."
         except Exception as e:
             return f"I couldn't reach the registry for {dom} ({type(e).__name__}) — I need the network for this; try again in a minute."
+
+    WMO = {0: "clear", 1: "mostly clear", 2: "partly cloudy", 3: "overcast", 45: "fog", 48: "fog", 51: "drizzle", 53: "drizzle", 55: "drizzle", 61: "light rain", 63: "rain", 65: "heavy rain",
+           71: "light snow", 73: "snow", 75: "heavy snow", 80: "showers", 81: "showers", 82: "heavy showers", 95: "thunderstorm", 96: "thunderstorm with hail", 99: "thunderstorm with hail"}
+
+    def weather(self, place, when="now"):
+        """Open-Meteo: free, no key. Current + next days; the shop angle (parcels, market days, launch) in one line."""
+        import urllib.request, urllib.parse
+        try:
+            q = urllib.parse.urlencode({"name": place, "count": 1, "language": "en"})
+            with urllib.request.urlopen(f"https://geocoding-api.open-meteo.com/v1/search?{q}", timeout=15) as r:
+                g = json.loads(r.read().decode())
+            if not g.get("results"):
+                return f"I couldn't find a place called “{place}” — try the city name alone."
+            loc = g["results"][0]
+            q = urllib.parse.urlencode({"latitude": loc["latitude"], "longitude": loc["longitude"], "current": "temperature_2m,weather_code,wind_speed_10m,precipitation",
+                                        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max", "timezone": "auto", "forecast_days": 7})
+            with urllib.request.urlopen(f"https://api.open-meteo.com/v1/forecast?{q}", timeout=15) as r:
+                w = json.loads(r.read().decode())
+        except Exception as e:
+            return f"I couldn't reach the weather service ({type(e).__name__}) — try again in a minute."
+        cur = w.get("current", {})
+        d = w.get("daily", {})
+        name = f"{loc.get('name')}{', ' + loc['country'] if loc.get('country') else ''}"
+        now_line = f"{name} now: {cur.get('temperature_2m')} °C, {self.WMO.get(cur.get('weather_code'), 'mixed')}, wind {cur.get('wind_speed_10m')} km/h."
+        days = []
+        for i, day in enumerate(d.get("time", [])[:7]):
+            dn = _dt.date.fromisoformat(day).strftime("%a %d")
+            days.append((dn, self.WMO.get(d["weather_code"][i], "mixed"), d["temperature_2m_max"][i], d["temperature_2m_min"][i], d["precipitation_probability_max"][i]))
+        if when == "tomorrow" and len(days) > 1:
+            dn, wc, hi, lo, pp = days[1]
+            fc = f"Tomorrow ({dn}): {wc}, {lo:.0f}–{hi:.0f} °C, rain chance {pp} %."
+        elif when == "week":
+            fc = "Next days: " + "; ".join(f"{dn} {wc} {lo:.0f}–{hi:.0f} °C{' ☔ ' + str(pp) + ' %' if pp >= 50 else ''}" for dn, wc, hi, lo, pp in days[1:7]) + "."
+        else:
+            fc = "Next days: " + "; ".join(f"{dn} {wc} {hi:.0f} °C" for dn, wc, hi, lo, pp in days[1:4]) + "."
+        wet = [dn for dn, wc, hi, lo, pp in days[1:7] if pp >= 60]
+        shop = ("Shop angle: " + (f"rain likely on {', '.join(wet)} — bad for market stalls and outdoor shoots, good for online sales (people scroll and buy when it rains); ship on dry days if parcels wait outside doors." if wet else
+                "dry week — good for outdoor product shots and a market day; online traffic tends to dip on sunny weekends, so post in the evening."))
+        return f"{now_line}\n{fc}\n{shop}"
 
     def reminders_due(self):
         """Dated to-dos: ping once when the time comes (from the poll loop, at most once a minute)."""

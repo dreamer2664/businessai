@@ -340,6 +340,48 @@ r = A.respond("when did we last sell a lamp?")
 check("'when did we last sell a lamp?' → the last order for it", r and (r.startswith("Last LED Desk Lamp Nordic sale") or r.startswith("We haven't sold")), (r or "")[:100])
 r = A.respond("spedizione in francia quanto costa")
 check("'spedizione in francia quanto costa' → € 6,90 rule", r and "Shipping to FR: € 6,90" in r, (r or "")[:100])
+# round 5: shopkeeper situations (agent/advice.py)
+for _ in range(120):                                              # the shop-read thread from 'open the practice store' must be over first
+    if not A.busy:
+        break
+    time.sleep(0.5)
+A.mind.queue.clear()
+for q, must in [("the courier lost a parcel, what do I do?", ["Courier lost a parcel", "claim"]),
+                ("a customer says they never got the parcel but tracking says delivered", ["proof of delivery", "refund"]),
+                ("a customer wants an invoice", ["invoice", "codice fiscale"]),
+                ("how do I handle a return?", ["Handling a return", "14 days"]),
+                ("someone wants to buy 100 cork cases for their company", ["100 × Phone Case Cork", "deposit"]),
+                ("an influencer asked for a free lamp in exchange for a post", ["influencer", "Red flags"]),
+                ("what do I do about a chargeback?", ["chargeback", "evidence"]),
+                ("should I open a tiktok shop?", ["TikTok Shop", "organic videos"]),
+                ("do I need insurance?", ["Insurance", "Product liability"]),
+                ("how do I package the mugs so they don't break?", ["Packing Stoneware Coffee Mug", "bubble wrap"]),
+                ("what's a good name for a newsletter?", ["Newsletter names for Green Nest", "1. "]),
+                ("can you write the newsletter?", ["Newsletter draft", "Subject:", "unsubscribe"]),
+                ("what time should I post?", ["When to post", "Instagram"]),
+                ("how often should I post?", ["How often to post", "a day for the first 30 days"]),
+                ("what's our return rate?", ["Return/refund rate", "%"]),
+                ("which country buys most?", ["Sales by country", "IT"]),
+                ("which day of the week sells best?", ["weekday", "orders"]),
+                ("what do you think of the shop so far?", ["Honestly:", "Numbers:"]),
+                ("I'm thinking of adding candles to the shop, good idea?", ["Adding candles", "Test small"]),
+                ("should I raise prices?", ["Raise prices?", "Omnibus"]),
+                ("tell me a joke", ["Back to work"]),
+                ("I'm bored", ["Pick one"]),
+                ("someone copied my photos and description", ["copyright", "48 h"]),
+                ("I listed the lamp at the wrong price and someone ordered", ["Wrong price", "Refund immediately"]),
+                ("where do I buy cheap boxes?", ["Boxes and packing", "RAJA"]),
+                ("how do I take product photos with my phone?", ["Product photos", "window"]),
+                ("I'm going on holiday for two weeks, what do I do with the shop?", ["holiday", "banner"]),
+                ("do I need a cookie banner?", ["GDPR", "Cookie banner"]),
+                ("a customer asks where the mugs are made, what do I say?", ["Where is it made", "truth"])]:
+    r = A.respond(q); A.last_brief = None; A.mind.queue.clear()
+    check(f"advice: {q!r}", r and all(x in r for x in must) and not A.mind.job, (r or "")[:100])
+A.weather = lambda place, when="now": f"weather stub {place} {when}"
+r = A.respond("what's the weather in bergamo")
+check("'what's the weather in bergamo' → Open-Meteo lookup (stubbed here), no research job", r == "weather stub Bergamo now", r)
+r = A.respond("will it rain in milan tomorrow?")
+check("'will it rain in milan tomorrow?' → tomorrow's forecast", r == "weather stub Milan tomorrow", r)
 A.domain_check = lambda dom: f"stub {dom}"
 r = A.respond("can you check if the domain greennest.it is free?")
 check("'is the domain greennest.it free?' → registry lookup (no browser job)", r == "stub greennest.it", r)
