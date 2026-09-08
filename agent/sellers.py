@@ -204,6 +204,7 @@ class SellerCheck:
         self.viewer = viewer
         self.pace = pace
         self.eyes = eyes
+        self.live_change = ""            # the owner's mid-job words ("only sellers that ship from italy") — read before judging
 
     # ---- steps ---------------------------------------------------------------------
     def _step(self, i, note=""):
@@ -390,10 +391,70 @@ class SellerCheck:
         return verdict
 
     # ---- the whole job -----------------------------------------------------------------
+    COUNTRY_WORDS = {"italy": ("ital",), "italia": ("ital",), "europe": ("ital", "german", "france", "franc", "spain", "spagn", "portug", "netherl", "olanda", "belg", "austria", "poland", "polon", "eu ", "europe"),
+                     "europa": ("ital", "german", "france", "spain", "portug", "europe"), "eu": ("ital", "german", "france", "spain", "portug", "netherl", "europe", "eu "),
+                     "germany": ("german", "deutsch"), "spain": ("spain", "spagn", "españ"), "france": ("france", "franc"), "uk": ("uk", "united kingdom", "britain", "england"), "usa": ("usa", "united states", "u.s."), "china": ("china", "cina", "cn")}
+
+    def parse_constraints(self, product):
+        """'cork sandals (max € 30; only italian sellers; ships from italy)' → (clean product, {"max": 30.0, "from": "italy", "words": [...]})."""
+        c = {"max": None, "from": None, "words": []}
+        m = re.search(r"\s*\(([^()]*)\)\s*$", product)
+        if not m:
+            return product, c
+        for part in re.split(r"\s*;\s*", m.group(1)):
+            low = part.lower().strip()
+            mm = re.match(r"max\s*€?\s*(\d+(?:[.,]\d+)?)", low)
+            if mm:
+                c["max"] = float(mm.group(1).replace(",", "."))
+                continue
+            mm = re.match(r"(?:ships from|ship from|shipping from|from|only|solo)\s+([a-z]+)", low)
+            adj = {"italian": "italy", "italiani": "italy", "italiano": "italy", "german": "germany", "tedeschi": "germany", "spanish": "spain", "french": "france", "european": "europe", "europei": "europe",
+                   "chinese": "china", "cinesi": "china", "british": "uk", "american": "usa", "italia": "italy", "europa": "europe"}
+            if mm and (mm.group(1) in self.COUNTRY_WORDS or mm.group(1) in adj):
+                c["from"] = adj.get(mm.group(1), mm.group(1))
+                continue
+            if low and not re.match(r"\d+ options?|no social media check", low):
+                c["words"].append(part.strip())
+        return product[:m.start()].strip(), c
+
+    @staticmethod
+    def live_change_to_condition(text):
+        """Owner's mid-job sentence → the '(…; …)' condition syntax the planner uses."""
+        low = text.lower()
+        parts = []
+        m = re.search(r"\b(?:max|under|below|less than|no more than|massimo|sotto|entro)\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)", low)
+        if m:
+            parts.append(f"max € {m.group(1)}")
+        m = re.search(r"\b(?:from|in|da|ship(?:ping|s)? from|based in)\s+(italy|italia|europe|europa|eu|germany|spain|france|uk|usa|china)\b", low)
+        if m:
+            parts.append(f"ships from {m.group(1)}")
+        m = re.search(r"\b(?:only|solo)\s+(italian|german|spanish|french|european|chinese|british|american|italiani|europei|cinesi)\b", low)
+        if m:
+            parts.append(f"only {m.group(1)}")
+        if not parts:
+            parts.append(text.strip())
+        return "; ".join(parts)
+
+    def apply_constraints(self, L, c):
+        """Owner's conditions become part of the verdict: over budget or from the wrong place → 'bad' with the reason."""
+        cons = []
+        p = L["facts"].get("_price")
+        if c.get("max") and p and p > c["max"]:
+            cons.append(f"over your € {c['max']:g} limit ({L['facts'].get('Price')})")
+        if c.get("from"):
+            origin = (L["facts"].get("Ships from / origin") or "").lower()
+            words = self.COUNTRY_WORDS.get(c["from"], (c["from"],))
+            if origin and not any(w in origin for w in words):
+                cons.append(f"ships from {L['facts'].get('Ships from / origin')}, you wanted {c['from']}")
+            elif not origin:
+                cons.append(f"origin not stated — you wanted {c['from']}")
+        return cons
+
     def run(self, product, n=4, want_doc=True, counterfeit_note=""):
         """Returns (document path, summary text, options list). Runs on the hands thread (caller uses T.on_hands)."""
         t0 = time.time()
         options = []
+        product, constraints = self.parse_constraints(product)
         with self.T._session() as b:
             n_eff = max(2, n - 1) if (self.pace and self.pace.hurry()) else n
             urls = re.findall(r"(?:https?|file)://[^\s<>\"']+", product)
@@ -442,6 +503,12 @@ class SellerCheck:
                         self.T.notify(r)
         self.T._release_page()
         self._step(3, "judging reliability")
+        if self.live_change:                                             # what the owner said while I was reading → same rules as a planned condition
+            _, late = self.parse_constraints(f"x ({self.live_change_to_condition(self.live_change)})")
+            for k in ("max", "from"):
+                constraints[k] = late[k] or constraints.get(k)
+            constraints["words"] = constraints.get("words", []) + late["words"]
+            self.live_change = ""
         for L in options:
             if L.get("note"):
                 L.update(grade="bad", verdict=L["note"], pros=[], cons=["could not be read"])
@@ -450,12 +517,18 @@ class SellerCheck:
             if L.get("eyes"):
                 cons.insert(0, "the photo contradicts the listing: " + L["eyes"][2:])
                 grade = "bad" if grade != "good" else "ok"
+            owner_cons = self.apply_constraints(L, constraints)
+            if owner_cons:                                                 # the owner's conditions outrank my own reading
+                cons = owner_cons + cons
+                grade = "bad" if any("over your" in x or "you wanted" in x and "not stated" not in x for x in owner_cons) else ("ok" if grade == "good" else grade)
+                verdict = owner_cons[0][0].upper() + owner_cons[0][1:] + ". " + verdict
             L.update(grade=grade, verdict=self.verdict_text(product, L, grade, verdict, pros, cons), pros=pros, cons=cons)
         order = {"good": 0, "ok": 1, "bad": 2}
         options.sort(key=lambda L: (order[L["grade"]], L["facts"].get("_price", 1e9)))
         # ---- document -----------------------------------------------------------------
         self._step(4, "writing the document")
-        doc = library.Doc(f"{product} — seller check", f"{len(options)} options researched · read-only, nothing bought or contacted", kind="seller_check")
+        cond = "; ".join(([f"max € {constraints['max']:g}"] if constraints.get("max") else []) + ([f"from {constraints['from']}"] if constraints.get("from") else []) + constraints.get("words", []))
+        doc = library.Doc(f"{product} — seller check", f"{len(options)} options researched · read-only, nothing bought or contacted" + (f" · your conditions: {cond}" if cond else ""), kind="seller_check")
         best = [L for L in options if L["grade"] == "good"] or [L for L in options if L["grade"] == "ok"]
         if urls and len(options) == 1:                                   # one link from the owner → a verdict on that shop, not a ranking
             L = options[0]
@@ -466,6 +539,7 @@ class SellerCheck:
             summary = ((f"I looked at the {len(options)} listing(s) you sent ({product}). " if urls else f"I looked at {len(options)} listings for {product}. ") +
                        (f"Best bet: {best[0]['seller']} ({best[0]['facts'].get('Price', 'price n/a')}) — {best[0]['verdict']} " if best else "None of them convinced me. ") +
                        (f"Skip: {', '.join(L['seller'] for L in options if L['grade'] == 'bad')}. " if any(L['grade'] == 'bad' for L in options) else "") +
+                       (f"Your conditions ({cond}) are applied in the verdicts. " if cond else "") +
                        (counterfeit_note or ""))
         doc.summary(summary)
         doc.table("Side by side", [[L["seller"], L["facts"].get("Price", "-"), L["facts"].get("Shipping", "-"), L["facts"].get("Delivery time", "-"),

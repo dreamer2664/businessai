@@ -918,6 +918,8 @@ class Agent:
             if what == "change":
                 self.mind.job["snags"].append(f"owner changed course: {text[:80]}")
                 self.mind.job["change"] = text
+                if self.mind.job.get("kind") == "seller_check":
+                    self.sellers.live_change = (self.sellers.live_change + "; " + text).strip("; ")
                 return f"Noted for this job: “{text.strip()[:100]}”. I apply it to what's left, and I'll say so in the result."
             self.mind.queue.append((text, time.time()))
             return f"Got it — I'm in the middle of “{self.mind.job['goal'][:60]}”, so this is queued as #{len(self.mind.queue)}. I start it as soon as I'm done (or say 'stop' to switch now)."

@@ -100,6 +100,50 @@ check("doc: links + verdicts + table", "listing_a.html" in html and "Side by sid
 rec = library.recent(1)
 check("doc: index row", rec and rec[0]["kind"] == "seller_check" and rec[0]["options"] == 3, str(rec[:1]))
 
+# ---- owner's conditions ("max € 20; only italian sellers") change the verdicts ------------------------------
+S2 = SellerCheck(T, planner=None, log=lambda k, **f: None, viewer=None, pace=None)
+clean, cst = S2.parse_constraints("cork slippers (max € 20; only italian sellers)")
+check("constraints: parsed from the amended topic", clean == "cork slippers" and cst["max"] == 20 and cst["from"] == "italy", str(cst))
+def fake_run_cst():
+    b = T.browser()
+    def search_results(query, limit=10):
+        b.open(BASE + "search.html")
+        links = [{"n": l["n"], "title": l["text"], "url": l["href"]} for l in b.links(50) if l.get("href")]
+        if "reviews" in query:
+            links.sort(key=lambda r: 0 if "review" in r["url"] else 1)
+        return links[:limit]
+    b.search_results = search_results
+    real_open = b.open
+    b.open = lambda url: real_open(BASE + "social_corkstep.html") if ("instagram.com" in url or "facebook.com" in url) else real_open(url)
+    b.ENGINE_HOSTS = re.compile(r"$^")
+    return S2.run("cork slippers (max € 20; only italian sellers)", n=4)
+cpath, csummary, coptions = T.on_hands(fake_run_cst, timeout=240)
+ca = next((o for o in coptions if "listing_a" in o["url"]), {})
+check("constraints: CorkStep (€ 24,90, Porto) now 'bad' with the owner's reasons first", ca.get("grade") == "bad" and ca.get("cons") and "over your € 20 limit" in ca["cons"][0] and any("you wanted italy" in c for c in ca["cons"]), f"{ca.get('grade')} {ca.get('cons')}")
+check("constraints: summary says the conditions were applied", "Your conditions (max € 20; from italy)" in csummary, csummary[:160])
+chtml = open(cpath, encoding="utf-8").read() if cpath else ""
+check("constraints: document subtitle shows them", "your conditions: max € 20; from italy" in chtml, "")
+
+# ---- a mid-job sentence from the owner is applied before judging ------------------------------------------
+S3 = SellerCheck(T, planner=None, log=lambda k, **f: None, viewer=None, pace=None)
+S3.live_change = "only sellers that ship from italy"
+def fake_run_live():
+    b = T.browser()
+    def search_results(query, limit=10):
+        b.open(BASE + "search.html")
+        links = [{"n": l["n"], "title": l["text"], "url": l["href"]} for l in b.links(50) if l.get("href")]
+        if "reviews" in query:
+            links.sort(key=lambda r: 0 if "review" in r["url"] else 1)
+        return links[:limit]
+    b.search_results = search_results
+    real_open = b.open
+    b.open = lambda url: real_open(BASE + "social_corkstep.html") if ("instagram.com" in url or "facebook.com" in url) else real_open(url)
+    b.ENGINE_HOSTS = re.compile(r"$^")
+    return S3.run("cork slippers", n=4)
+lpath2, lsummary2, loptions2 = T.on_hands(fake_run_live, timeout=240)
+la = next((o for o in loptions2 if "listing_a" in o["url"]), {})
+check("live change: 'only sellers that ship from italy' said mid-job → Portuguese seller marked bad for that reason", la.get("grade") == "bad" and any("you wanted italy" in c for c in la.get("cons", [])) and not S3.live_change, f"{la.get('grade')} {la.get('cons')}")
+
 # ---- "is this shop legit? <link>": the link itself is the candidate, no search needed ----------------------
 def fake_link_run():
     b = T.browser()

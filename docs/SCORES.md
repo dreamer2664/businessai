@@ -27,7 +27,7 @@
 | score | result | what it proves | harness |
 |---|---|---|---|
 | brief | 30/30 | plain sentences → kind / deliverable / pace / deadline / budget / topic, counterfeit flag, amend while pending, Italian pace words | `python3 engine/scripts/score_brief.py` |
-| sellers | 29/29 | deep seller check on a fake marketplace: listing, reviews (right seller), social page + comments, reliability grades, document with pictures + links, store proposal | `timeout 280 python3 engine/scripts/score_sellers.py` |
+| sellers | 34/34 | deep seller check on a fake marketplace: listing, reviews (right seller), social page + comments, reliability grades, document with pictures + links, store proposal; owner's conditions (max €, only Italian / ships from …) — planned or said mid-job — outrank my reading and show in verdicts, summary and document | `timeout 280 python3 engine/scripts/score_sellers.py` |
 | accounts | 12/12 | own-account sign-up on a fake site (identity, terms, code from mail, checkbox CAPTCHA), login, never-sign-up list, no double sign-up | `timeout 280 python3 engine/scripts/score_accounts.py` |
 | study | 18/18 | self-study: PDF density judge, ideas from short videos, long videos → chaptered course notes resumed across sessions, ideas doc sync, quiet-session cycling, owner's two courses pending from the start | `python3 engine/scripts/score_study.py` |
 | sites | 34/34 | website builder: sentence → brief, 6-page self-contained site, facts grounded, own-browser check (broken links, leftovers, mobile overflow), zip + screenshot, all 15 kinds, training switch | `timeout 280 python3 engine/scripts/score_sites.py` |
