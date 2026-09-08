@@ -133,6 +133,9 @@ class Agent:
         self.last_site = None                                     # the last website brief, so "make it in Italian too" knows which site
         self.mind = Mind(planner=self.planner, log=self.log, pace=self.pace, viewer=self.viewer)
         self.talk = Talk(memory=self.memory, mind=self.mind, library=library, inbox=self.inbox, store=self.store, log=self.log, planner=self.planner)
+        self.talk.selftalk.busy_text = lambda: self.busy
+        self.talk.selftalk.pace = self.pace
+        self.talk.selftalk.version = VERSION
         self.viewer.listener = self.mind.on_event
         self.stop_flag = False
         self.rehearsal = Rehearsal(self.tasks, accounts=self.accounts, social=self.social, inbox=self.inbox, log=self.log, viewer=self.viewer, eyes=self.eyes)

@@ -161,7 +161,9 @@ class Talk:
 
     def __init__(self, memory=None, mind=None, library=None, inbox=None, store=None, log=None, planner=None):
         from .advice import Advice
+        from .selftalk import SelfTalk
         self.advice = Advice(store=store, inbox=inbox, memory=memory)
+        self.selftalk = SelfTalk(store=store, inbox=inbox, memory=memory, mind=mind)
         self.planner = planner
         self.memory = memory
         self.mind = mind
@@ -181,7 +183,7 @@ class Talk:
         low = t.lower()
         if self.GREET.match(t):
             return self.greet()
-        if self.CAN_DO.search(t):
+        if self.CAN_DO.search(t) and not re.search(r"\b(alone|on your own|by yourself|without me)\b|\b(when|if|with|about|for the shop|while)\b.{0,40}?\b(customer|angry|rude|shop|store|order|refund|me)\b", low):
             return self.can_do()
         if self.BYE.match(t) and len(low.split()) <= 8:
             return self.bye()
@@ -189,6 +191,9 @@ class Talk:
             return "You're welcome. I'm here when you need the next thing."
         if self.TODAY.search(t):
             return self.today()
+        st_ = self.selftalk.reply(t)                                    # about me and about judgment: 'what are you doing?', 'why did you propose…', 'if you were me…'
+        if st_:
+            return st_
         q = self.quick(t)                                              # to-do, clock, opinions — also answered while I'm busy
         if q is not None:
             return q
