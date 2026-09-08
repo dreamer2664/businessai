@@ -117,9 +117,10 @@ def random_place(rng=random, timeout=40):
     osm_kind = t.get("amenity") or t.get("shop") or ""
     addr = ", ".join(x for x in (f"{t.get('addr:street', '')} {t.get('addr:housenumber', '')}".strip(), t.get("addr:postcode", ""), t.get("addr:city", city)) if x)
     c = e.get("center") or {"lat": e.get("lat"), "lon": e.get("lon")}
+    langs = ["it", "en"] if country == "Italy" else ["en"]                                          # Italian places: Italian site first, English switch
     return {"name": t["name"], "kind": OSM_KIND.get(osm_kind, "shop"), "osm_kind": osm_kind, "city": t.get("addr:city", city), "country": country, "address": addr,
             "phone": t.get("phone") or t.get("contact:phone", ""), "website": t.get("website", ""), "hours": t.get("opening_hours", ""),
-            "cuisine": t.get("cuisine", ""), "lat": c.get("lat"), "lon": c.get("lon"), "osm_id": f"{e['type']}/{e['id']}"}
+            "cuisine": t.get("cuisine", ""), "lat": c.get("lat"), "lon": c.get("lon"), "osm_id": f"{e['type']}/{e['id']}", "langs": langs}
 
 
 def geocode(address, city, country="", timeout=15):
