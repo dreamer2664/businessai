@@ -42,7 +42,9 @@ class Talk:
     TODAY = re.compile(r"\b(what (did|have) you (do|done|work(ed)? on|been up to)( today| so far| this morning)?|remind me what you did|recap( of)? (today|the day)|what happened today|cosa hai fatto( oggi)?|daily recap|summary of (today|your day))\b", re.I)
     PRICE = re.compile(r"\b(how much (should|can|do) i (charge|sell|price|ask)|what (price|should i charge)|(sell|retail) price for|quanto (dovrei|posso) (chiedere|far pagare)|a che prezzo)\b", re.I)
     COST = re.compile(r"\b(?:costs?(?: me)?|cost price|i pay|buy (?:it )?(?:for|at)|mi costa|pago)\s*" + _MONEY, re.I)
-    SHIP_OK = re.compile(r"\b(?:is|are)\s*" + _MONEY + r"\s*(?:for )?(?:shipping|delivery|spedizione)(?: (?:cost|fee))?(?: (?:to|for|in) [a-z ]{2,20}?)?\s*(?:too (?:much|expensive|high)|ok|okay|fine|reasonable|fair|normal|a lot|acceptable|right)", re.I)
+    SHIP_OK = re.compile(r"\b(?:is|are)\s*" + _MONEY + r"\s*(?:for )?(?:shipping|delivery|spedizione)(?: (?:cost|fee))?(?: (?:to|for|in) [a-z ]{2,20}?)?\s*(?:too (?:much|expensive|high)|ok|okay|fine|reasonable|fair|normal|a lot|acceptable|right)"
+                         r"|\b(?:è|e'|sono) (?:troppo|troppi|giusto|giusti|ok|normale|normali|tanto|tanti|caro|cara)?\s*" + _MONEY + r"\s*(?:di |per la |per )?spedizione", re.I)
+    LAST_DOC_IT = re.compile(r"\b(?:mandami|rimandami|inviami|rimanda|manda|carica)\b.{0,20}\b(?:l'?ultimo|quel|il) (?:documento|report|file|pdf)\b", re.I)
     CUSTOMER = re.compile(r"\b(?:a |the |my )?(?:customer|client|buyer|cliente)s?\s+(?:says?|wrote|writes|asks?|is asking|complain(?:s|ed)?|messaged|emailed|sent|dice|scrive|chiede)\b(?P<inner>.{0,400}?)(?:what (?:do|should|can) i (?:answer|reply|say|tell|write)|how (?:do|should) i (?:answer|reply|respond)|cosa (?:rispondo|gli dico|le dico)|what now)\b", re.I | re.S)
     START = re.compile(r"\b(where (do|should) i (start|begin)|how (do|should|can) i (start|begin|get started)|i want to (start|sell|open)|voglio (vendere|aprire|iniziare)|da dove (comincio|inizio|parto))\b", re.I)
     OPINION_IT = re.compile(r"\b(che ne pensi|cosa ne pensi|secondo te)\b", re.I)
@@ -113,7 +115,7 @@ class Talk:
                 return p
         m = self.SHIP_OK.search(t)
         if m:
-            return self.shipping_ok(_num(m.group(1)), t)
+            return self.shipping_ok(_num(m.group(1) or m.group(2)), t)
         if self.START.search(t) and re.search(r"\b(sell|selling|shop|store|online|business|vendere|negozio|dropship)", low):
             return self.start_plan(t)
         return None
@@ -165,8 +167,8 @@ class Talk:
             return self.launch_list(t)
         if self.AWAY.match(t) and not re.search(r"\b(research|find|check|compare|build|write|look|cerca|trova)\b", low):
             return {"away": self._away_minutes(t), "text": self.away_line(t)}
-        if self.LAST_DOC.search(t):
-            return {"last_doc": True, "to_drive": bool(re.search(r"\b(drive|google|upload)\b", low))}
+        if self.LAST_DOC.search(t) or self.LAST_DOC_IT.search(t):
+            return {"last_doc": True, "to_drive": bool(re.search(r"\b(drive|google|upload|carica)\b", low))}
         if self.STORE_Q.search(t) and self.store is not None:
             try:
                 return self.store.numbers_text() + "\n(/store for the pages and the orders to ship)"
@@ -632,7 +634,7 @@ class Talk:
     def shipping_ok(self, amount, text):
         low = text.lower()
         it = re.search(r"\b(italy|italia|it)\b", low)
-        eu = re.search(r"\b(eu|europe|germany|france|spain|europa)\b", low)
+        eu = re.search(r"\b(eu|europe|germany|france|spain|europa|germania|francia|spagna)\b", low)
         if it or not eu:
             verdict = ("that's in the normal range — Italian shops typically charge € 3,90–6,90 for a parcel and go free above € 39–49." if 3 <= amount <= 7
                        else "that's cheap — most Italian shops charge € 3,90–6,90 (you may be subsidising it)." if amount < 3
