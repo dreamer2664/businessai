@@ -123,6 +123,26 @@ for _ in range(60):
 check("agent: report line + screenshot + zip sent", any(s.startswith("🌐 Built a website") for s in A.bot.sent) and any(s.startswith("[photo") for s in A.bot.sent) and any(s.startswith("[doc") for s in A.bot.sent), A.bot.sent[-3:])
 check("agent: memory note kept", any("Forno Bianchi" in n.get("topic", "") for n in A.memory.notes("Forno Bianchi", limit=20)))
 
+# 5b) languages: "in italian too" rebuilds the last site with a language switch; "solo in italiano" replaces
+check("brief: language words → langs", A._site_langs("fai un sito per la pasticceria Dolce Vita a Milano, in italiano") == ["it"] and A._site_langs("build a bilingual website (italian and english) for Studio Legale Rossi") == ["it", "en"] and A._site_langs("build a website for a bakery in Bergamo") == ["en"])
+check("agent: remembers the last site", A.last_site and A.last_site["name"] == "Forno Bianchi", A.last_site)
+A.bot.sent.clear()
+r = A.respond("can you make the website in italian too?")
+for _ in range(90):
+    if any(s.startswith("[doc") for s in A.bot.sent):
+        break
+    time.sleep(1)
+site_dir = A.sites and (A.last_site and __import__("pathlib").Path(os.environ["BAI_STATE"]) / "sites" / slugify("Forno Bianchi-Bergamo"))
+it_index = site_dir / "it" / "index.html"
+check("agent: 'in italian too' → rebuilt in English + Italian (12 pages)", any("in English + Italian" in s and "12 pages" in s for s in A.bot.sent), [s[:80] for s in A.bot.sent][:3])
+it_txt = it_index.read_text() if it_index.exists() else ""
+check("italian pages: menu, copy and kind in Italian, language switch back to English", 'lang="it"' in it_txt and "Chi siamo" in it_txt and "Panificio" in it_txt and "Pane fresco ogni giorno" in it_txt and 'href="../index.html" class="lang"' in it_txt, it_txt[:0])
+en_txt = (site_dir / "index.html").read_text()
+check("english pages: switch to Italian in the menu", 'href="it/index.html" class="lang"' in en_txt and ">Italiano<" in en_txt)
+check("italian copy: no English template leftovers", not re.search(r"What we do|Find us|Opening hours|Send us a message", re.sub(r"<style.*?</style>", "", it_txt, flags=re.S)))
+r = A.respond("make the site in italian too")
+check("agent: same languages again → says so, no rebuild", r and "already in" in r, r)
+
 # 6) training switch
 r = A.respond("start auto training on website building")
 check("agent: training starts from a sentence", A.site_training and "training on" in r.lower(), r[:60])

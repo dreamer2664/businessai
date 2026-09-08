@@ -231,7 +231,7 @@ Milestones (one per session, each with a score set; earlier scores must not drop
 | 16 own accounts / credential vault / mail codes | ✅ | accounts 12/12 |
 | 17 Drive library: PDF density judge, video ideas, long courses in chapters (lesson picker keeps rules, drops brags), brainstorm, quiet-time loop | ✅ | study 20/20 |
 | 18 social readiness: practice network + rehearsals (limits, photos, comments, replies) | ✅ | rehearsal 19/19 |
-| 19 website builder + auto-training (OpenStreetMap places) + Drive "Websites"; the owner's own words (since 1962, sourdough, delivery to offices) drive the copy; unknown kinds keep their label | ✅ | sites 34/34 |
+| 19 website builder + auto-training (OpenStreetMap places) + Drive "Websites"; the owner's own words (since 1962, sourdough, delivery to offices) drive the copy; unknown kinds keep their label; Italian and English sites ("in italiano", "bilingual", "make it in Italian too" → language folder + menu switch) | ✅ | sites 41/41 |
 | 20 thinking: journal, interruptions, reflection, lessons, queue instead of 'busy', everyday talk (to-do in plain words, clock, opinions, translations, Italian shop basics, EU return rules, shop names, descriptions from facts, launch list, Gmail codes, 'off to lunch' → study hour); mid-job manners (praise/status/'take your time'/'don't forget'/'when done, …'); research reads what the owner adds mid-job; brain refuses off-topic passages | ✅ | mind 42/42 · talk 56/56 · docs 20/20 |
 | 14b research/compare deliver documents too (summary, one card per page with picture + link + points) | ✅ | practice day 27/27 |
 | 12 real store | ⏳ awaits platform choice (end of the road, per owner) | — |

@@ -190,52 +190,63 @@ class SiteBuilder:
         self.eyes = eyes
 
     # ---- copy ------------------------------------------------------------------------------------------
-    def copy(self, b):
-        """Text for every page. Model when available (grounded in the brief), templates otherwise."""
+    def copy(self, b, lang="en"):
+        """Text for every page in one language. Model when available (grounded in the brief), templates otherwise."""
+        from . import site_i18n as I
+        U = I.UI.get(lang, I.UI["en"])
         k = KINDS.get(b["kind"], KINDS["shop"])
         name, city = b["name"], b.get("city") or ""
-        if b.get("label"):                                          # "yoga studio" on the shop template: say yoga studio, never "shop"
-            b = dict(b, kind=b["label"])
-            if not b.get("services"):
-                own = [f[0].upper() + f[1:] for f in (b.get("facts") or []) if not re.match(r"since \d{4}", f, re.I) and len(f) <= 40][:3]
-                b["services"] = (own + ["Prices & packages", "Gift vouchers", "Get in touch", "Opening hours"])[:4]
+        kind_word = b.get("label") or I.kind_name(b["kind"], lang)      # "yoga studio" on the shop template: say yoga studio, never "shop"
+        own_services = b.get("services")
+        if b.get("label") and not own_services:
+            own = [f[0].upper() + f[1:] for f in (b.get("facts") or []) if not re.match(r"since \d{4}", f, re.I) and len(f) <= 40][:3]
+            own_services = (own + (["Prezzi e pacchetti", "Buoni regalo", "Contattaci", "Orari di apertura"] if lang == "it" else ["Prices & packages", "Gift vouchers", "Get in touch", "Opening hours"]))[:4]
+        if own_services:
+            services = []
+            for t in own_services:
+                txt = (SERVICE_TEXT.get(t) if lang == "en" else None) or I.generic_service_text(t, name, b["kind"], lang) or _service_text(t, name, kind_word)
+                services.append({"title": t, "text": txt})
+        else:
+            tr = I.services_for(b["kind"], lang)
+            services = [{"title": t, "text": x} for t, x in tr] if tr else [{"title": t, "text": SERVICE_TEXT.get(t, _service_text(t, name, kind_word))} for t in k["services"]]
+        Kind = kind_word[0].upper() + kind_word[1:]
+        country = (", " + b["country"]) if b.get("country") else ""
         base = {
-            "tagline": b.get("tagline") or f"{k['verb'].capitalize()} with care in {city}" if city else f"{name} — {b['kind']}",
-            "about": b.get("about") or (f"{name} is a {b['kind']} in {city}{', ' + b['country'] if b.get('country') else ''}. "
-                                        f"We keep things simple: good work, honest prices and a friendly welcome. "
-                                        f"Whether you are a regular or just passing by, you will find the same attention every time."),
-            "services": [{"title": s, "text": SERVICE_TEXT.get(s, _service_text(s, name, b["kind"]))} for s in (b.get("services") or k["services"])],
-            "why": [f"Local and independent — {name} is run by people who live here", "Clear prices, no surprises", "Easy to reach: " + (b.get("address") or city or "in the centre")],
-            "cta": k["cta"],
-            "reviews": [{"text": f"Exactly what a {b['kind']} should be — friendly and reliable.", "who": "A regular customer"},
-                        {"text": "Quick, kind and well priced. Recommended.", "who": "Visitor from out of town"}],
-            "meta": f"{name} — {b['kind']} in {city}. {(b.get('services') or k['services'])[0]}, {(b.get('services') or k['services'])[1].lower()} and more.",
+            "tagline": b.get("tagline") or (U["tagline_city"].format(Kind=Kind, city=city) if city else U["tagline"].format(name=name, kind=kind_word)),
+            "about": b.get("about") or U["about_text"].format(name=name, kind=kind_word, city=city or U["neighbourhood"], country=country),
+            "services": services,
+            "why": [U["why_local"].format(name=name), U["why_prices"], U["why_reach"].format(where=b.get("address") or city or U["centre"])],
+            "cta": I.cta_for(b["kind"], lang, k["cta"]),
+            "reviews": [{"text": U["review1"].format(kind=kind_word), "who": U["review1_who"]}, {"text": U["review2"], "who": U["review2_who"]}],
+            "meta": U["meta"].format(name=name, kind=kind_word, city=city, s1=services[0]["title"], s2=services[1]["title"].lower()),
+            "kind_word": kind_word,
         }
         if b.get("cuisine"):
-            base["about"] += f" The kitchen focuses on {b['cuisine'].replace(';', ', ').replace('_', ' ')}."
+            base["about"] += U["cuisine"].format(cuisine=b["cuisine"].replace(";", ", ").replace("_", " "))
         facts = [f for f in (b.get("facts") or []) if f]
         if facts:                                                   # the owner's own words become the story, not filler
             since = next((f for f in facts if re.match(r"since \d{4}", f, re.I)), None)
+            since_l = since if lang == "en" or not since else U["since_word"] + " " + since.split()[-1]
             others = [f for f in facts if f is not since]
             story = []
             if since:
-                story.append(f"{name} has been part of {city or 'the neighbourhood'} {since} — a {b['kind']} built on the same care today as on day one.")
+                story.append(U["story_since"].format(name=name, city=city or U["neighbourhood"], since=since_l, kind=kind_word))
             if others:
-                story.append("What sets us apart: " + ", ".join(others[:-1]) + (" and " if len(others) > 1 else "") + others[-1] + ".")
+                story.append(U["story_others"].format(others=", ".join(others[:-1]) + (U["and"] if len(others) > 1 else "") + others[-1]))
             base["about"] = " ".join(story) + " " + base["about"].split(". ", 1)[-1] if story else base["about"]
-            base["why"] = ([f"{name}: {since}" if since else None] + [o[0].upper() + o[1:] for o in others[:2]] + base["why"])[:3]
+            base["why"] = ([f"{name}: {since_l}" if since else None] + [o[0].upper() + o[1:] for o in others[:2]] + base["why"])[:3]
             base["why"] = [w for w in base["why"] if w]
             if others and not b.get("tagline"):
-                base["tagline"] = (f"{b['kind'][0].upper() + b['kind'][1:]} in {city} — {others[0]}" if city else f"{b['kind'][0].upper() + b['kind'][1:]} — {others[0]}")[:90]
-            base["meta"] = f"{name} — {b['kind']} in {city}: " + ", ".join(others[:3] or [since or ""]) + "."
+                base["tagline"] = (f"{Kind} {'a' if lang == 'it' else 'in'} {city} — {others[0]}" if city else f"{Kind} — {others[0]}")[:90]
+            base["meta"] = U["meta_facts"].format(name=name, kind=kind_word, city=city, facts=", ".join(others[:3] or [since_l or ""]))
         if not (self.planner and self.planner.installed()):
             return base
         try:
             facts = json.dumps({x: b.get(x) for x in ("name", "kind", "city", "country", "address", "phone", "hours", "cuisine", "services", "facts") if b.get(x)}, ensure_ascii=False)
             raw = self.planner.chat(
-                "You write website copy for small local businesses. Warm, concrete, short sentences. Use ONLY the facts given; never invent awards, years, prices or names. Output JSON only.",
+                f"You write website copy for small local businesses. Warm, concrete, short sentences. Write everything in {U['lang_name']}. Use ONLY the facts given; never invent awards, years, prices or names. Output JSON only.",
                 f"Facts: {facts}\nWrite JSON: {{\"tagline\": max 9 words, \"about\": 2 short paragraphs (60-110 words total) separated by \\n\\n, "
-                f"\"services\": [{{\"title\", \"text\": one sentence}} for each of these services: {json.dumps(b.get('services') or k['services'])}], "
+                f"\"services\": [{{\"title\", \"text\": one sentence}} for each of these services: {json.dumps([x['title'] for x in services], ensure_ascii=False)}], "
                 f"\"why\": [3 short reasons to choose us], \"meta\": one sentence for search engines (max 150 chars)}}",
                 max_tokens=520, timeout=240)
             m = re.search(r"\{.*\}", raw, re.S)
@@ -247,28 +258,62 @@ class SiteBuilder:
                 base["services"] = [{"title": str(x["title"])[:60], "text": str(x["text"])[:220]} for x in j["services"][:6]]
             if isinstance(j.get("why"), list) and len(j["why"]) >= 3:
                 base["why"] = [str(x)[:120] for x in j["why"][:3]]
-            self.log("site_copy_model", name=name)
+            self.log("site_copy_model", name=name, lang=lang)
         except Exception as e:
             self.log("site_copy_fallback", error=str(e)[:100])
         return base
 
     # ---- html ----------------------------------------------------------------------------------------------
-    def _shell(self, b, c, page, body, pages):
+    def _shell(self, b, c, page, body, pages, lang="en", switch=None):
+        """switch: [(label, href)] for the other languages of the site (shown in the menu)."""
         k = KINDS.get(b["kind"], KINDS["shop"])
         p, bg, fg = k["palette"]
         nav = "".join(f'<a href="{f}"{" class=on" if f == page else ""}>{t}</a>' for f, t in pages)
-        return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        nav += "".join(f'<a href="{h}" class="lang" lang="{l}">{t}</a>' for t, h, l in (switch or []))
+        from . import site_i18n as I
+        U = I.UI.get(lang, I.UI["en"])
+        return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(b['name'])} — {html.escape(dict(pages).get(page, ''))}</title><meta name="description" content="{html.escape(c['meta'])}">
 <style>{CSS % {'p': p, 'bg': bg, 'fg': fg}}</style></head><body>
 <header><div class="nav"><a class="brand" href="index.html">{html.escape(b['name'])}</a><button class="burger" onclick="document.querySelector('.nav nav').classList.toggle('open')" aria-label="menu">☰</button><nav>{nav}</nav></div></header>
 {body}
 <footer><div class="in"><div><b>{html.escape(b['name'])}</b><br>{html.escape(b.get('address') or b.get('city') or '')}</div>
 <div>{('☎ <a href="tel:' + html.escape(re.sub(r'[^+0-9]', '', b['phone'])) + '">' + html.escape(b['phone']) + '</a><br>') if b.get('phone') else ''}{html.escape(b.get('hours') or '')}</div>
-<div>© {time.strftime('%Y')} {html.escape(b['name'])} · <a href="contact.html">Contact</a> · <a href="privacy.html">Privacy</a></div></div></footer></body></html>"""
+<div>© {time.strftime('%Y')} {html.escape(b['name'])} · <a href="contact.html">{U['contact']}</a> · <a href="privacy.html">{U['privacy']}</a></div></div></footer></body></html>"""
 
-    def build(self, b, out_dir=None):
-        """Write the site. Returns {dir, index, pages, copy}."""
+    def _pages_for(self, b, c, lang, maps, prefix=""):
+        """The six page bodies in one language. prefix: '' at the root, '../' inside a language folder (gallery folder link)."""
+        from . import site_i18n as I
+        U = I.UI.get(lang, I.UI["en"])
+        k = KINDS[b["kind"]]
+        p = k["palette"][0]
+        facts = "".join(f"<div><b>{t}</b>{html.escape(v)}</div>" for t, v in ((U["address"], b.get("address") or b.get("city") or ""), (U["phone"], b.get("phone", "")), (U["hours"], b.get("hours", "")), (U["city"], f"{b.get('city', '')}, {b.get('country', '')}".strip(", "))) if v)
+        home = f"""<div class="hero">{_svg_hero(b['name'], p, len(b['name']))}<div class="in"><h1>{html.escape(b['name'])}</h1><p>{html.escape(c['tagline'])}</p><a class="btn alt" href="contact.html">{html.escape(c['cta'])}</a></div></div>
+<section><h2>{U['what_we_do']}</h2><div class="grid">{"".join(f'<div class="card">{_svg_card(i, p)}<div class="t"><h3>{html.escape(s["title"])}</h3><p>{html.escape(s["text"])}</p></div></div>' for i, s in enumerate(c['services'][:4]))}</div></section>
+<section><h2>{html.escape(U['why'].format(name=b['name']))}</h2><ul class="lead">{"".join(f'<li>{html.escape(w)}</li>' for w in c['why'])}</ul></section>
+<section><h2>{U['find_us']}</h2><div class="facts">{facts}<div><b>{U['map']}</b><a href="{maps}">{U['open_map']}</a></div></div></section>"""
+        about = f"""<section><h2>{html.escape(U['about'].format(name=b['name']))}</h2>{"".join(f'<p class="lead">{html.escape(par)}</p>' for par in c['about'].split(chr(10) + chr(10)))}</section>
+<section><h2>{U['people_say']}</h2><div class="grid">{"".join(f'<div class="review">“{html.escape(r["text"])}”<br><small>— {html.escape(r["who"])}</small></div>' for r in c['reviews'])}</div><p><small>{U['sample_reviews']}</small></p></section>"""
+        services = f"""<section><h2>{U['services']}</h2><div class="grid">{"".join(f'<div class="card">{_svg_card(i + 10, p)}<div class="t"><h3>{html.escape(s["title"])}</h3><p>{html.escape(s["text"])}</p></div></div>' for i, s in enumerate(c['services']))}</div>
+<p style="margin-top:24px"><a class="btn" href="contact.html">{html.escape(c['cta'])}</a></p></section>"""
+        gallery = f"""<section><h2>{U['gallery']}</h2><p class="lead">{html.escape(U['gallery_lead'])}</p><div class="grid">{"".join(f'<div class="card">{_svg_card(i + 20, p)}<div class="t"><h3>{html.escape(t)}</h3></div></div>' for i, t in enumerate(U['gallery_items']))}</div></section>"""
+        reach = html.escape(U["reach"].format(name=b["name"], phone=U["reach_phone"].format(phone=b["phone"]) if b.get("phone") else "", hours=U["reach_hours"].format(hours=b["hours"]) if b.get("hours") else ""))
+        form = (f"""<section><h2>{U['send_msg']}</h2><form onsubmit="event.preventDefault();this.querySelector('button').textContent='{html.escape(U['thanks'])}';"><input placeholder="{U['your_name']}" required><input type="email" placeholder="{U['your_email']}" required><textarea rows="5" placeholder="{U['how_help']}" required></textarea><button type="submit">{U['send']}</button></form>
+<p><small>{html.escape(U['form_demo'])}</small></p></section>""")
+        contact = f"""<section><h2>{U['contact']}</h2><p class="lead">{reach}</p><div class="facts">{facts}</div></section>
+{form}
+<section><h2>{U['map']}</h2><iframe class="map" loading="lazy" title="map" src="https://www.openstreetmap.org/export/embed.html?bbox={(b.get('lon') or 0) - 0.006}%2C{(b.get('lat') or 0) - 0.004}%2C{(b.get('lon') or 0) + 0.006}%2C{(b.get('lat') or 0) + 0.004}&layer=mapnik&marker={b.get('lat') or 0}%2C{b.get('lon') or 0}"></iframe></section>""" if b.get("lat") else f"""<section><h2>{U['contact']}</h2><p class="lead">{reach}</p><div class="facts">{facts}</div></section>
+{form}"""
+        privacy = f"""<section><h2>{U['privacy']}</h2><p class="lead">{html.escape(U['privacy_text'].format(name=b['name']))}</p></section>"""
+        return [("index.html", home), ("about.html", about), ("services.html", services), ("gallery.html", gallery), ("contact.html", contact), ("privacy.html", privacy)]
+
+    def build(self, b, out_dir=None, langs=None):
+        """Write the site. langs: ["en"], ["it"] or several — the first is the root, the others live in <lang>/ with a
+        language switch in the menu. Returns {dir, index, pages, copy, langs}."""
+        from . import site_i18n as I
         b = dict(b)
+        langs = [l for l in (langs or b.get("langs") or ["en"]) if l in I.UI] or ["en"]
+        b["langs"] = langs
         if b.get("kind") not in KINDS:                                    # unknown kind → nearest template, the owner's words stay as the label
             b["label"] = b.get("label") or b.get("kind") or None
             b["kind"] = "shop"
@@ -277,49 +322,43 @@ class SiteBuilder:
                 b.update(geocode(b.get("address") or "", b.get("city") or "", b.get("country") or ""))
             except Exception as e:
                 self.log("geocode_failed", error=str(e)[:80])
-        k = KINDS[b["kind"]]
-        c = self.copy(b)
         slug = slugify(f"{b['name']}-{b.get('city', '')}")
         d = out_dir or (SITES_DIR / slug)
         d = __import__("pathlib").Path(d)
         if d.exists():
             shutil.rmtree(d)
         d.mkdir(parents=True)
-        pages = [("index.html", "Home"), ("about.html", "About"), ("services.html", "Services"), ("gallery.html", "Gallery"), ("contact.html", "Contact")]
-        p = k["palette"][0]
         maps = f"https://www.openstreetmap.org/?mlat={b['lat']}&mlon={b['lon']}#map=17/{b['lat']}/{b['lon']}" if b.get("lat") else f"https://www.openstreetmap.org/search?query={urllib.parse.quote(b.get('address') or b['name'] + ' ' + b.get('city', ''))}"
-        facts = "".join(f"<div><b>{t}</b>{html.escape(v)}</div>" for t, v in (("Address", b.get("address") or b.get("city") or ""), ("Phone", b.get("phone", "")), ("Opening hours", b.get("hours", "")), ("City", f"{b.get('city', '')}, {b.get('country', '')}".strip(", "))) if v)
-        home = f"""<div class="hero">{_svg_hero(b['name'], p, len(b['name']))}<div class="in"><h1>{html.escape(b['name'])}</h1><p>{html.escape(c['tagline'])}</p><a class="btn alt" href="contact.html">{html.escape(c['cta'])}</a></div></div>
-<section><h2>What we do</h2><div class="grid">{"".join(f'<div class="card">{_svg_card(i, p)}<div class="t"><h3>{html.escape(s["title"])}</h3><p>{html.escape(s["text"])}</p></div></div>' for i, s in enumerate(c['services'][:4]))}</div></section>
-<section><h2>Why {html.escape(b['name'])}</h2><ul class="lead">{"".join(f'<li>{html.escape(w)}</li>' for w in c['why'])}</ul></section>
-<section><h2>Find us</h2><div class="facts">{facts}<div><b>Map</b><a href="{maps}">Open in OpenStreetMap</a></div></div></section>"""
-        about = f"""<section><h2>About {html.escape(b['name'])}</h2>{"".join(f'<p class="lead">{html.escape(par)}</p>' for par in c['about'].split(chr(10) + chr(10)))}</section>
-<section><h2>What people say</h2><div class="grid">{"".join(f'<div class="review">“{html.escape(r["text"])}”<br><small>— {html.escape(r["who"])}</small></div>' for r in c['reviews'])}</div><p><small>Sample testimonials — replace with real reviews.</small></p></section>"""
-        services = f"""<section><h2>Services</h2><div class="grid">{"".join(f'<div class="card">{_svg_card(i + 10, p)}<div class="t"><h3>{html.escape(s["title"])}</h3><p>{html.escape(s["text"])}</p></div></div>' for i, s in enumerate(c['services']))}</div>
-<p style="margin-top:24px"><a class="btn" href="contact.html">{html.escape(c['cta'])}</a></p></section>"""
-        gallery = f"""<section><h2>Gallery</h2><p class="lead">A first look. Real photos go here — drop them into the <code>gallery</code> folder and replace these placeholders.</p><div class="grid">{"".join(f'<div class="card">{_svg_card(i + 20, p)}<div class="t"><h3>{html.escape(t)}</h3></div></div>' for i, t in enumerate(["The place", "Our team", "Details", "At work", "Happy customers", "Around us"]))}</div></section>"""
-        reach = (f"The quickest way to reach {html.escape(b['name'])} is by phone" + (f" at {html.escape(b['phone'])}" if b.get('phone') else "") +
-                 f" or simply by coming in{(' during opening hours (' + html.escape(b['hours']) + ')') if b.get('hours') else ''}. For anything that can wait, use the form below and we reply within one working day.")
-        contact = f"""<section><h2>Contact</h2><p class="lead">{reach}</p><div class="facts">{facts}</div></section>
-<section><h2>Send us a message</h2><form onsubmit="event.preventDefault();this.querySelector('button').textContent='Thanks — we will reply soon';"><input placeholder="Your name" required><input type="email" placeholder="Your e-mail" required><textarea rows="5" placeholder="How can we help?" required></textarea><button type="submit">Send</button></form>
-<p><small>This form is a demo (no server). Connect it to Formspree, Netlify Forms or your e-mail when the site goes live.</small></p></section>
-<section><h2>Map</h2><iframe class="map" loading="lazy" title="map" src="https://www.openstreetmap.org/export/embed.html?bbox={(b.get('lon') or 0) - 0.006}%2C{(b.get('lat') or 0) - 0.004}%2C{(b.get('lon') or 0) + 0.006}%2C{(b.get('lat') or 0) + 0.004}&layer=mapnik&marker={b.get('lat') or 0}%2C{b.get('lon') or 0}"></iframe></section>""" if b.get("lat") else f"""<section><h2>Contact</h2><p class="lead">{reach}</p><div class="facts">{facts}</div></section>
-<section><h2>Send us a message</h2><form onsubmit="event.preventDefault();this.querySelector('button').textContent='Thanks — we will reply soon';"><input placeholder="Your name" required><input type="email" placeholder="Your e-mail" required><textarea rows="5" placeholder="How can we help?" required></textarea><button type="submit">Send</button></form></section>"""
-        privacy = f"""<section><h2>Privacy</h2><p class="lead">{html.escape(b['name'])} only uses the information you send through the contact form to answer you. No tracking cookies are set by this website. To have your data removed, write to us at the address on the contact page.</p></section>"""
-        for fn, body in (("index.html", home), ("about.html", about), ("services.html", services), ("gallery.html", gallery), ("contact.html", contact), ("privacy.html", privacy)):
-            (d / fn).write_text(self._shell(b, c, fn, body, pages), encoding="utf-8")
+        copies, written = {}, []
+        for i, lang in enumerate(langs):
+            U = I.UI[lang]
+            c = self.copy(b, lang)
+            copies[lang] = c
+            folder = d if i == 0 else d / lang
+            folder.mkdir(exist_ok=True)
+            switch = []
+            for j, other in enumerate(langs):
+                if other == lang:
+                    continue
+                to_root = "../" if i > 0 else ""
+                href = f"{to_root}index.html" if j == 0 else f"{to_root}{other}/index.html"
+                switch.append((I.UI[other]["lang_name"], href, other))
+            for fn, body in self._pages_for(b, c, lang, maps):
+                (folder / fn).write_text(self._shell(b, c, fn, body, U["nav"], lang=lang, switch=switch), encoding="utf-8")
+                written.append(fn if i == 0 else f"{lang}/{fn}")
+        c = copies[langs[0]]
         (d / "brief.json").write_text(json.dumps(b, ensure_ascii=False, indent=1))
         (d / "gallery").mkdir(exist_ok=True)
         with zipfile.ZipFile(d / f"{slug}.zip", "w", zipfile.ZIP_DEFLATED) as z:
-            for fn in d.glob("*.html"):
-                z.write(fn, fn.name)
-        self.log("site_built", name=b["name"], pages=len(pages), dir=str(d))
+            for rel in written:
+                z.write(d / rel, rel)
+        self.log("site_built", name=b["name"], pages=len(written), dir=str(d), langs=",".join(langs))
         try:
             from . import library
-            library.register("website", f"{b['name']} ({b.get('label') or b['kind']}, {b.get('city') or '?'})", d / f"{slug}.zip", options=len(pages))
+            library.register("website", f"{b['name']} ({b.get('label') or b['kind']}, {b.get('city') or '?'}{', ' + '+'.join(langs) if len(langs) > 1 else ''})", d / f"{slug}.zip", options=len(written))
         except Exception:
             pass
-        return {"dir": d, "index": d / "index.html", "pages": [fn for fn, _ in pages] + ["privacy.html"], "copy": c, "slug": slug, "zip": d / f"{slug}.zip"}
+        return {"dir": d, "index": d / "index.html", "pages": written, "copy": c, "copies": copies, "slug": slug, "zip": d / f"{slug}.zip", "langs": langs}
 
     # ---- checking my own work ----------------------------------------------------------------------------------
     def check(self, built, screenshots=True):
@@ -381,7 +420,9 @@ class SiteBuilder:
             except Exception as e:
                 self.log("site_upload_failed", error=str(e)[:100])
         where = ", ".join(x for x in (brief.get("city"), brief.get("country")) if x)
-        report = (f"🌐 Built a website for {brief['name']} ({brief.get('label') or brief['kind']}{', ' + where if where else ''}) — {len(built['pages'])} pages"
+        names = {"en": "English", "it": "Italian"}
+        langs_txt = (" in " + " + ".join(names.get(l, l) for l in built["langs"])) if built.get("langs") and built["langs"] != ["en"] else ""
+        report = (f"🌐 Built a website for {brief['name']} ({brief.get('label') or brief['kind']}{', ' + where if where else ''}){langs_txt} — {len(built['pages'])} pages"
                   + (f", {len(problems)} issue(s): {problems[0]}" if problems else ", checks passed") + f" ({time.time() - t0:.0f}s)"
                   + (f"\n☁️ Drive: {link}" if link else f"\n📁 {built['dir']}"))
         return report, built, shot

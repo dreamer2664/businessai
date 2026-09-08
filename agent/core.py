@@ -130,6 +130,7 @@ class Agent:
         self.sites = SiteBuilder(planner=self.planner, tasks=self.tasks, google=self.google, log=self.log, viewer=self.viewer, eyes=self.eyes)
         self.site_training = False          # "start auto training on website building" → loop until "stop"
         self.sites_built = 0
+        self.last_site = None                                     # the last website brief, so "make it in Italian too" knows which site
         self.mind = Mind(planner=self.planner, log=self.log, pace=self.pace, viewer=self.viewer)
         self.talk = Talk(memory=self.memory, mind=self.mind, library=library, inbox=self.inbox, store=self.store, log=self.log, planner=self.planner)
         self.viewer.listener = self.mind.on_event
@@ -937,6 +938,23 @@ class Agent:
             self.last_brief = b
             self.bot.send(self.owner_id, Brief.text(b) + "\n\nShall I go?", buttons=[[("▶ Go", "b:go"), ("✏️ Change", "b:edit"), ("✖ Cancel", "b:no")]])
             return None
+        m = re.search(r"\b(?:make|do|build|have|redo|rebuild|add|want|need|fai|rifai|aggiungi|voglio)\b.{0,30}?\b(?:website|web site|site|sito|it)\b.{0,20}?\bin\s+(italian|english|italiano|inglese)\b|\b(?:aggiungi|add)\s+(?:l'|the )?(italian|english|italiano|inglese)\b.{0,20}\b(?:site|website|sito)\b|\b(?:website|site|sito)\b.{0,10}?\b(?:anche|also)\s+in\s+(italian|english|italiano|inglese)\b", low)
+        if m and getattr(self, "last_site", None) and not re.search(r"\b(for|per)\s+(a|an|un|una|the|my|il|la)\b.{0,40}\b(in|a)\s+[A-Z]", text) and not re.search(r"\bcalled\b|\bchiamat", low):
+            lang = "it" if (m.group(1) or m.group(2) or m.group(3) or "").startswith("ital") else "en"
+            prev = list(self.last_site.get("langs") or ["en"])
+            if re.search(r"\b(only|just|solo|soltanto|instead|invece)\b", low):
+                langs = [lang]                                                           # "only in Italian" → replace
+            elif re.search(r"\b(too|as well|also|anche|aggiungi|add)\b", low):
+                langs = prev + [lang] if lang not in prev else prev                      # "in Italian too" → add
+            else:
+                langs = [lang] + [x for x in prev if x != lang]                          # "make it in Italian" → Italian first
+            if langs == prev:
+                return f"The {self.last_site['name']} site is already in " + " + ".join({"it": "Italian", "en": "English"}[x] for x in langs) + " — say “only in Italian” or “in English too” to change it."
+            b = dict(self.briefer.make(f"build the website for {self.last_site['name']} in {'Italian' if lang == 'it' else 'English'}"))
+            b["kind"], b["deliverable"], b["langs"], b["site_brief"] = "build_site", "website", langs, dict(self.last_site, langs=langs)
+            b["goal"] = f"{self.last_site['name']} website in " + " + ".join({"it": "Italian", "en": "English"}[x] for x in langs)
+            b["steps"] = ["Reuse the brief of the last site (name, place, facts)", "Write the copy in " + " and ".join({"it": "Italian", "en": "English"}[x] for x in langs), "Build the pages with a language switch in the menu", "Check every page in the browser", "Send you the files"]
+            return self.execute(b, approved=True)
         direct = self.talk.reply(text)                                              # everyday questions: answered here, no job
         if isinstance(direct, dict):
             if direct.get("customer"):
@@ -1103,16 +1121,41 @@ class Agent:
         if b.get("change"):
             _add(re.sub(r"^\W*(also|and|please)?\s*(mention|say|add|include)( that)?\s*", "", b["change"], flags=re.I).strip(" ."))
         facts = [f for f in facts if not (name and f.lower() == name.lower()) and f.lower() != (label or "").lower()]
-        return {"name": name, "kind": kind, "label": label, "city": city, "country": country, "services": services, "about": None, "tagline": None, "facts": facts[:6]}
+        langs = self._site_langs(g)
+        facts = [f for f in facts if not re.search(r"\b(in )?(italian|english|italiano|inglese|bilingual|bilingue|both languages|entrambe le lingue)\b", f, re.I)]
+        return {"name": name, "kind": kind, "label": label, "city": city, "country": country, "services": services, "about": None, "tagline": None, "facts": facts[:6], "langs": langs}
+
+    @staticmethod
+    def _site_langs(text):
+        """'in italian', 'in italiano e inglese', 'bilingual', 'italian and english' → ['it'], ['it', 'en']… (first = main language)."""
+        low = text.lower()
+        found = []
+        for m in re.finditer(r"\b(italian|italiano|english|inglese)\b", low):
+            code = "it" if m.group(1).startswith("ital") else "en"
+            if code not in found:
+                found.append(code)
+        if re.search(r"\b(bilingual|bilingue|both languages|entrambe le lingue|two languages|due lingue)\b", low):
+            for code in ("it", "en"):
+                if code not in found:
+                    found.append(code)
+        if re.search(r"\b(italian|italiano)\b.{0,12}\b(too|as well|also|anche)\b|\b(also|anche|too)\b.{0,12}\b(italian|italiano)\b", low) and "en" not in found:
+            found.append("en")
+            found = ["en"] + [x for x in found if x != "en"]
+        if not found and re.search(r"\b(sito|per un|per una|chiamato|chiamata|negozio|pasticceria|panificio|ristorante|parrucchiere|studio legale)\b", low):
+            found = ["it"]                                                     # asked in Italian → Italian site
+        return found or ["en"]
 
     def run_build_site(self, b):
         self.busy = "building a website"
         try:
             if self.mind.job and self.mind.job.get("change"):
                 b["change"] = self.mind.job["change"]
-            brief = self._site_brief_from(b)
+            brief = dict(b["site_brief"]) if b.get("site_brief") else self._site_brief_from(b)
+            if b.get("langs"):
+                brief["langs"] = b["langs"]
             self.viewer.plan_step(1, f"writing copy for {brief['name']}")
             report, built, shot = self.sites.build_for(brief)
+            self.last_site = brief
             self.viewer.plan_step(3, "checked in my browser")
             self.bot.send(self.owner_id, report)
             if shot:
