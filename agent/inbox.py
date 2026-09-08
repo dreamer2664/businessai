@@ -583,6 +583,9 @@ class Inbox:
             flags.append(f"contains a number the customer never gave: {', '.join(foreign)}")
         if re.search(r"\b(i've|i have|we've|we have|i|we) (already |just )?(checked|contacted|spoken|called|looked into|escalated|forwarded|asked)\b", low):
             flags.append("claims to have already done something — nothing has been done yet")
+        if c["kind"] == "cancel_or_change" and (c.get("order") or {}).get("status") != "cancelled" and \
+                re.search(r"\b(has been|is now|was|has now been|is) cancel+ed\b|\b(i|we) (have |'ve )?(now )?cancel+ed\b|\bcancel+ed (it|your order) for you\b|\b(has been|is now|was) refunded\b", low):
+            flags.append("says the order is already cancelled/refunded — only the owner can do that; it 'will be' cancelled once confirmed")
         if re.search(r"\b(full refund|refund(ed)?|replacement)\b", low) and c["kind"] not in ("damaged_or_wrong", "return_or_refund", "cancel_or_change") \
                 and not (c.get("order") or {}).get("late") and not ((c.get("order") or {}).get("status") == "paid" and "cancel" in low):
             flags.append("promises a refund/replacement outside the return/damage cases")
