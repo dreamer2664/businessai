@@ -54,7 +54,7 @@ def _version():
     try:
         return (Path(__file__).resolve().parent.parent / "VERSION").read_text().strip()
     except Exception:
-        return "1.8"
+        return "1.9"
 
 
 VERSION = _version() + " (Phase 2: I understand plain requests, plan them, hand you documents, check sellers deeply, look at photos, pass simple security checks, build websites and study on my own)"
