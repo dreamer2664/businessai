@@ -288,6 +288,14 @@ class Google:
         self.log("drive_upload", name=name, size=len(content), doc=convert_to_doc)
         return {"id": d["id"], "name": d.get("name", name), "link": d.get("webViewLink", f"https://drive.google.com/file/d/{d['id']}/view")}
 
+    def upload_bytes(self, data, name, folder=None, mime="application/octet-stream"):
+        tmp = config.STATE_DIR / f"_up_{secrets.token_hex(4)}"
+        tmp.write_bytes(data)
+        try:
+            return self.upload(tmp, name=name, folder=folder, mime=mime)
+        finally:
+            tmp.unlink(missing_ok=True)
+
     def upload_text(self, text, name, folder=None, mime="text/plain"):
         tmp = config.STATE_DIR / f"_up_{secrets.token_hex(4)}"
         tmp.write_text(text, encoding="utf-8")

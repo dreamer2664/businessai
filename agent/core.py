@@ -38,6 +38,7 @@ from .brief import Brief
 from .pace import Pace
 from .sellers import SellerCheck
 from .accounts import Accounts
+from .study import Study
 
 
 def money_list(orders):
@@ -63,6 +64,7 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /eyes — my vision status (/eyes install once, 310 MB) · /look [question] — I look at my own screen and tell you what I see · send me any screenshot or photo and I'll read it
 /do <goal> — I work a web page by myself, step by step (look → decide → click/type → check), e.g. /do https://en.wikipedia.org/wiki/Etsy | in which year was Etsy founded? · /do <page1> <page2> | which is cheaper? (compare several pages) · /do <page> | fill in the form: name = …, email = …, message = … (I type, you send) · /do desktop <goal> — same on my own screen. Any click that costs money, publishes, signs in or deletes waits for your tap.
 /google — my own Google account (Drive library + reading my own mailbox for sign-up codes): /google connect · /google test · /google ls
+/ideas — business ideas I jotted from short videos (/ideas <topic> = go watch some now) · /study [topic] — find and keep a good PDF in my library
 /accounts — the site accounts I created with my own e-mail (I sign up when a task needs it and tell you in one line; never money sites)
 /library — the documents I've written (seller checks, research, comparisons); they also land in my Drive folder
 /screen · /watch on|off — see my browser · /status · /selftest
@@ -104,6 +106,9 @@ class Agent:
         self.accounts.eyes = self.eyes
         self.sellers = SellerCheck(self.tasks, planner=self.planner, log=self.log, viewer=self.viewer, pace=self.pace, eyes=self.eyes)
         self.sellers.accounts = self.accounts
+        self.study = Study(self.tasks, planner=self.planner, google=self.google, memory=self.memory, log=self.log, notify=self.notify, viewer=self.viewer)
+        self.quiet_sessions = 0
+        self.last_quiet = 0
         self.active_brief = None            # the plan being worked on (shown in /status)
         self.last_brief = None              # last plan proposed, for "go" / "change step 2 …"
         self.desktop = Desktop(log=self.log, eyes=self.eyes)
@@ -711,6 +716,16 @@ class Agent:
             had = self.editing or self.editing_post
             self.editing = self.editing_post = None
             return "Okay, edit cancelled — the draft is still waiting with its buttons." if had else "Nothing to cancel."
+        if low.startswith("/ideas"):
+            arg = text[6:].strip()
+            if arg:
+                threading.Thread(target=lambda: self.notify(self.study.video_session(query=arg)), daemon=True).start()
+                return f"Watching short videos about “{arg}” and jotting the concrete ideas — a few minutes."
+            return self.study.ideas_text()
+        if low.startswith("/study"):
+            arg = text[6:].strip()
+            threading.Thread(target=lambda: self.notify(self.study.pdf_session(topic=arg or None)), daemon=True).start()
+            return "Looking for a good PDF to learn from" + (f" about {arg}" if arg else "") + " — I'll tell you if I keep one."
         if low.startswith("/library"):
             return library.list_text(10) + ("\n\nDrive folder: " + self.google.folder_link() if self.google.connected() else "")
         if low.startswith("/accounts") or low.startswith("/account"):
@@ -789,6 +804,13 @@ class Agent:
         if kind == "seller_check":
             threading.Thread(target=self.run_seller_check, args=(b,), daemon=True).start()
             return head + "\n\nStarting — you'll get the document here (and in my Drive if it's connected)."
+        if kind == "watch" and not re.search(r"https?://", topic) and re.search(r"\b(ideas?|videos|shorts|tiktoks?|reels)\b", b["goal"], re.I):
+            threading.Thread(target=self._run_ideas, args=(topic, b), daemon=True).start()
+            return head
+        if kind == "watch" and re.search(r"https?://", b["goal"]) and len(re.findall(r"https?://\S+", b["goal"])) > 1:
+            urls = re.findall(r"https?://\S+", b["goal"])
+            threading.Thread(target=self._run_ideas, args=(None, b, urls), daemon=True).start()
+            return head
         if kind in ("research", "compare", "summarize", "visit", "watch"):
             threading.Thread(target=self.run_task, args=(f"{kind} {topic}", b), daemon=True).start()
             return head
@@ -799,6 +821,18 @@ class Agent:
             threading.Thread(target=self.draft_post, args=(plat, t2 or topic), daemon=True).start()
             return head
         return self.start_task("research", topic)
+
+    def _run_ideas(self, query, b, urls=None):
+        self.busy = "ideas from videos"
+        try:
+            self.bot.send(self.owner_id, self.study.video_session(query=query, urls=urls))
+        except Exception as e:
+            self.bot.send(self.owner_id, f"Couldn't read those videos: {str(e)[:120]}")
+        finally:
+            self.busy = None
+            self.pace.finish()
+            self.viewer.plan_done()
+            self.active_brief = None
 
     def run_seller_check(self, b):
         self.busy = f"seller check: {b['topic'][:40]}"
@@ -1023,6 +1057,31 @@ class Agent:
         goal = self.memory.next_goal()
         if goal and 8 <= hour < 23 and self.owner_id:
             threading.Thread(target=self.run_study, args=(goal,), daemon=True).start()
+            return
+        # owner away ("take it slow") and nothing else to do → self-training sessions every ~10 min
+        if self.pace.has_quiet_time() and not self.busy and now - self.last_quiet > 600:
+            self.last_quiet = now
+            threading.Thread(target=self.run_quiet, daemon=True).start()
+            return
+        # normal idle: at most 3 quiet sessions a day, daytime only, spaced ≥ 90 min
+        if 9 <= hour < 22 and not self.busy and self.owner_id and now - self.last_quiet > 5400 and self.study.sessions_today() < 3:
+            self.last_quiet = now
+            threading.Thread(target=self.run_quiet, daemon=True).start()
+
+    def run_quiet(self):
+        self.busy = "self-training (quiet time)"
+        try:
+            out = self.study.quiet_session(self.quiet_sessions)
+            self.quiet_sessions += 1
+            self.log("quiet_session", n=self.quiet_sessions, out=out[:120])
+            if out.startswith(("📚", "💡", "🧠")) and self.owner_id:
+                self.bot.send(self.owner_id, out)                      # one short line per kept thing, never chatter
+        except Exception as e:
+            self.log("quiet_session_failed", error=str(e)[:160])
+        finally:
+            self.busy = None
+            if self.viewer:
+                self.viewer.task = None
 
     def run_digest(self):
         """Trim: boil new notes down to facts; when enough new facts, fold them into learned.kdw."""
