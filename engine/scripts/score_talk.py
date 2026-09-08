@@ -861,7 +861,7 @@ check("'which customers are waiting longest?' → oldest unshipped first", isins
 r = A.respond("how much did order 51003 pay?")
 check("'how much did order 51003 pay?' → total + lines + status", isinstance(r, str) and r.startswith("Order #51003: €") and "status" in r, (r or "")[:100])
 r = A.respond("who placed order 51003?")
-check("'who placed order 51003?' → the customer", isinstance(r, str) and r.startswith("Order #51003:") and "@" in r, (r or "")[:100])
+check("'who placed order 51003?' → the order card with the customer line", isinstance(r, str) and r.startswith("Order #51003") and "@" in r, (r or "")[:100])
 r = A.respond("how much did order 99999 pay?")
 check("unknown order → says so", isinstance(r, str) and r.startswith("There's no order #99999"), (r or "")[:100])
 r = A.respond("customer says the mug arrived broken, photo attached")

@@ -1852,27 +1852,35 @@ class SelfTalk:
         for o in rows[:6]:
             wait = day - o.get("day", day)
             c = o.get("customer") or {}
-            out.append(f"• #{o['n']} {c.get('name', '?')} ({c.get('country', '?')}) — {wait} practice day(s), {_eur(o.get('total', 0))}" + (" ⚠️ past the promise" if wait >= 1 else ""))
+            out.append(f"• #{o['n']} {c.get('name', '?')} ({o.get('country') or c.get('country', '?')}) — {wait} practice day(s), {_eur(o.get('total', 0))}" + (" ⚠️ past the promise" if wait >= 1 else ""))
         out.append("Say “print the shipping labels” and I prepare all of them.")
         return "\n".join(out)
 
     def order_lookup(self, t, m):
+        """'how much did order 51003 pay?', 'who placed order 51003?' — the phrasings talk.order_info doesn't catch; it stays the owner of 'status/total/details of order N'."""
         if self.store is None:
             return None
+        try:
+            from .talk import Talk
+            if Talk.ORDER_Q.search(t):
+                return None                                                   # talk.py answers those (with our-side costs and events)
+        except Exception:
+            pass
         gd = m.groupdict()
         n = next((gd[k] for k in ("n", "n2", "n3", "n4", "n5", "n6") if gd.get(k)), None)
         if not n:
             return None
-        o = st_order = self.store.order(int(n))
+        o = self.store.order(int(n))
         if not o:
             return f"There's no order #{n} in the practice shop (orders start at #51001)."
         c = o.get("customer") or {}
         lines = "; ".join(f"{l['qty']} × {l.get('name', l['id'])} at {_eur(l['price'])}" for l in o["lines"])
         low = t.lower()
+        country = o.get("country") or c.get("country", "?")
         if re.search(r"\bwho|whose|chi\b", low):
-            return f"Order #{n}: {c.get('name', '?')} ({c.get('country', '?')}, {c.get('email', '?')}) — {lines}; {_eur(o.get('total', 0))}, {o['status']}."
+            return f"Order #{n}: {c.get('name', '?')} ({country}, {c.get('email', '?')}) — {lines}; {_eur(o.get('total', 0))}, {o['status']}."
         return (f"Order #{n}: {_eur(o.get('total', 0))} total ({lines}" + (f"; shipping {_eur(o.get('shipping', 0))}" if o.get("shipping") is not None else "") +
-                f"), placed day {o.get('day', '?')}, status {o['status']}" + (f", tracking {o['tracking']}" if o.get("tracking") else "") + f". Customer: {c.get('name', '?')} ({c.get('country', '?')}).")
+                f"), placed day {o.get('day', '?')}, status {o['status']}" + (f", tracking {o['tracking']}" if o.get("tracking") else "") + f". Customer: {c.get('name', '?')} ({country}).")
 
     # ---- round 15: consequences, absence, night work, how I propose, limits, friend price, missing payment, milestones, glossary ----
     def do_nothing(self, t, m):
