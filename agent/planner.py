@@ -225,6 +225,8 @@ class Planner:
 
     # ---- raw chat ---------------------------------------------------------
     def chat(self, system, user, max_tokens=256, temperature=0.0, timeout=180, stop=None):
+        if getattr(threading.current_thread(), 'filler', False) and getattr(self, 'abort_filler', False):
+            raise RuntimeError('self-training preempted by the owner')
         with self._lock:
             if not self.available():
                 raise RuntimeError("thinking model not available")

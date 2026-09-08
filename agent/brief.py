@@ -142,6 +142,9 @@ def _rule_brief(text, pace):
         kind, deliverable = "summarize", "answer"
     elif re.search(r"\b(open|go to|visit|check)\b.*\b(youtube|amazon|etsy|ebay|vinted|instagram|tiktok|google maps|\.com|\.it)\b", low):
         kind, deliverable = "visit", "answer"
+    elif re.search(r"\b(look up|look for|find( me)?|search( for)?|cerca|trova|trovami|cercami)\b.{0,80}\b(cheapest|cheap|best price|lowest|deals?|under \d|below \d|listings?|for sale|second[- ]hand|used|usat[oi]|economic[oi]|più economic[oi]|meno car[oi])\b", low) \
+            or re.search(r"\b(cheapest|best price|lowest price)\b.{0,60}\b(on|su)\s+(vinted|subito|ebay|amazon|etsy|wallapop|depop|aliexpress|temu|facebook marketplace|marketplace)\b", low):
+        kind, deliverable = "research", "document" if re.search(r"\b(options?|list|links?|pictures?|images?|photos?|doc|document|report|walk me through|drive)\b", low) else "answer"
     elif re.search(r"\b(research|find out|look into|learn about|how does|how do|what is the best way)\b", low):
         kind, deliverable = "research", "document" if re.search(r"\b(options?|list|links?|pictures?|images?|photos?|doc|document|walk me through)\b", low) else "answer"
     elif re.search(r"\b(post|caption|tweet|reel|story for|stories for)\b", low):
@@ -152,6 +155,16 @@ def _rule_brief(text, pace):
         deliverable = "document"
     product = topic_of(text)
     product = re.sub(r"^(compare|comparison of|confronta|research|find out|look into|watch|summari[sz]e)\s+", "", product).strip() or product
+    conds = [c.strip(" .;,") for c in re.findall(r"\(([^()]{8,160})\)", text)]
+    conds += [m.strip(" .;,") for m in re.findall(r"(?:^|[.;,]\s*)((?:it |they |[a-z.]+ )?(?:has to|have to|must|needs? to|should|only if|no |not just|without|excluding|deve|devono|solo se|senza)\b[^.;()]{4,120})", text, flags=re.I)]
+    conds += [m.strip(" .;,") for m in re.findall(r"\b(i want [^.;()]{4,80})", text, flags=re.I)]
+    seen, conditions = set(), []
+    for c in conds:
+        k = c.lower()
+        if k not in seen and not any(k in o.lower() and k != o.lower() for o in conds):
+            seen.add(k); conditions.append(c)
+    sites = re.findall(r"\b(vinted|subito(?:\.it)?|ebay(?:\.it)?|amazon(?:\.it)?|etsy|wallapop|depop|aliexpress|temu|facebook marketplace|zalando|leroy merlin|ikea|alibaba|shein|kleinanzeigen|leboncoin)\b", low)
+    sites = list(dict.fromkeys(s_.replace(".it", "") for s_ in sites))
     if counterfeit:
         goal = f"{goal} — note: branded replicas are counterfeit, so I research genuine/unbranded options instead"
         product = re.sub(r"\b(reps?|replicas?|fakes?|knock-?offs?|dupes?)( of| for)?\b", "", product).strip()
@@ -186,7 +199,7 @@ def _rule_brief(text, pace):
         "ask": ["Answer from my own knowledge", "If I don't know it well enough, look it up first"],
         "chat": [],
     }[kind]
-    return {"goal": goal, "deliverable": deliverable, "kind": kind, "steps": steps, "questions": [], "counterfeit": counterfeit, "topic": product or goal}
+    return {"goal": goal, "deliverable": deliverable, "kind": kind, "steps": steps, "questions": [], "counterfeit": counterfeit, "topic": product or goal, "constraints": conditions[:4], "sites": sites[:5]}
 
 
 class Brief:

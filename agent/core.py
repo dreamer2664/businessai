@@ -90,6 +90,15 @@ while I work: "status" / "what are you doing" · "why" · "hurry up" · "stop" �
 Browsing is read-only: I never log in, pass CAPTCHAs, buy or post. Money, public posts and customer messages will always need your OK."""
 
 
+def _short(x, n=60):
+    """Cut a goal/text for a message at a word boundary, with an ellipsis."""
+    x = str(x or "").strip()
+    if len(x) <= n:
+        return x
+    cut = x[:n].rsplit(" ", 1)[0]
+    return (cut if len(cut) > n // 2 else x[:n]).rstrip(",;:- ") + "…"
+
+
 class Agent:
     def __init__(self):
         config.ensure_dirs()
@@ -154,6 +163,7 @@ class Agent:
         self.drafts = {}            # message id -> draft dict awaiting the owner's tap
         self.editing = None         # message id whose reply the owner is typing
         self.busy = None
+        self.filler = False                 # True while self-training runs: idle-time filler, the owner always comes first
         self.last_idle_check = time.time()
         self.report_sent = ""
         self.log("start", version=VERSION, bot=self.me.get("username"))
@@ -916,6 +926,10 @@ class Agent:
         """Every plain message: build a brief (goal, pace, deliverable, steps). Short jobs start at once with the plan
         shown; long ones (documents, sites) show the plan first with Go / Change / Cancel buttons."""
         low = text.strip().lower()
+        if re.fullmatch(r"\W*(?:stop|stop it|stop that|wait|hold on|pause|halt|abort|enough|cancel|cancel that|basta|ferma|fermati|fermo|aspetta|smettila|annulla)\W*", low):
+            return self.stop_everything()                                             # never a question for the brain
+        if getattr(self, "filler", False) and not low.startswith("/"):
+            self.preempt_filler()                                                     # the owner is here → quiet time is over
         if self.busy and self.mind.job and not self.last_brief:                       # a message while I'm working
             quick = self.talk.quick(text.strip())                                     # to-do, clock, opinions, translations: answered live, job untouched
             if isinstance(quick, dict):
@@ -966,7 +980,7 @@ class Agent:
                     self.tasks.owner_change = (self.tasks.owner_change + "; " + text).strip("; ")
                 return f"Noted for this job: “{text.strip()[:100]}”. I apply it to what's left, and I'll say so in the result."
             self.mind.queue.append((text, time.time()))
-            return f"Got it — I'm in the middle of “{self.mind.job['goal'][:60]}”, so this is queued as #{len(self.mind.queue)}. I start it as soon as I'm done (or say 'stop' to switch now)."
+            return f"Got it — I'm in the middle of “{_short(self.mind.job['goal'])}”, so this is queued as #{len(self.mind.queue)}. I start it as soon as I'm done (or say 'stop' to switch now)."
         if self.last_brief and self.GO_WORDS.match(low):
             b, self.last_brief = self.last_brief, None
             return self.execute(b, approved=True)
@@ -1082,6 +1096,10 @@ class Agent:
             self.log("talk", text=text[:60])
             return direct
         it = self.planner.intent(text) if self.planner.installed() else None       # cheap regexes inside, model for the middle
+        if len(low.split()) == 1 and not low.startswith('/') and '?' not in low and not re.search(r'https?://', low):
+            return f"Not sure what you mean by “{text.strip()[:40]}” — say it in a few more words and I'm on it."
+        if self.planner.installed() and len(low.split()) >= 8 and self.owner_id and not self.busy:
+            self.bot.send(self.owner_id, "👀 On it — reading your request…")   # a sign of life within a second; the plan follows
         b = self.briefer.make(text)
         if it and it["kind"] in ("watch", "summarize", "visit") and b["kind"] in ("ask", "research", "visit", "watch", "summarize"):
             b["kind"], b["topic"] = it["kind"], it["topic"]                                        # URL rules are reliable
@@ -1129,9 +1147,11 @@ class Agent:
 
     def execute(self, b, prefix="", approved=False):
         """approved=True when the owner already saw the plan (▶ Go / 'go' / queued brief) → no second copy of it."""
+        if self.busy and getattr(self, "filler", False):
+            self.preempt_filler()                      # self-training is filler: cut it, the owner's job starts now
         if self.busy:                                  # e.g. ▶ Go tapped while another job runs → queue it, never a dead end
             self.mind.queue.append((b, time.time()))
-            return (f"I'm still on: {self.busy}. I queued “{(b.get('goal') or '')[:60]}” as #{len(self.mind.queue)} and start it right after "
+            return (f"I'm still on: {self.busy}. I queued “{_short(b.get('goal'))}” as #{len(self.mind.queue)} and start it right after "
                     f"(say 'stop' to switch now).")
         self.pace.set(b["pace"], b["goal"])
         self.active_brief = b
@@ -2109,8 +2129,74 @@ class Agent:
             self.last_quiet = now
             threading.Thread(target=self.run_quiet, daemon=True).start()
 
+    def preempt_filler(self):
+        """Self-training is idle-time filler: the owner always comes first. Cut it and free the desk at once."""
+        if not getattr(self, "filler", False):
+            return
+        self.filler = False
+        for obj, attr in ((self.planner, "abort_filler"), (self.study, "abort")):
+            try:
+                setattr(obj, attr, True)
+            except Exception:
+                pass
+        self.log("filler_preempted", was=str(self.busy)[:60])
+        self.busy = None
+        if self.viewer:
+            self.viewer.task = None
+
+    def start_queued(self):
+        """Start the first queued request now (after 'stop' cut the filler)."""
+        if not self.mind.queue:
+            return None
+        item = self.mind.queue.pop(0)[0]
+        if isinstance(item, dict):
+            return self.execute(item, approved=True)
+        return self.understand(item)
+
+    def stop_everything(self):
+        """'stop' / 'wait' / 'basta': act at once, in plain words — what was running, what happens next."""
+        was = self.busy
+        cut = False
+        if getattr(self, "filler", False):
+            self.preempt_filler()
+            cut = True
+        if self.last_brief:
+            self.last_brief = None
+            return "Okay, dropped." + (" I also stopped the self-training — idle now." if cut else "")
+        if cut:
+            nxt = self.start_queued()
+            if nxt is None and not self.busy:
+                return "Stopped the self-training — I'm idle now. Reminders and the inbox keep running; say what you need."
+            return f"Stopped the self-training. Now on your request:\n\n{nxt}" if isinstance(nxt, str) else None
+        if was and self.mind.job:
+            self.stop_flag = True
+            self.site_training = False
+            self.pace.stop_now()
+            self.mind.snag("owner said stop")
+            q = ""
+            if self.mind.queue:
+                first = self.mind.queue[0][0]
+                q = f" Next in line: “{_short(first.get('goal') if isinstance(first, dict) else first)}”."
+            return f"Stopping “{_short(self.mind.job['goal'])}” — I hand you what I have so far in a moment.{q}"
+        if was:
+            self.stop_flag = True
+            self.site_training = False
+            return f"Stopping “{was}” now."
+        if self.mind.queue:
+            n = len(self.mind.queue)
+            self.mind.queue.clear()
+            return f"Nothing was running; I dropped the {n} queued request(s)."
+        return "Nothing is running right now — I'm idle. Say what you need."
+
     def run_quiet(self):
         self.busy = "self-training (quiet time)"
+        self.filler = True
+        threading.current_thread().filler = True
+        for obj, attr in ((self.planner, "abort_filler"), (self.study, "abort")):
+            try:
+                setattr(obj, attr, False)
+            except Exception:
+                pass
         try:
             if self.quiet_sessions % 4 == 3 and self.rehearsals_done < 2:
                 out = "🎭 " + self.run_rehearsal("one of our products", tell=False)
@@ -2121,11 +2207,16 @@ class Agent:
             if out.startswith(("📚", "💡", "🧠")) and self.owner_id:
                 self.bot.send(self.owner_id, out)                      # one short line per kept thing, never chatter
         except Exception as e:
-            self.log("quiet_session_failed", error=str(e)[:160])
+            if "preempted" in str(e):
+                self.log("quiet_session_preempted")
+            else:
+                self.log("quiet_session_failed", error=str(e)[:160])
         finally:
-            self.busy = None
-            if self.viewer:
-                self.viewer.task = None
+            self.filler = False
+            if self.busy == "self-training (quiet time)":       # only clear if it is still ours (the owner's job may run by now)
+                self.busy = None
+                if self.viewer:
+                    self.viewer.task = None
 
     def run_digest(self):
         """Trim: boil new notes down to facts; when enough new facts, fold them into learned.kdw."""
