@@ -121,6 +121,8 @@ class Talk:
     STORE_REVIEW = re.compile(r"\b(?:review the (?:store|shop)|store review|what (?:do you|would you) (?:propose|suggest) (?:for|in) the (?:store|shop)|any proposals|what (?:should|needs to|do) (?:i|we) (?:do|fix) in the (?:store|shop)|cosa proponi per il negozio|controlla il negozio)\b", re.I)
     STORE_ORDERS = re.compile(r"\b(?:(?:open|pending|new|today'?s|latest|recent|last|unshipped|paid) orders|orders to ship|what (?:do i|should i|needs to be|do we) ship|which orders|show (?:me )?(?:the )?orders|ordini (?:da spedire|aperti|recenti|nuovi)|quali ordini)\b", re.I)
     STORE_LABELS = re.compile(r"\b(?:print|prepare|make|generate|create|give me|stampa|prepara|fammi)\b.{0,20}?\b(?:shipping labels?|labels?|packing slips?|etichette|bolle|lettere di vettura)\b|\b(?:shipping labels?|packing slips?|etichette)\b.{0,25}?\b(?:for|of|per)\b.{0,25}?\b(?:orders?|ordini|today|oggi)\b", re.I)
+    LOGO_REQ = re.compile(r"\b(?:make|create|design|draw|do|prepare|generate|build|fai|crea|disegna|prepara)\b.{0,20}?\b(?:a |the |me a |me the |un |il |uno )?(?:new |nuovo )?logo\b(?:\s+(?:for|per)\s+(?:the |il |la |my |mio |nostro )?(?P<what>[^?.!]{2,60}))?|\bcan you (?:make|design|do|create) (?:a |the |me a )?logos?\b|\b(?:sai|puoi|riesci a) (?:fare|creare|disegnare) (?:un |il )?logo\b|\blogo\s+(?:for|per)\s+(?:the |il |la )?(?:shop|store|negozio)\b", re.I)
+    BANNER_REQ = re.compile(r"\b(?:make|create|design|prepare|generate|do|fai|crea|prepara)\b.{0,12}?\b(?:a |the |me a |me the |an |un |una |il )?(?:new |nuovo |nuova )?(?:(?P<plat0>instagram|ig|facebook|fb)\s+)?(?P<kind>banner|cover|post image|image for (?:a |the )?post|graphic|visual|immagine|grafica|copertina|story|stories)\b(?:\s+(?:for|per)\s+(?P<platform>instagram|ig|facebook|fb|the shop|stories|story|the site|il sito)\b)?(?:.{0,10}?(?:saying|that says|with|about|con scritto|che dice|per)?\s*:?\s*[\"“']?(?P<text>[^\"”':]{4,120})[\"”']?)?\W*$", re.I)
     CODE_MAKE = re.compile(r"\b(?:make|create|add|set up|activate|open|start|launch|crea|attiva|fai|aggiungi|prepara)\s+(?:a |the |an |un |il |uno )?(?:new |nuovo )?(?:discount |promo |coupon |voucher )?(?:code|codice|coupon|voucher|buono)(?:\s+(?:sconto|promozionale|promo|di sconto))?\s*(?:called |named |chiamato |:)?\s*[\"“']?(?P<code>[A-Za-z][A-Za-z0-9\-]{2,19})[\"”']?\b.{0,40}?(?:(?P<pct>\d{1,2}(?:[.,]\d)?)\s*%|(?:€|eur|euro)?\s*(?P<fixed>\d{1,3}(?:[.,]\d{1,2})?)\s*(?:€|eur|euro|euros)?\s+(?:off|di sconto|sconto))(?:.{0,30}?\b(?:over|above|from|min(?:imum)?|sopra|da|oltre)\s*(?:i |gli |the )?(?:€|eur|euro)?\s*(?P<min>\d{1,4}(?:[.,]\d{1,2})?))?(?:.{0,30}?\b(?P<uses>\d{1,4})\s*(?:uses|times|customers|people|utilizzi|volte|usi))?"
                            r"|\b(?P<pct2>\d{1,2})\s*%\s*(?:off|discount|di sconto)\b.{0,30}?\b(?:with |using |code |codice |con il codice )+[\"“']?(?P<code2>[A-Z][A-Z0-9\-]{2,19})[\"”']?\b", re.I)
     CODE_OFF = re.compile(r"\b(?:switch off|turn off|disable|deactivate|stop|kill|remove|delete|end|expire|disattiva|spegni|elimina|togli|cancella|ferma)\s+(?:the |il |la )?(?:discount |promo )?(?:code|codice|coupon)(?:\s+sconto)?\s*[\"“']?(?P<code>[A-Za-z][A-Za-z0-9\-]{2,19})[\"”']?\W*$", re.I)
@@ -993,6 +995,20 @@ class Talk:
                 if p["stock"] == 0:
                     return f"{p['name']} already shows sold out (0 in stock) — the page takes e-mails for the restock. Say “we received N more …” when it's back."
                 return {"store_change": {"kind": "stock", "product": p["id"], "value": 0, "name": p["name"], "old": p["stock"], "text": f"Mark {p['name']} sold out (stock {p['stock']} → 0; the page shows 'sold out' and stops taking orders)"}}
+        m = self.LOGO_REQ.search(t)
+        if m and not re.search(r"\b(how (?:do|can|should) i|where (?:do|can) i|what (?:is|makes)|cost|price of a|hire|freelanc|fiverr|canva)\b", t, re.I):
+            what = (m.groupdict().get("what") or "").strip(" ,.")
+            return {"design": {"kind": "logo", "what": what}}
+        m = self.BANNER_REQ.search(t)
+        if m and not re.search(r"\b(how (?:do|can|should) i|what size|dimensions|pixels?)\b", t, re.I):
+            plat = (m.group("platform") or m.group("plat0") or "").lower()
+            plat = {"ig": "instagram", "fb": "facebook", "story": "story", "stories": "story", "the shop": "facebook", "the site": "facebook", "il sito": "facebook"}.get(plat, plat or "instagram")
+            if "stor" in (m.group("kind") or "").lower():
+                plat = "story"
+            txt = (m.group("text") or "").strip(" ,.:-—")
+            if re.fullmatch(r"(?:for |per )?(?:instagram|ig|facebook|fb|the shop|the site|il sito|stories|story)", txt, re.I):
+                txt = ""
+            return {"design": {"kind": "banner", "platform": plat, "text": txt}}
         m = self.CODE_OFF.search(t)
         if m and self.store.code(m.group("code")):
             return {"store_change": {"kind": "code", "code": m.group("code").upper(), "off": True}}

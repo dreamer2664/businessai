@@ -10,6 +10,7 @@ Usage:  python3 -m agent.core            # run
 import datetime as _dt
 import html
 import json
+import pathlib
 import os
 import re
 import sys
@@ -1058,6 +1059,8 @@ class Agent:
                 return self.store_plain(direct["store_cmd"])
             if direct.get("store_change"):                                           # "lower the price of the lamp to 35" → proposal + Apply button
                 return self.store_change(direct["store_change"])
+            if direct.get("design"):                                                 # "make a logo" / "make a banner for instagram" → real files, three options
+                return self.make_design(direct["design"])
             if direct.get("text"):                                                    # e.g. a to-do item already added by talk
                 return direct["text"]
         if direct:
@@ -1486,6 +1489,57 @@ class Agent:
         self.bot.send(self.owner_id, out)
 
     # ---- practice store (milestone 11) ------------------------------------
+    def make_design(self, d):
+        """Logos (3 styles) or a social banner from the shop's own name, colours and products — PNG + SVG, sent as photos."""
+        from . import design
+        st = self.store
+        name = st.data.get("name", "Green Nest").split(" — ")[0].strip()
+        tagline = st.data.get("name", "").split(" — ")[1].strip() if " — " in st.data.get("name", "") else ""
+        hint = " ".join(p["name"] for p in st.products())[:300]
+        try:
+            if d["kind"] == "logo":
+                what = d.get("what") or ""
+                if what and not re.search(r"\b(shop|store|site|website|us|negozio|sito|business|brand|" + re.escape(name.lower()) + r")\b", what.lower()):
+                    name, tagline = what.title()[:30], ""                     # a logo for something else ("a logo for Bella Pizza")
+                res = design.make_logos(name, tagline, hint=hint)
+                pngs = [r for r in res if r["png"]]
+                for r in pngs:
+                    self.bot.send_document(self.owner_id, r["png"], caption=f"Logo option — {r['style']}", field="photo")
+                out_dir = str(pathlib.Path(res[0]["svg"]).parent) if res else ""
+                return (f"🎨 Three logo options for {name}" + (f" — {tagline}" if tagline else "") + f" ({'sent as pictures' if pngs else 'saved as SVG files'}):\n"
+                        "1. wordmark — just the name, serif, quiet and premium\n2. badge — monogram in a circle + name, works tiny (profile pictures, stamps)\n3. icon — a symbol + name, the most 'shop' of the three\n"
+                        f"Colours come from what you sell. Files (PNG + SVG, scalable for print): {out_dir}\n"
+                        "Say “I like the badge”, “make it blue”, or “logo for <another name>”. The SVG opens in Canva/Inkscape if you want to tweak it.")
+            plat = d.get("platform") or "instagram"
+            text = d.get("text") or ""
+            if not text:                                                          # no words given → the best live message: notice, code, or top product
+                nt = st.notice().get("text")
+                code = next((c for c in st.codes() if c.get("active")), None)
+                if nt:
+                    text, sub = nt, ""
+                elif code:
+                    text = f"{code['pct']:g} % off with code {code['code']}" if code.get("pct") else f"{money(code.get('fixed', 0))} off with code {code['code']}"
+                    sub = "Enter it at checkout" + (f" · orders over {money(code['min'])}" if code.get("min") else "")
+                else:
+                    sold = {}
+                    for o in st.data["orders"]:
+                        if o["status"] not in ("cancelled", "refunded"):
+                            for l in o["lines"]:
+                                sold[l["id"]] = sold.get(l["id"], 0) + l["qty"]
+                    top = max(st.products(), key=lambda p: (sold.get(p["id"], 0), p["price"])) if st.products() else None
+                    text = f"{top['name'].split(' (')[0]} — {money(top['price'])}" if top else name
+                    sub = "Ships in 1 business day"
+            else:
+                sub = ""
+            res = design.make_banner(name, text, sub, hint=hint, platform=plat)
+            if res["png"]:
+                self.bot.send_document(self.owner_id, res["png"], caption=f"{plat} banner {res['size'][0]}×{res['size'][1]}", field="photo")
+            return (f"🖼️ {plat.capitalize()} banner ({res['size'][0]}×{res['size'][1]}) — “{text}”" + (f" / {sub}" if sub else "") + ".\n"
+                    f"Files: {res['png'] or res['svg']}\nSay “change the text to …”, “make it for facebook/story”, or “post it” and I draft the caption for your tap.")
+        except Exception as e:
+            self.log("design_failed", error=str(e)[:120])
+            return f"I couldn't render the design here ({str(e)[:80]}) — the browser I use for pictures may be missing; run sh scripts/install.sh once and ask again."
+
     def store_url(self):
         return f"http://{self.store.host}:{practice_store.PORT}/"
 

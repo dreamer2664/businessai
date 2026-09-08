@@ -23,6 +23,8 @@ class Advice:
 
     # each entry: (regex, method name). First match wins; a method may return None to fall through.
     RULES = [
+        (r"\b(?:how (?:do|can|should) i|how to|where (?:do|can) i)\b.{0,15}?\b(?:make|create|design|get)\b.{0,10}?\b(?:a |the |my )?logo\b|\bcome (?:faccio|si fa) (?:a fare |a creare )?(?:un |il )?logo\b", "logo_how"),
+        (r"\b(?:what|which|ideal|best|right|correct)\s+(?:size|dimensions?|resolution|format|ratio)\b.{0,30}?\b(?:instagram|ig|facebook|fb|story|stories|reel|post|banner|cover|pinterest|tiktok|youtube)\b|\b(?:instagram|facebook|story|reel|post|cover)\b.{0,20}?\b(?:size|dimensions?|pixels?|resolution)\b|\bche (?:dimensioni|misure|formato)\b.{0,20}?\b(?:post|storia|instagram|facebook)\b", "post_sizes"),
         (r"\b(courier|carrier|gls|brt|poste|dhl|ups|corriere)\b.{0,30}?\b(lost|lose|smarrito|perso|missing|damaged (?:the|a|my)|broke)\b|\b(lost|smarrito) (?:a |the |il |un )?(?:parcel|package|pacco)\b", "lost_parcel"),
         (r"\btracking (?:says|shows|dice) (?:delivered|consegnato)\b|\bnever (?:got|received) (?:the |their |his |her )?(?:parcel|package|order)\b.{0,40}?\bdelivered\b|\bdelivered but (?:not|never) (?:received|arrived|got)\b|\bsays delivered\b", "says_delivered"),
         (r"\b(?:wants?|asks? for|needs?|chiede|vuole) (?:an? |la |una )?(?:invoice|receipt|fattura|ricevuta)\b|\binvoice\b.{0,20}?\b(?:how|do i|must|devo)\b", "invoice"),
@@ -577,6 +579,21 @@ class Advice:
                 f"• Fees: {fees} → {allin}.\n"
                 "• Rule for any marketplace: same price as your site (never cheaper there), your own photos, ship in 1 business day, answer within 24 h — marketplaces rank sellers on exactly that."
                 + top + "\nIf you want it, say so and I put 'open the account + list 3 products' on the plan; the account is yours, I prepare the listings for your tap.")
+
+    def logo_how(self, t, m):
+        return ("Making a logo — the honest order:\n"
+                "1. Say “make a logo” and I draw three options from your shop's name and colours (wordmark, badge, icon) as PNG + SVG — free, yours, in a minute.\n"
+                "2. Want more? Canva (free) → 'Logo' template, type the name, change the colour, download PNG + SVG; Looka/Hatchful are similar. Avoid clip-art icons everyone uses (leaf + circle is fine, a generic globe is not).\n"
+                "3. A designer on Fiverr/Upwork: € 30–150 for a proper wordmark with source files; ask for SVG/PDF + a black-and-white version + the exact colour codes.\n"
+                "Rules: readable at 32 px (profile picture), max 2 colours, no gradients, one font. Keep the SVG — it prints at any size on labels, cards and bags.")
+
+    def post_sizes(self, t, m):
+        return ("Sizes that don't get cropped (2026):\n"
+                "• Instagram feed: 1080×1350 (portrait, most screen) or 1080×1080 square · reel/story: 1080×1920, keep text inside the middle 1080×1420\n"
+                "• Facebook post: 1200×630 (link) or 1080×1080 · page cover: 820×312 (shows 640×360 on phones) · event: 1920×1005\n"
+                "• TikTok: 1080×1920 · Pinterest pin: 1000×1500 · YouTube thumbnail: 1280×720\n"
+                "• Shop banner/hero: 1600×600 (desktop) + 1080×1080 (mobile)\n"
+                "Export PNG (or JPG at 80 % for photos), under 1 MB; text ≥ 5 % of the height so it reads on a phone. Say “make a banner for instagram/facebook/story” and I make it in the right size.")
 
     def gift_wrap(self, t, m):
         st = self.store
