@@ -933,7 +933,7 @@ check("'put a notice on the shop saying: …' → proposal with the clean text",
 r = A.respond("approve that")
 _fp = _op.open(_base + "/").read().decode()
 check("…notice live: banner on the front page", isinstance(r, str) and "shop notice" in r and "class=notice" in _fp and "Orders placed after 20 December" in _fp, (r or "")[:80])
-for _i in range(40):                                              # the shop-read thread from "open the practice store" may still hold 'busy'
+for _i in range(240):                                             # the shop-read thread from "open the practice store" may still hold 'busy' (slow box: up to 60 s)
     if not A.busy:
         break
     time.sleep(0.25)
