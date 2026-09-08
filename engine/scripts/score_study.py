@@ -2,6 +2,7 @@
 course notes resumed across sessions, ideas doc sync, quiet-session cycling, owner videos pending at start.
 Offline: transcripts are stubbed. Run:  python3 engine/scripts/score_study.py --show | tail -30"""
 import json
+import re
 import os
 import shutil
 import sys
@@ -94,6 +95,18 @@ S.course_session("https://youtu.be/vid_long", max_chunks=3)
 prog2 = json.loads((S_mod.config.STATE_DIR / "course_vid_long.json").read_text())
 check("second session continues where it stopped", prog2["done"] == min(n_total, before + 3), f"{before} → {prog2['done']}")
 check("course notes document in the library", any("course" in p.name.lower() for p in library.LIB_DIR.glob("*.html")))
+# the extractive picker on real guru talk: rules stay, brags and screen-talk go
+GURU = ("I remember with my last brand, we were consistently doing $5 to $10,000 every single day on autopilot with the systems that I put in place. "
+        "From this, I was comfortably bringing home over $1,000 a day in profit without barely working more than an hour a day. "
+        "So, if the product cost me $5 per order, I want to make sure that I can at least sell that product for $15, ideally way more, but we have to be at at least 3x the cost of fulfilment. "
+        "So, then you can copy it and then you can go right back here and you can add as a draft. "
+        "If you want to get the same color, you can go back to this and you can just copy this color code. "
+        "The reason why we have to have the privacy policy, the shipping policy, all that stuff is because once we start running ads, Facebook is going to scan the store for them. "
+        "In 2025 alone, Shopify processed over $378 billion in sales on their platform, which is almost a 30% increase from the previous year. "
+        "Even though we're optimizing for mobile, we always want to make sure that our store still looks good on desktop.")
+picked = S_mod.Study.pick_lessons(re.split(r"(?<=[.!?])\s+", GURU), n=4)
+check("lesson picker keeps the rules (3x cost, policy pages before ads, mobile+desktop)", any("3x" in l for l in picked) and any("privacy policy" in l for l in picked) and any("desktop" in l for l in picked), picked)
+check("lesson picker drops income brags, screen-talk and platform trivia", not any(("$1,000 a day" in l) or ("color code" in l) or ("right back here" in l) or ("378 billion" in l) or ("autopilot" in l) for l in picked), picked)
 
 # 4) quiet sessions cycle and prefer pending courses
 kinds = []

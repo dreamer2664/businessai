@@ -273,16 +273,47 @@ class Study:
             except Exception as e:
                 self.log("lessons_model_error", error=str(e)[:80])
         sents = re.split(r"(?<=[.!?])\s+", chunk)
+        return self.pick_lessons(sents)
+
+    @staticmethod
+    def pick_lessons(sents, n=3, min_score=6):
+        """Extractive fallback (no thinking model): instructions and rules of thumb, never the guru's income brags."""
         def score(x):
+            low = x.lower()
             sc = 0
-            sc += 3 * len(re.findall(r"\d+\s?%|\$\s?\d|€\s?\d|\d+\s?(?:x|times)\b|\d+\s?(?:percent|per cent)\b", x, re.I))
-            sc += 2 * len(re.findall(r"\b\d+\s?(?:(?:thousand|million|billion|k)\s?)?(?:days?|hours?|weeks?|months?|products?|orders?|dollars?|euros?|bucks|seconds?|words?|customers?|sales)\b", x, re.I))
-            sc += len(re.findall(r"\b(margin|profit|supplier|shipping|conversion|rule of thumb|never|always|make sure|the key is|you (?:should|need to|want to)|at least|no more than)\b", x, re.I))
-            sc -= 3 * len(re.findall(r"\b(subscribe|like this video|my course|link in|comment below|congrats|welcome|in this video|I'?ve made|hundreds of videos)\b", x, re.I))
+            sc += 3 * len(re.findall(r"\b(you (?:should|need to|want to|have to|must|can|could)|make sure|the (?:key|trick|rule|goal) is|rule of thumb|at least|no more than|never|always|avoid|don'?t|step \d|the first thing|the (?:best|easiest|cheapest|fastest) way|instead of|before you|the (?:reason|problem) is)\b", low))
+            sc += 2 * len(re.findall(r"\d+\s?%|\d+\s?(?:x|times)\b|\d+\s?(?:percent|per cent)\b|\b\d+\s?(?:days?|hours?|weeks?|seconds?|products?|orders?|reviews?|customers?|variations?)\b", low))
+            sc += len(re.findall(r"\b(margin|profit|supplier|shipping|conversion|refund|return rate|ad spend|cost per|break[- ]even|test(?:ing)?|winning product|competitor|reviews?|creatives?|hook|landing page|checkout|upsell|bundle)\b", low))
+            sc += 1 if re.search(r"[$€]\s?\d", low) and re.search(r"\b(cost|price|sell (?:it )?for|charge|spend|budget|per (?:order|day|unit|product)|at least)\b", low) else 0
+            # brag / filler / story → out
+            sc -= 5 * len(re.findall(r"\b(i|we) (?:was|were|am|'m|have been|had been|started|ended up|remember)\b.{0,60}\b(?:making|doing|bringing|earning|generating|pulling|profit(?:ing)?|revenue|a day|per day|a month|per month|figures?)\b", low))
+            sc -= 5 * len(re.findall(r"\b(?:\$|€)\s?\d[\d,.]*\s?(?:k|thousand|million|m|billion)?\s?(?:a|per|every(?: single)?) (?:day|month|year|week)\b", low))
+            sc -= 4 * len(re.findall(r"\b(subscribe|like this video|my (?:course|program|mentorship|community)|link in (?:the )?(?:bio|description)|comment below|congrats|welcome (?:back|to)|in this video|i'?ve made|hundreds of videos|autopilot|without (?:barely )?working|my last brand|my students?|if i had to guess|i would assume|i literally|as you (?:guys )?can see|trust me|guys)\b", low))
+            sc -= 3 if re.search(r"^(so|and|but|now|okay|ok|alright|look)\b", low) and len(x) < 70 else 0
+            sc -= 2 if re.search(r"\b(billion|processed over|\d{3},\d{3},\d{3})\b", low) else 0
+            sc -= 2 if low.count(" i ") + low.startswith("i ") >= 2 else 0
+            # screen-deictic / sales-funnel / vague sentences carry nothing without the video
+            sc -= 4 * len(re.findall(r"\b(click (?:right )?here|right here|over here|this (?:website|page|tab|button|link)|like this|something like this|this sort of|book a call|my team|member of my team|sign up (?:here|below)|the software i showed|as i showed|we are going to do this|we don'?t need to do this|right now|you know,?)\b", low))
+            sc -= 3 if not re.search(r"\b(product|supplier|shipping|margin|profit|price|cost|customer|ad|ads|store|shop|order|review|competitor|niche|market|brand|conversion|refund|budget|test|video|creative|traffic|sales?|revenue|inventory|stock|alibaba|aliexpress|amazon|tiktok|facebook|shopify)\w*\b", low) and not re.search(r"\d", low) else 0
+            sc -= 4 * len(re.findall(r"\b(you can (?:go|click|copy|come|see|scroll|type|search up|paste|just|also do|easily go)|go (?:right )?back|come (?:over )?here|copy (?:this|it|the)|paste (?:it|this)|(?:on|in) (?:the|their|your) dashboard|color code|this color|filters?\b|drop-?down|tab|button)\b", low))
+            sc -= 3 * len(re.findall(r"\b(um+|uh+|i mean|god forbid|really,? really|kind of|sort of|you guys|literally|basically)\b", low))
+            sc -= 3 if re.search(r"\bi (?:don'?t|do not) (?:know|recommend|think)\b|\bi (?:like|love|hate) to\b", low) else 0
+            sc += 3 if re.search(r"\b(because|so that|which means|the reason)\b", low) else 0          # a lesson explains itself
+            sc += 2 * len(re.findall(r"\b(have to have|has to have|need to have|must have|required|mandatory|before (?:you|we) (?:start|run|launch)|once (?:you|we) start)\b", low))
             return sc
-        picks = [x.strip() for x in sents if 40 <= len(x.strip()) <= 220]
+        picks = [x.strip() for x in sents if 40 <= len(x.strip()) <= 220 and not x.strip().endswith(("…", ","))]
         picks = sorted(dict.fromkeys(picks), key=lambda x: -score(x))
-        return [x for x in picks[:3] if score(x) >= 3]
+        out = []
+        for x in picks:
+            if score(x) < min_score:
+                break
+            words = set(re.findall(r"[a-z]{4,}", x.lower()))
+            if any(len(words & set(re.findall(r"[a-z]{4,}", y.lower()))) >= max(3, int(0.6 * len(words))) for y in out):
+                continue                                                # near-duplicate of one already kept
+            out.append(x)
+            if len(out) >= n:
+                break
+        return out
 
     def pending_courses(self):
         out = []
