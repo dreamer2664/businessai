@@ -123,6 +123,7 @@ class Eyes:
             return False
         if self.planner is not None and hasattr(self.planner, "stop") and self._mem_available_mb() < 1500:
             self.planner.stop()                 # 2 GB machines: one model at a time
+        config.LOG_DIR.mkdir(parents=True, exist_ok=True)
         logf = open(config.LOG_DIR / "eyes.log", "ab")
         try:
             self._proc = subprocess.Popen([str(SERVER_BIN), "-m", str(MODEL_FILE), "--mmproj", str(MMPROJ_FILE), "--host", "127.0.0.1",

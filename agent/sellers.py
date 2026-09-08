@@ -83,9 +83,14 @@ def extract_facts(text, url):
     m = MATERIAL.search(text)
     if m:
         f["Materials"] = m.group(1).strip()
-    m = CONDITION.search(text[:4000])
-    if m and (MARKETPLACES.search(url) and re.search(r"vinted|ebay|subito|depop", url, re.I)):
+    m = re.search(r"\bcondition\s*[:\-–]?\s*(new with tags|new without tags|brand new|like new|very good|good|satisfactory|fair|used|pre-owned|new|nuovo con cartellino|nuovo|ottime condizioni|buone condizioni|usato)\b", text[:6000], re.I)
+    second_hand = re.search(r"vinted|ebay|subito|depop|wallapop|leboncoin|kleinanzeigen", url + " " + text[:300], re.I)
+    if m:                                                    # an explicit "Condition: …" line is trustworthy anywhere
         f["Condition (as listed)"] = m.group(1)
+    elif second_hand:
+        m = CONDITION.search(text[:4000])
+        if m:
+            f["Condition (as listed)"] = m.group(1)
     m = RATING.search(text)
     if m:
         f["Rating"] = (m.group(1) + "/5") if m.group(1) else (m.group(2) + "% positive")
@@ -150,6 +155,44 @@ def reliability(facts, reviews_text, social_hits, age_hint=""):
     verdict = {"good": "Looks reliable — I'd shortlist it.", "ok": "Usable, but check the points below before buying or listing.",
                "bad": "I would not trust this one."}[grade]
     return grade, verdict, pros[:4], cons[:4]
+
+
+EYES_QUESTION = "In one sentence, what signs of use or damage (if any) does the item in this photo show? If it looks brand new, say so."
+_NEWISH = re.compile(r"\b(new|never worn|like new|unused|mint|sealed|brand new|nuovo|mai (?:indossat|usat)\w*|neu|neuf)\b", re.I)
+_WEAR = re.compile(r"\b(worn|wear|scuff\w*|scratch\w*|stain\w*|dirt\w*|holes?|torn|fray\w*|dents?|crack\w*|damage\w*|broken|peel\w*|faded|ripped|used)\b", re.I)
+_STRONG = re.compile(r"\b(holes?|torn|broken|crack\w*|ripped|damaged|missing)\b", re.I)
+_CLEAN = re.compile(r"\b(brand new|no (?:visible |obvious |apparent )?(?:signs?|defects?|damage|wear)|unused|pristine|new and unused|looks new|appears? (?:to be )?new)\b", re.I)
+
+
+def photo_is_graphic(data, flat_share=0.7):
+    """True for flat graphics (placeholders, icons, logos): the 8 most common colours cover most of the image, or it is tiny.
+    Measured: drawn placeholders 0.77–0.93, a product shot on white 0.41, real photos ~0.1."""
+    try:
+        from PIL import Image
+        import io
+        im = Image.open(io.BytesIO(data)).convert("RGB")
+        if im.width < 80 or im.height < 80:
+            return True
+        im.thumbnail((160, 160))
+        cols = sorted(im.quantize(256).getcolors(), reverse=True)
+        return sum(c for c, _ in cols[:8]) / float(im.width * im.height) >= flat_share
+    except Exception:
+        return False
+
+
+def photo_verdict(answer, condition=""):
+    """Turn the eyes' one-sentence description into a flag ('👁 …') or '' — flag wear on items listed as new, and real damage on anything."""
+    a = (answer or "").strip().split("\n")[0].strip()
+    if not a:
+        return ""
+    strong = bool(_STRONG.search(a))
+    clean = bool(_CLEAN.search(a)) and not strong
+    worn = bool(_WEAR.search(a)) and not clean
+    if not worn:
+        return ""
+    if strong or (condition and _NEWISH.search(condition)) or (not condition and re.search(r"\bworn\b|signs of (?:use|wear)", a, re.I) and _STRONG.search(a)):
+        return "👁 " + a[:220]
+    return ""
 
 
 class SellerCheck:
@@ -306,20 +349,23 @@ class SellerCheck:
         return listing.get("socials", [])
 
     def look(self, b, listing, product):
-        """Eyes on the listing picture: does the photo contradict the text (damage, wrong item)? '' when no eyes."""
+        """Eyes on the listing picture: does the photo contradict the text (damage, wear on a 'new' item)? '' when no eyes / nothing wrong.
+        Lessons from testing with real photos: never ask the small vision model yes/no (it answers 'no damage' to everything);
+        ask it to describe signs of use and judge the words here. Flat graphics (placeholders, icons) make it hallucinate → skipped."""
         if not self.eyes or not listing.get("image"):
             return ""
         try:
+            if photo_is_graphic(listing["image"]):
+                return ""
             import tempfile, os
             fd, path = tempfile.mkstemp(suffix=".jpg")
             os.write(fd, listing["image"]); os.close(fd)
+            try:
+                ans = self.eyes.look(path, EYES_QUESTION, max_tokens=70)
+            finally:
+                os.unlink(path)
             cond = listing["facts"].get("Condition (as listed)", "")
-            q = (f"This is a product photo of {product}. Is the item visibly damaged, worn, dirty or different from '{cond or 'new'}'? Answer yes or no and what you see, in one sentence.")
-            ans = self.eyes.look(path, q, max_tokens=60)
-            os.unlink(path)
-            if ans and re.match(r"\s*yes", ans, re.I):
-                return "👁 " + ans.strip()
-            return ""
+            return photo_verdict(ans, cond)
         except Exception as e:
             self.log("look_failed", error=str(e)[:80])
             return ""
