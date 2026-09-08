@@ -1780,11 +1780,25 @@ class Agent:
         today = _dt.date.today().isoformat()
         if hour >= 20 and self.report_sent != today and self.owner_id:
             rep = self.memory.daily_report()
+            self.report_sent = today
+            try:                                                                       # the shop's day: orders, late parcels, low stock, messages waiting
+                shop = self.talk.check_in("update me")
+                if shop and not shop.startswith("All quiet"):
+                    rep = (rep + "\n\n" if rep else "Evening report " + today + "\n") + shop
+            except Exception as e:
+                self.log("report_shop_failed", error=str(e)[:80])
             if rep:
                 rep += "\n" + self.inbox.status()
-            self.report_sent = today
-            if rep:
                 self.notify(rep)
+        if 8 <= hour < 12 and self.memory.todo.get("morning_sent") != today and self.owner_id:   # morning: what's on the plate, only when something is (once a day, survives restarts)
+            self.memory.todo["morning_sent"] = today
+            self.memory._save()
+            try:
+                plate = self.talk.plate()
+                if plate and plate.startswith("Today ("):
+                    self.notify("☀️ " + plate)
+            except Exception as e:
+                self.log("morning_failed", error=str(e)[:80])
         if self.learner.pending() and self.planner.installed():
             threading.Thread(target=self.run_digest, daemon=True).start()
             return
