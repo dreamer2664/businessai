@@ -328,6 +328,13 @@ class Store:
                 old = p["stock"]
                 p["stock"] = int(ch)
                 out = f"{p['name']}: stock {old} → {p['stock']}"
+            elif k == "cost":
+                p = self.product(t)
+                if not p:
+                    return "Product not found."
+                old = p.get("cost", 0)
+                p["cost"] = round(float(ch), 2)
+                out = f"{p['name']}: cost {money(old)} → {money(p['cost'])}"
             elif k == "description":
                 p = self.product(t)
                 if not p:

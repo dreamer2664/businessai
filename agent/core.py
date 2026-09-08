@@ -1578,6 +1578,17 @@ class Agent:
             self.bot.send(self.owner_id, f"🏪 {ch['name']}: price {money(ch['old'])} → {money(ch['value'])}{warn}\nApply it?",
                           buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
             return None
+        if k == "cost":
+            price = ch.get("price") or 0
+            old_m = (price - ch["old"]) / price * 100 if price else 0
+            new_m = (price - ch["value"]) / price * 100 if price else 0
+            keep = round(ch["value"] / (1 - old_m / 100) + 0.09, 0) - 0.10 if price and old_m < 95 else 0        # price that keeps the old margin, X,90 style
+            prop = st.propose("cost", ch["product"], ch["value"], f"you said: cost {money(ch['old'])} → {money(ch['value'])}")
+            advice = (f" The margin at {money(price)} goes {old_m:.0f} % → {new_m:.0f} %." +
+                      (f" To keep {old_m:.0f} % the price would be {money(keep)} — say “raise the price of {ch['name'].split(' (')[0].lower()} to {keep:.2f}” if you want that; under ~45 % I'd move it." if keep and new_m < 50 else " Still fine, I'd leave the price."))
+            self.bot.send(self.owner_id, f"🏪 {ch['name']}: cost {money(ch['old'])} → {money(ch['value'])}.{advice}\nRecord the new cost?",
+                          buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
         if k == "stock":
             prop = st.propose("stock", ch["product"], ch["value"], f"you said: stock {ch['old']} → {ch['value']}")
             self.bot.send(self.owner_id, f"🏪 {ch['name']}: stock {ch['old']} → {ch['value']}. Apply it?",
@@ -1588,8 +1599,9 @@ class Agent:
             margin = (price - cost) / price * 100 if price else 0
             note = (f" (I picked {money(price)} = 3× the cost; tell me another price if you prefer)" if ch.get("guessed") else "")
             warn = f"\n⚠️ {margin:.0f} % gross margin is thin — below ~55 % the shipping and fees eat it. 2.5–3× the cost is the usual floor." if cost and margin < 50 else (f" — {margin:.0f} % gross margin" if cost else "")
-            prop = st.propose("product", ch["name"], json.dumps({"name": ch["name"], "price": price, "cost": cost, "stock": 10, "short": ""}), "you asked to add it")
-            self.bot.send(self.owner_id, f"🏪 New product “{ch['name']}” at {money(price)}{note}, cost {money(cost)}{warn}\nStock starts at 10 and the description is empty — say “write a description for {ch['name']}” after adding it. Add it?",
+            stock = int(ch.get("stock") or 10)
+            prop = st.propose("product", ch["name"], json.dumps({"name": ch["name"], "price": price, "cost": cost, "stock": stock, "short": ""}), "you asked to add it")
+            self.bot.send(self.owner_id, f"🏪 New product “{ch['name']}” at {money(price)}{note}, cost {money(cost)}{warn}\nStock starts at {stock} and the description is empty — say “write a description for {ch['name']}” after adding it. Add it?",
                           buttons=[[("✅ Add to shop", f"s:ok:{prop['id']}"), ("❌ No", f"s:no:{prop['id']}")]])
             return None
         return "I didn't understand which change you want in the store."
