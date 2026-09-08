@@ -120,6 +120,7 @@ class Viewer:
         self.url = self.title = self.text = ""
         self.status, self.tabs, self.task = "idle", 0, None
         self.plan = None                      # {"goal", "steps", "step", "deadline", "deadline_min", "budget_until", "note"}
+        self.listener = None                  # Mind.on_event(kind, fields) — the agent's own journal listens to what the screen shows
         self.browser_open = False
         self.events = collections.deque(maxlen=200)
         self._seen = 0
@@ -133,6 +134,11 @@ class Viewer:
         if kind in ("poll_error",):
             return
         self.events.appendleft({"t": _dt.datetime.now().strftime("%H:%M:%S"), "text": humanize(kind, fields)})
+        if self.listener:
+            try:
+                self.listener(kind, fields)
+            except Exception:
+                pass
 
     def step(self, action, url, title, status, tabs, shot=None):
         self.url, self.title, self.status, self.tabs = url, title, status, tabs

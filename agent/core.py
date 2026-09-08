@@ -42,6 +42,7 @@ from .accounts import Accounts
 from .study import Study
 from .sitebuilder import SiteBuilder, KINDS as SITE_KINDS
 from .rehearsal import Rehearsal
+from .mind import Mind
 
 
 def money_list(orders):
@@ -69,6 +70,8 @@ Forward me any customer message (or write /customer <their text>) → I draft th
 /google — my own Google account (Drive library + reading my own mailbox for sign-up codes): /google connect · /google test · /google ls
 "rehearse posting about <topic>" — a dry run on my own practice network: log in, publish with photo, learn the limits, answer comments (nothing public) · /rehearse map — what I learned about each interface
 "build a website for <a place>" — I write the copy, build the pages, check them in my browser and send you the files · "start auto training on website building" — I practise on random real places from the map (watch it live) · "stop training"
+while I work: "status" / "what are you doing" · "why" · "hurry up" · "stop" · a change ("only Italy") · a new request (queued) — no need to wait
+/lessons — what I learned from my last jobs (I reflect after every one)
 /ideas — business ideas I jotted from short videos (/ideas <topic> = go watch some now) · /study [topic] — find and keep a good PDF in my library
 /accounts — the site accounts I created with my own e-mail (I sign up when a task needs it and tell you in one line; never money sites)
 /library — the documents I've written (seller checks, research, comparisons); they also land in my Drive folder
@@ -117,6 +120,9 @@ class Agent:
         self.sites = SiteBuilder(planner=self.planner, tasks=self.tasks, google=self.google, log=self.log, viewer=self.viewer, eyes=self.eyes)
         self.site_training = False          # "start auto training on website building" → loop until "stop"
         self.sites_built = 0
+        self.mind = Mind(planner=self.planner, log=self.log, pace=self.pace, viewer=self.viewer)
+        self.viewer.listener = self.mind.on_event
+        self.stop_flag = False
         self.rehearsal = Rehearsal(self.tasks, accounts=self.accounts, social=self.social, inbox=self.inbox, log=self.log, viewer=self.viewer, eyes=self.eyes)
         self.stage = None                   # the rehearsal network (tests/social/server.py) once started
         self.rehearsals_done = 0
@@ -752,6 +758,8 @@ class Agent:
             topic = re.sub(r"\b(rehearse|rehearsal|dry run|practice|practise|posting|a post|post|on|social media|social)\b", " ", arg, flags=re.I).strip(" ,.:") or "our newest product"
             threading.Thread(target=self.run_rehearsal, args=(topic, True), daemon=True).start()
             return "🎭 Rehearsing: I draft a post, log into my practice network with my own account, publish it there with a photo, read the platform's reaction, then answer the comments. One report line when done."
+        if low.startswith("/lessons") or re.fullmatch(r"\W*(what did you learn( from your (last )?jobs)?|lessons?( learned)?|cosa hai imparato)\W*", low):
+            return self.mind.lessons_text()
         if low.startswith("/ideas"):
             arg = text[6:].strip()
             if arg:
@@ -789,6 +797,24 @@ class Agent:
         """Every plain message: build a brief (goal, pace, deliverable, steps). Short jobs start at once with the plan
         shown; long ones (documents, sites) show the plan first with Go / Change / Cancel buttons."""
         low = text.strip().lower()
+        if self.busy and self.mind.job and not self.last_brief:                       # a message while I'm working
+            what, reply = self.mind.interrupt(text)
+            if what in ("status", "why", "hurry"):
+                return reply
+            if what == "stop":
+                self.stop_flag = True
+                self.site_training = False
+                self.pace.stop_now()
+                self.mind.snag("owner said stop")
+                return f"Stopping “{self.mind.job['goal'][:60]}” — I'll hand you what I have so far in a moment."
+            if what == "chat":
+                return None if re.fullmatch(r"\W*(ok(ay)?|👍|❤️|🙏)\W*", low) else "🙂 (still working on it — ask me 'status' any time)"
+            if what == "change":
+                self.mind.job["snags"].append(f"owner changed course: {text[:80]}")
+                self.mind.job["change"] = text
+                return f"Noted for this job: “{text.strip()[:100]}”. I apply it to what's left, and I'll say so in the result."
+            self.mind.queue.append((text, time.time()))
+            return f"Got it — I'm in the middle of “{self.mind.job['goal'][:60]}”, so this is queued as #{len(self.mind.queue)}. I start it as soon as I'm done (or say 'stop' to switch now)."
         if self.last_brief and self.GO_WORDS.match(low):
             b, self.last_brief = self.last_brief, None
             return self.execute(b)
@@ -824,7 +850,8 @@ class Agent:
         big = b["deliverable"] in ("document", "website") or b["kind"] in ("seller_check", "build_site") or b.get("questions")
         if big and not (b["pace"]["pace"] == "quick" and not b.get("questions")):
             self.last_brief = b
-            self.bot.send(self.owner_id, Brief.text(b) + "\n\nShall I go? (you can also write changes, e.g. 'only Italian sellers, max 30 €')",
+            adv = self.mind.advice(b["kind"])
+            self.bot.send(self.owner_id, Brief.text(b) + ("\n\n🧠 From last time: " + " · ".join(adv[:2]) if adv else "") + "\n\nShall I go? (you can also write changes, e.g. 'only Italian sellers, max 30 €')",
                           buttons=[[("▶ Go", "b:go"), ("✏️ Change", "b:edit"), ("✖ Cancel", "b:no")]])
             return None
         return self.execute(b)
@@ -834,9 +861,14 @@ class Agent:
             return f"I'm still busy with: {self.busy}. Ask me again in a minute (or /cancel it)."
         self.pace.set(b["pace"], b["goal"])
         self.active_brief = b
+        self.stop_flag = False
         self.viewer.show_plan(b["goal"], b["steps"], self.pace)
         kind, topic = b["kind"], b["topic"]
+        self.mind.begin(b["goal"], kind, b["steps"], why=f"You asked: “{b['goal'][:100]}” — I hand you {b['deliverable']} at {b['pace']['pace']} pace.")
+        adv = self.mind.advice(kind)
         head = Brief.text(b) if not prefix else prefix + Brief.text(b)
+        if adv:
+            head += "\n\n🧠 From last time: " + " · ".join(adv[:2])
         if kind == "seller_check":
             threading.Thread(target=self.run_seller_check, args=(b,), daemon=True).start()
             return head + "\n\nStarting — you'll get the document here (and in my Drive if it's connected)."
@@ -900,11 +932,11 @@ class Agent:
         except Exception as e:
             self.log("build_site_failed", error=traceback.format_exc()[-400:])
             self.bot.send(self.owner_id, f"Building the site failed: {type(e).__name__}: {str(e)[:160]}")
+            self.mind.snag(f"{type(e).__name__}: {str(e)[:80]}")
+            delivered = False
         finally:
             self.busy = None
-            self.pace.finish()
-            self.viewer.plan_done()
-            self.active_brief = None
+            self._finish_job(locals().get("report", "") if isinstance(locals().get("report"), str) else "", delivered=locals().get("delivered", True))
 
     def train_sites(self):
         """Auto-training loop: random real place → full site → check → save; one short line per site."""
@@ -1004,11 +1036,11 @@ class Agent:
             self.bot.send(self.owner_id, self.study.video_session(query=query, urls=urls))
         except Exception as e:
             self.bot.send(self.owner_id, f"Couldn't read those videos: {str(e)[:120]}")
+            self.mind.snag(str(e)[:80])
+            delivered = False
         finally:
             self.busy = None
-            self.pace.finish()
-            self.viewer.plan_done()
-            self.active_brief = None
+            self._finish_job("ideas session", delivered=locals().get("delivered", True))
 
     def run_seller_check(self, b):
         self.busy = f"seller check: {b['topic'][:40]}"
@@ -1043,11 +1075,11 @@ class Agent:
         except Exception as e:
             self.log("seller_check_failed", error=traceback.format_exc()[-400:])
             self.bot.send(self.owner_id, f"The seller check failed: {type(e).__name__}: {str(e)[:160]}")
+            self.mind.snag(f"{type(e).__name__}: {str(e)[:80]}")
+            delivered = False
         finally:
             self.busy = None
-            self.pace.finish()
-            self.viewer.plan_done()
-            self.active_brief = None
+            self._finish_job(locals().get("summary", "") if isinstance(locals().get("summary"), str) else "", delivered=locals().get("delivered", True))
 
     def start_do(self, arg):
         """/do [desktop] [<url> |] <goal> — the operator works the screen step by step."""
@@ -1192,16 +1224,42 @@ class Agent:
                "research": f"looking into '{arg}' — report in about a minute."}[kind]
         return (prefix + msg) if prefix else msg[0].upper() + msg[1:]
 
+    def _finish_job(self, outcome, delivered=True):
+        """Every job ends here: reflect (one lesson), clear the clocks, then start whatever the owner queued meanwhile."""
+        try:
+            if self.mind.job:
+                if self.mind.job.get("change"):
+                    outcome = (outcome or "") + f" | owner's mid-job change: {self.mind.job['change'][:80]}"
+                self.mind.reflect(outcome or "", delivered=delivered)
+        except Exception as e:
+            self.log("reflect_failed", error=str(e)[:100])
+        self.pace.finish()
+        self.viewer.plan_done()
+        self.active_brief = None
+        self.stop_flag = False
+        if self.mind.queue:
+            text, _ = self.mind.queue.pop(0)
+            self.bot.send(self.owner_id, f"▶ Now the request you queued: “{text[:80]}”")
+            threading.Thread(target=self._start_queued, args=(text,), daemon=True).start()
+
+    def _start_queued(self, text):
+        time.sleep(1)
+        try:
+            r = self.respond(text)
+            if r:
+                self.bot.send(self.owner_id, r)
+        except Exception as e:
+            self.log("queued_failed", error=str(e)[:120])
+
     def run_task(self, command, brief=None):
         self.busy = command[:60]
+        out = ""
         try:
             out = self.tasks.run(command)
         finally:
             self.busy = None
             if brief is not None:
-                self.pace.finish()
-                self.viewer.plan_done()
-                self.active_brief = None
+                self._finish_job(out[:200], delivered=not out.startswith("Task failed"))
         self.log("out", text=out[:300])
         self.bot.send(self.owner_id, out)
 
@@ -1355,6 +1413,7 @@ class Agent:
                 f"{self.eyes.describe_status()} · {self.desktop.describe_status()}\n"
                 f"{self.google.status()} · {self.accounts.id.describe()} · {len(self.accounts.data['accounts'])} site account(s)\n"
                 f"{self.pace.text()}" + (f" · plan: {self.active_brief['goal'][:60]} (step {self.viewer.plan['step'] + 1 if self.viewer.plan else '?'}/{len(self.active_brief['steps'])})" if self.active_brief else "") + "\n"
+                f"thinking: {self.mind.stats_text()}\n"
                 f"owner: {'pinned' if self.owner_id else 'not yet seen'} · "
                 f"pending questions: {len(self.pending)} · busy: {self.busy or 'no'}\n"
                 f"live screen: {self.viewer.address()} (on the machine I run on) · watch: {'on' if self.watch else 'off'}")

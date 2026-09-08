@@ -31,4 +31,5 @@
 | accounts | 12/12 | own-account sign-up on a fake site (identity, terms, code from mail, checkbox CAPTCHA), login, never-sign-up list, no double sign-up | `timeout 280 python3 engine/scripts/score_accounts.py` |
 | sites | 28/28 | website builder: sentence → brief, 6-page self-contained site, facts grounded, own-browser check (broken links, leftovers, mobile overflow), zip + screenshot, all 15 kinds, training switch | `timeout 280 python3 engine/scripts/score_sites.py` |
 | rehearsal | 19/19 | social dry-run on the agent's own practice network (Postly): own-account login, composer found, photo upload, limits learned from refusals (300 chars / 5 tags), comments → reply drafts through the normal gate, approved reply posted, real platforms refused, interface map | `timeout 280 python3 engine/scripts/score_rehearsal.py` |
+| mind | 29/29 | thinking: live journal from the screen events, mid-job status/why/hurry/stop/change/queue, reflection + lesson per job, lessons shown in the next plan, /lessons | `python3 engine/scripts/score_mind.py` |
 | phone | 23/23 | (re-run after Phase 2 changes) | `timeout 240 python3 engine/scripts/score_phone.py` |

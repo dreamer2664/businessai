@@ -1,0 +1,275 @@
+"""Thinking (milestone 20): the agent knows what it is doing, why, how it is going, and what it learned.
+
+Three pieces, all cheap (rules first, the thinking model only when it is running):
+
+  Journal   — a live record of the current job: goal, step, what was just done, what comes next, snags. Written by the
+              code paths that do the work (`mind.doing(...)`, `mind.snag(...)`) and read back to answer the owner *while*
+              the job runs ("what are you doing?", "how long still?", "why?") without stopping it.
+  Interrupt — understanding the owner's messages during a job: status question / hurry up / stop / change of plan /
+              small talk / a NEW job → the right reaction (answer, speed up, cancel, amend, queue).
+  Reflect   — after each job: did it deliver what was asked, in time, with what snags? One lesson per job goes to
+              state/lessons.jsonl; the top lessons are shown to the planner in the next brief ("last time X went wrong,
+              so this time do Y") and can be read with /lessons.
+
+Everything is plain words: the same journal feeds the live screen and Telegram.
+"""
+import json
+import re
+import time
+
+from . import config
+
+LESSONS = config.STATE_DIR / "lessons.jsonl"
+JOURNAL = config.STATE_DIR / "journal.jsonl"
+
+STATUS_Q = re.compile(r"\b(what are you doing|what('s| is) (going on|happening|the status)|how('s| is) it going|are you (still )?(there|working|alive|on it)|status\??|progress|"
+                      r"how long( still| more)?|how much (longer|time)|when (will|are) you (be )?(done|finished)|update\??|where are you( at)?|che stai facendo|a che punto sei|quanto manca|come va)\b", re.I)
+HURRY = re.compile(r"\b(hurry( up)?|faster|quick(er|ly)?|speed (it )?up|wrap (it )?up|finish (it )?(up|now)|i need it now|come on|sbrigati|veloce|fai presto|concludi)\b", re.I)
+STOP = re.compile(r"^\W*(stop|cancel|abort|enough|forget it|never ?mind|drop it|basta|ferma(ti)?|annulla|lascia (stare|perdere))\b", re.I)
+WHY = re.compile(r"\b(why|what for|perch[eé]|how come)\b", re.I)
+CHAT = re.compile(r"^\W*(hi|hello|hey|ciao|thanks?( you)?|grazie|ok(ay)?|good|nice|great|cool|lol|haha|👍|❤️|🙏)\W*$", re.I)
+CHANGE = re.compile(r"\b(also|and also|instead|rather|only|but|actually|make it|change|switch to|add|include|exclude|not|no more than|max(imum)?|min(imum)?|under|below|above|cheaper|in italy|europe|anche|invece|solo|cambia)\b", re.I)
+
+
+def _append(path, rec):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def _load(path, limit=None):
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    out = []
+    for l in (lines[-limit:] if limit else lines):
+        try:
+            out.append(json.loads(l))
+        except Exception:
+            continue
+    return out
+
+
+class Mind:
+    def __init__(self, planner=None, log=None, pace=None, viewer=None):
+        self.planner = planner
+        self.log = log or (lambda kind, **f: None)
+        self.pace = pace
+        self.viewer = viewer
+        self.job = None          # {"goal","kind","started","steps","step","done":[...],"snags":[...],"next":"", "why": ""}
+        self.queue = []          # jobs the owner asked for while one was running: [(text, t)]
+
+    # ---- journal -------------------------------------------------------------------------------------------------
+    def begin(self, goal, kind="", steps=None, why=""):
+        self.job = {"goal": goal, "kind": kind, "started": time.time(), "steps": list(steps or []), "step": 0, "done": [], "snags": [], "next": (steps or [""])[0], "why": why, "hurry": False}
+        self.log("mind_begin", goal=goal[:80], job=kind)
+
+    def doing(self, what, step=None):
+        """Called by the work: 'reading reviews of CorkStep (2 of 4)'. Keeps the last 12 entries."""
+        if not self.job:
+            return
+        j = self.job
+        j["done"].append((time.strftime("%H:%M"), what[:140]))
+        j["done"] = j["done"][-12:]
+        if step is not None:
+            j["step"] = step
+            j["next"] = j["steps"][step + 1] if step + 1 < len(j["steps"]) else "finishing and writing it up"
+            if self.viewer:
+                self.viewer.plan_step(step, what[:80])
+        _append(JOURNAL, {"t": time.strftime("%Y-%m-%dT%H:%M"), "goal": j["goal"][:80], "what": what[:140]})
+
+    def snag(self, what):
+        if self.job:
+            self.job["snags"].append(what[:160])
+            self.job["snags"] = self.job["snags"][-8:]
+        self.log("mind_snag", what=what[:120])
+
+    def elapsed(self):
+        return int(time.time() - self.job["started"]) if self.job else 0
+
+    def status_line(self):
+        """One honest paragraph about the job in progress — for the owner, mid-job."""
+        j = self.job
+        if not j:
+            return "Nothing running right now — I'm free."
+        el = self.elapsed()
+        el_t = f"{el // 60} min {el % 60} s" if el >= 60 else f"{el} s"
+        last = j["done"][-1][1] if j["done"] else "just started"
+        n, total = j["step"] + 1, max(1, len(j["steps"]))
+        out = [f"I'm on: {j['goal'][:120]} — step {min(n, total)} of {total}, {el_t} in.", f"Right now: {last}."]
+        if j["next"]:
+            out.append(f"Next: {j['next'][:100]}.")
+        if self.pace and self.pace.active():
+            r = self.pace.remaining()
+            if r is not None:
+                out.append("Time: " + (f"{int(r // 60)} min left of what you gave me." if r > 0 else f"{int(-r // 60)} min past your time — wrapping up."))
+        if j["snags"]:
+            out.append("Snags so far: " + "; ".join(j["snags"][-2:]) + ".")
+        if self.queue:
+            out.append(f"Queued after this: {len(self.queue)} request(s).")
+        return " ".join(out)
+
+    def why_line(self):
+        j = self.job
+        if not j:
+            return "Nothing running, so nothing to explain — ask me why about a plan and I'll tell you."
+        if j.get("why"):
+            return j["why"]
+        step = j["steps"][j["step"]] if j["steps"] and j["step"] < len(j["steps"]) else ""
+        return f"Because you asked for “{j['goal'][:100]}”. This step ({step[:80]}) is how I get there: " + self._step_reason(step, j["kind"])
+
+    @staticmethod
+    def _step_reason(step, kind):
+        s = step.lower()
+        if "review" in s or "complaint" in s:
+            return "reviews and complaints are where a bad seller shows before the price does."
+        if "social" in s:
+            return "a live social page with real comments is hard to fake and shows how they treat buyers."
+        if "search" in s or "candidates" in s:
+            return "I need a few options before I can rank anything."
+        if "document" in s or "write" in s:
+            return "you asked for something you can read and click, not a chat dump."
+        if "check" in s and "browser" in s:
+            return "I look at my own work before handing it over."
+        if kind == "build_site":
+            return "a site is only done when the pages are written, built and checked."
+        return "it is the shortest path I know to what you asked."
+
+    def on_event(self, kind, f):
+        """Listener on the live screen's event stream: turns steps, page opens and walls into journal lines (no code in the
+        tools has to know about the journal)."""
+        if not self.job:
+            return
+        try:
+            if kind == "plan_step":
+                n = int(f.get("n", 1)) - 1
+                self._doing_quiet(str(f.get("text", ""))[:120], n)
+            elif kind == "browser_open":
+                self._doing_quiet(f"reading {str(f.get('url', ''))[:90]}")
+            elif kind == "seller_check":
+                self._doing_quiet(f"checking seller {f.get('name', '')}")
+            elif kind in ("task_wall", "search_engine_skip"):
+                self.snag(f"{f.get('url') or f.get('engine')}: {f.get('wall') or f.get('reason')} wall")
+            elif kind == "captcha_passed":
+                self._doing_quiet("solved a checkbox CAPTCHA")
+            elif kind in ("login_failed", "signup_error", "transcript_failed", "listing_failed", "image_failed", "look_failed"):
+                self.snag(f"{kind.replace('_', ' ')}: {str(f.get('error') or f.get('note') or f.get('site') or '')[:60]}")
+            elif kind == "pace_late":
+                self.snag("past the owner's time")
+            elif kind == "doc_saved":
+                self._doing_quiet(f"document written: {f.get('title', '')}")
+        except Exception:
+            pass
+
+    def _doing_quiet(self, what, step=None):
+        """doing() without echoing the step back to the viewer (the viewer is where it came from)."""
+        j = self.job
+        j["done"].append((time.strftime("%H:%M"), what[:140]))
+        j["done"] = j["done"][-12:]
+        if step is not None:
+            j["step"] = step
+            j["next"] = j["steps"][step + 1] if step + 1 < len(j["steps"]) else "finishing and writing it up"
+        _append(JOURNAL, {"t": time.strftime("%Y-%m-%dT%H:%M"), "goal": j["goal"][:80], "what": what[:140]})
+
+    # ---- interruptions -----------------------------------------------------------------------------------------------
+    def interrupt(self, text):
+        """What does a message *during a job* mean? → ('status'|'why'|'hurry'|'stop'|'chat'|'change'|'new', reply_or_None)."""
+        t = text.strip()
+        if STOP.search(t) and len(t.split()) <= 4:
+            return "stop", None
+        if STATUS_Q.search(t):
+            return "status", self.status_line()
+        if HURRY.search(t):
+            if self.job:
+                self.job["hurry"] = True
+            if self.pace:
+                try:
+                    self.pace.hurry_now()
+                except Exception:
+                    pass
+            return "hurry", "Speeding up — I'll skip the nice-to-haves and hand you what I have as soon as it's usable."
+        if WHY.search(t) and len(t.split()) <= 8:
+            return "why", self.why_line()
+        if CHAT.search(t):
+            return "chat", None
+        if self.job and len(t.split()) <= 14 and CHANGE.search(t) and not re.search(r"https?://", t):
+            return "change", None
+        return "new", None
+
+    # ---- reflection -------------------------------------------------------------------------------------------------
+    def reflect(self, outcome, delivered=True, note=""):
+        """Close the job: judge it, keep a lesson. outcome: short text of what was handed over (or the error)."""
+        j = self.job
+        if not j:
+            return None
+        el = self.elapsed()
+        late = False
+        if self.pace:
+            try:
+                r = self.pace.remaining()
+                late = r is not None and r < 0
+            except Exception:
+                late = False
+        lesson = self._lesson(j, outcome, delivered, late, note)
+        rec = {"t": time.strftime("%Y-%m-%dT%H:%M"), "goal": j["goal"][:120], "kind": j["kind"], "seconds": el, "delivered": bool(delivered),
+               "late": late, "snags": j["snags"][-4:], "outcome": (outcome or "")[:200], "lesson": lesson}
+        _append(LESSONS, rec)
+        self.log("mind_reflect", job=j["kind"], seconds=el, delivered=delivered, late=late, lesson=lesson[:100])
+        self.job = None
+        return rec
+
+    def _lesson(self, j, outcome, delivered, late, note):
+        snags = " ".join(j["snags"]).lower()
+        if not delivered:
+            if "captcha" in snags or "captcha" in (outcome or "").lower():
+                return f"{j['kind']}: a CAPTCHA wall stopped me — next time try another site first and keep the walled one last."
+            if "timeout" in snags or "timed out" in (outcome or "").lower():
+                return f"{j['kind']}: a page hung and ate the time budget — set shorter per-page limits and move on sooner."
+            return f"{j['kind']}: I did not deliver ({(outcome or note)[:80]}) — start with the cheapest reliable source next time."
+        if late:
+            return f"{j['kind']}: delivered but late by my own clock — open fewer pages up front, write earlier, refine only if time is left."
+        if j.get("hurry"):
+            return f"{j['kind']}: the owner had to hurry me — send a first usable version sooner, then improve."
+        if len(j["snags"]) >= 3:
+            return f"{j['kind']}: many snags ({j['snags'][0][:50]}…) — check the site's walls before planning around it."
+        if self.planner and self.planner.installed() and j["done"]:
+            try:
+                out = self.planner.chat("You review your own work as a careful assistant. One sentence, concrete, no praise.",
+                                        f"Job: {j['goal']}\nSteps done: {'; '.join(d[1] for d in j['done'][-8:])}\nSnags: {'; '.join(j['snags']) or 'none'}\nResult: {outcome[:300]}\n\nWrite ONE lesson for next time (max 25 words), or 'none' if nothing to improve.",
+                                        max_tokens=60, timeout=90).strip()
+                if out and out.lower() != "none" and len(out) < 220:
+                    return f"{j['kind']}: {out}"
+            except Exception:
+                pass
+        return f"{j['kind']}: went fine in {self.elapsed() // 60} min — keep the same order of steps."
+
+    # ---- what the past says about a new job ------------------------------------------------------------------------
+    def advice(self, kind, topic=""):
+        """Lessons from earlier jobs of the same kind (most recent first, max 3) — shown in the plan and given to the planner."""
+        recs = [r for r in _load(LESSONS) if r.get("kind") == kind and not r["lesson"].endswith("keep the same order of steps.")]
+        seen, out = set(), []
+        for r in reversed(recs):
+            l = r["lesson"].split(": ", 1)[-1]
+            if l not in seen:
+                seen.add(l)
+                out.append(l)
+            if len(out) >= 3:
+                break
+        return out
+
+    def lessons_text(self, limit=8):
+        recs = _load(LESSONS, limit=limit)
+        if not recs:
+            return "No lessons yet — I write one after every job."
+        return "🧠 What I learned from my last jobs:\n" + "\n".join(f"• {r['t'][5:16].replace('T', ' ')} · {r['lesson']}" for r in reversed(recs))
+
+    def stats_text(self):
+        recs = _load(LESSONS)
+        if not recs:
+            return "no jobs reflected on yet"
+        n = len(recs)
+        ok = sum(1 for r in recs if r.get("delivered"))
+        late = sum(1 for r in recs if r.get("late"))
+        avg = sum(r.get("seconds", 0) for r in recs) / n
+        return f"{n} jobs reflected on · {ok} delivered · {late} late · avg {avg / 60:.0f} min"

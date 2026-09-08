@@ -222,3 +222,15 @@ Milestones (one per session, each with a score set; earlier scores must not drop
     filed on the order. Practice week score: 10/10 replies judged good (`state/week3.log`).
   Score: `score_store.py` 40 model-free checks + 8 model replies (**41/41** with `--model`, ~6.5 min).
 
+### Phase 2 status (2026-09-08)
+| milestone | state | score |
+|---|---|---|
+| 13 understanding & planning (brief, pace, plan → Go/Change/Cancel) | ✅ | brief 30/30 |
+| 14 deliverables + deep seller check (document with pictures/links, store proposal) | ✅ | sellers 27/27 |
+| 15 eyes on listings + CAPTCHA attempts | ✅ (inside sellers/accounts) | — |
+| 16 own accounts / credential vault / mail codes | ✅ | accounts 12/12 |
+| 17 Drive library: PDF density judge, video ideas, long courses in chapters, brainstorm, quiet-time loop | ✅ | (smoke) |
+| 18 social readiness: practice network + rehearsals (limits, photos, comments, replies) | ✅ | rehearsal 19/19 |
+| 19 website builder + Google-Maps-style auto-training (OpenStreetMap places) + Drive "Websites" | ✅ | sites 28/28 |
+| 20 thinking: journal, interruptions, reflection, lessons | ✅ | mind 29/29 |
+| 12 real store | ⏳ awaits platform choice (end of the road, per owner) | — |

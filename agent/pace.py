@@ -15,6 +15,8 @@ class Pace:
         self.clear()
 
     def clear(self):
+        self.forced_hurry = False
+        self.stopped = False
         self.mode = "normal"          # quick | normal | slow
         self.goal = ""
         self.started = 0.0
@@ -94,7 +96,19 @@ class Pace:
     def hurry(self):
         """True when the deadline is close/past: tools should take the short path (fewer pages, shorter reads)."""
         r = self.remaining()
-        return self.mode == "quick" or (r is not None and r < 5 * 60)
+        return self.mode == "quick" or (r is not None and r < 5 * 60) or getattr(self, "forced_hurry", False)
+
+    def hurry_now(self):
+        """The owner said 'hurry up' mid-job: from now on every tool takes the short path."""
+        self.forced_hurry = True
+        self.mode = "quick"
+
+    def stop_now(self):
+        """The owner said 'stop': long loops end at their next check and hand over what they have."""
+        self.stopped = True
+
+    def should_stop(self):
+        return getattr(self, "stopped", False)
 
     def pages_budget(self, normal=3):
         """How many pages a research step may read, by pace."""

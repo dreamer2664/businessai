@@ -352,6 +352,9 @@ class SellerCheck:
             if not cands:
                 return None, f"I couldn't find listings for {product} (search engines walled or nothing matched).", []
             for i, c in enumerate(cands):
+                if self.pace and self.pace.should_stop() and options:
+                    self.log("seller_check_stopped", read=len(options))
+                    break
                 self._step(1, f"reading listing {i + 1}/{len(cands)}: {c['title'][:50]}")
                 self.log("seller_check", name=c["title"][:60])
                 try:
