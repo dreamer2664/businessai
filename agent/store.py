@@ -208,6 +208,41 @@ class Store:
             return float(eu[1]) if eu else None
         return None                                                     # outside the EU (and not listed): not offered
 
+    # ---- extras the owner can switch on: discount codes, gift wrap, a shop notice ----------------------
+    def codes(self):
+        return self.data.setdefault("codes", [])                        # [{"code","pct","fixed","min","uses","max_uses","active","note","t"}]
+
+    def code(self, text):
+        c = (text or "").strip().upper()
+        return next((x for x in self.codes() if x["code"] == c), None)
+
+    def add_code(self, code, pct=0.0, fixed=0.0, min_total=0.0, max_uses=None, note=""):
+        with self.lock:
+            code = re.sub(r"[^A-Z0-9\-]", "", str(code).upper())[:20]
+            x = self.code(code)
+            if x is None:
+                x = {"code": code, "t": _now(), "uses": 0}
+                self.codes().append(x)
+            x.update({"pct": round(float(pct or 0), 2), "fixed": round(float(fixed or 0), 2), "min": round(float(min_total or 0), 2), "max_uses": max_uses, "active": True, "note": note[:120]})
+            self.save()
+            return x
+
+    def discount_for(self, code_text, subtotal):
+        """(amount, code dict) if the code applies to this subtotal, else (0, None)."""
+        x = self.code(code_text)
+        if not x or not x.get("active") or subtotal < x.get("min", 0):
+            return 0.0, None
+        if x.get("max_uses") and x.get("uses", 0) >= x["max_uses"]:
+            return 0.0, None
+        amt = subtotal * x.get("pct", 0) / 100 + x.get("fixed", 0)
+        return round(min(amt, subtotal), 2), x
+
+    def gift_wrap(self):
+        return self.data.setdefault("gift_wrap", {"active": False, "price": 2.90, "cost": 0.80})
+
+    def notice(self):
+        return self.data.setdefault("notice", {"text": "", "until": ""})
+
     def _it_ship_line(self):
         it = next((r for r in self.ship_rules() if r[0] == "IT"), None)
         return (f"Italy {money(it[1])}" + (f", free over {money(it[2])}" if it[2] else "")) if it else "see the shipping page"
@@ -256,8 +291,9 @@ class Store:
             pass
         return row
 
-    def place_order(self, items, customer, country, simulated=False, day=None):
-        """items: [(product_id, option_text, qty)] → order dict; stock is reserved at once (like a real shop)."""
+    def place_order(self, items, customer, country, simulated=False, day=None, code=None, wrap=False):
+        """items: [(product_id, option_text, qty)] → order dict; stock is reserved at once (like a real shop).
+        code: a discount code typed at checkout (validated here); wrap: gift wrap chosen (only if the owner switched it on)."""
         with self.lock:
             lines, subtotal = [], 0.0
             for pid, opt, qty in items:
@@ -277,11 +313,21 @@ class Store:
                 for l in lines:                                          # give the stock back
                     self.product(l["id"])["stock"] += l["qty"]
                 return None
+            disc, cd = self.discount_for(code, subtotal) if code else (0.0, None)
+            gw = self.gift_wrap()
+            wrap_price = round(float(gw.get("price", 0)), 2) if (wrap and gw.get("active")) else 0.0
             n = self.data["next_order"]
             self.data["next_order"] += 1
             o = {"n": n, "t": _now(), "day": day if day is not None else self.data["day"], "customer": customer, "country": country.upper(),
-                 "lines": lines, "subtotal": round(subtotal, 2), "shipping": ship, "total": round(subtotal + ship, 2),
+                 "lines": lines, "subtotal": round(subtotal, 2), "shipping": ship, "total": round(subtotal - disc + wrap_price + ship, 2),
                  "status": "paid", "events": [{"t": _now(), "what": "paid (practice payment)"}], "simulated": simulated}
+            if cd:
+                o["discount"], o["code"] = disc, cd["code"]
+                cd["uses"] = cd.get("uses", 0) + 1
+                o["events"].append({"t": _now(), "what": f"code {cd['code']} −{money(disc)}"})
+            if wrap_price:
+                o["gift_wrap"] = wrap_price
+                o["events"].append({"t": _now(), "what": f"gift wrap {money(wrap_price)}"})
             self.data["orders"].append(o)
             self.save()
             self.log("store_order", n=n, total=o["total"], simulated=simulated)
@@ -428,6 +474,30 @@ class Store:
                                               "details": [x for x in (f"Supplier: {d['supplier']}" if d.get("supplier") else "", f"Shipping: {d['ship']}" if d.get("ship") else "") if x],
                                               "weight_g": int(d.get("weight_g", 300))})
                 out = f"added product '{d['name'][:60]}' at {money(float(d['price']))}"
+            elif k == "code":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                if d.get("off"):
+                    x = self.code(t)
+                    prop["before"] = dict(x) if x else None
+                    if x:
+                        x["active"] = False
+                    out = f"code {t} switched off"
+                else:
+                    prop["before"] = dict(self.code(t)) if self.code(t) else None
+                    x = self.add_code(t, d.get("pct", 0), d.get("fixed", 0), d.get("min", 0), d.get("max_uses"), d.get("note", ""))
+                    out = f"code {x['code']}: " + (f"{x['pct']:g} % off" if x["pct"] else f"{money(x['fixed'])} off") + (f" on orders over {money(x['min'])}" if x["min"] else "") + (f", max {x['max_uses']} uses" if x.get("max_uses") else "") + " — live at checkout"
+            elif k == "gift_wrap":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                gw = self.gift_wrap()
+                prop["before"] = dict(gw)
+                gw.update({"active": bool(d.get("active", True)), "price": round(float(d.get("price", gw.get("price", 2.9))), 2), "cost": round(float(d.get("cost", gw.get("cost", 0.8))), 2)})
+                out = f"gift wrap {'on' if gw['active'] else 'off'}" + (f" at {money(gw['price'])} (cost {money(gw['cost'])}) — a tick box at checkout" if gw["active"] else "")
+            elif k == "notice":
+                nt = self.notice()
+                prop["before"] = dict(nt)
+                d = json.loads(ch) if isinstance(ch, str) else (dict(ch) if isinstance(ch, dict) else {"text": str(ch)})
+                nt.update({"text": str(d.get("text", ""))[:200], "until": str(d.get("until", ""))[:16]})
+                out = ("shop notice: “" + nt["text"] + "” on every page" + (f" until {nt['until']}" if nt["until"] else "")) if nt["text"] else "shop notice removed"
             elif k in ("ship", "refund", "cancel"):
                 ok = self.set_status(int(t), {"ship": "shipped", "refund": "refunded", "cancel": "cancelled"}[k], note=f"applied by {by}")
                 if not ok:
@@ -473,6 +543,7 @@ class Store:
         refunded = [o for o in os_ if o["status"] == "refunded"]
         rev = sum(o["total"] for o in paid)
         cogs = sum(l["qty"] * l.get("cost", 0) for o in paid for l in o["lines"])
+        cogs += sum(float(self.gift_wrap().get("cost", 0)) for o in paid if o.get("gift_wrap"))    # paper + ribbon per wrapped parcel
         ship_cost = sum(2.9 + 0.35 * sum(l["qty"] for l in o["lines"]) for o in paid)            # what the carrier charges us (practice figure)
         fees = sum(0.029 * o["total"] + 0.30 for o in paid)                                     # payment gateway
         units = {}
@@ -485,7 +556,10 @@ class Store:
         losses += sum(2.9 + 0.35 * sum(l["qty"] for l in o["lines"]) + sum(l["qty"] * l.get("cost", 0) for l in o["lines"]) for o in refunded if o.get("tracking"))
         visits = sum(v for d, v in self.data["visits"].items() if day is None or int(d) == day)
         low = [p for p in self.products() if p["stock"] <= 3]
+        discounts = sum(o.get("discount", 0) for o in paid)
+        wraps = sum(1 for o in paid if o.get("gift_wrap"))
         return {"orders": len(paid), "refunded": len(refunded), "cancelled": len(cancelled), "losses": round(losses, 2), "revenue": round(rev, 2), "cogs": round(cogs, 2), "shipping_cost": round(ship_cost, 2),
+                "discounts": round(discounts, 2), "code_orders": sum(1 for o in paid if o.get("code")), "wraps": wraps,
                 "fees": round(fees, 2), "profit": round(rev - cogs - ship_cost - fees - losses, 2), "units": units, "visits": visits,
                 "conversion": (len(paid) / visits * 100) if visits else 0.0, "low_stock": [(p["name"], p["stock"]) for p in low],
                 "open": [o for o in self.data["orders"] if o["status"] == "paid"]}
@@ -534,7 +608,10 @@ class Store:
                 country = rnd.choice(COUNTRIES)
                 street, city = rnd.choice(ADDRESSES.get(country, ADDRESSES["IT"]))
                 address = f"{street} {rnd.randint(1, 120)}, {city}"
-                o = self.place_order([(p["id"], opt, qty)], {"name": name, "email": email, "address": address}, country, simulated=True, day=day)
+                active_codes = [c for c in self.codes() if c.get("active")]     # simulated shoppers use a live code now and then, and tick gift wrap sometimes
+                use_code = rnd.choice(active_codes)["code"] if active_codes and rnd.random() < 0.35 else None
+                o = self.place_order([(p["id"], opt, qty)], {"name": name, "email": email, "address": address}, country, simulated=True, day=day,
+                                     code=use_code, wrap=(self.gift_wrap().get("active") and rnd.random() < 0.2))
                 if o:
                     made.append(o)
             # earlier paid orders that were shipped get delivered; a shipped one may come back
@@ -609,14 +686,17 @@ CSS = ("body{font-family:system-ui,sans-serif;margin:0;background:#f7f7f4;color:
        ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px}"
        ".price{color:#2f5d3a;font-size:20px;font-weight:600}button,.btn{background:#2f5d3a;color:#fff;border:0;padding:9px 14px;border-radius:6px;cursor:pointer;font-size:15px}"
        "table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #e5e5e5;padding:6px 8px;text-align:left}footer{color:#777;font-size:12px;padding:20px 24px}"
+       ".notice{background:#fff3cd;color:#5c4400;padding:10px 24px;border-bottom:1px solid #f0d36b}"
        "input,select,textarea{padding:7px;border:1px solid #bbb;border-radius:6px;font-size:15px}label{display:block;margin:8px 0}.muted{color:#777}.warn{color:#a33}")
 
 
 def page(title, body, store, admin=False):
     nav = ('<a href="/">Shop</a><a href="/cart">Cart</a><a href="/faq">Help</a><a href="/shipping">Shipping</a><a href="/returns">Returns</a><a href="/contact">Contact</a>'
            if not admin else '<a href="/admin">Orders</a><a href="/admin/products">Products &amp; stock</a><a href="/admin/changes">Changes</a><a href="/">Shop front</a>')
+    nt = store.data.get("notice") or {}
+    banner = f"<div class=notice>{html.escape(nt['text'])}</div>" if (nt.get("text") and not admin) else ""
     return (f"<!doctype html><html><head><meta charset='utf-8'><title>{html.escape(title)} — {html.escape(store.data['name'])}</title><style>{CSS}</style></head>"
-            f"<body><header><b>{html.escape(store.data['name'])}</b> &nbsp; {nav}</header><main><h1>{html.escape(title)}</h1>{body}</main>"
+            f"<body><header><b>{html.escape(store.data['name'])}</b> &nbsp; {nav}</header>{banner}<main><h1>{html.escape(title)}</h1>{body}</main>"
             f"<footer>Practice store run by Business AI — nothing here is real: payments are simulated, customers are simulated. "
             f"Free returns within 30 days · help@greennest.example</footer></body></html>")
 
@@ -752,7 +832,11 @@ class Handler(BaseHTTPRequestHandler):
                 name, email, country = f.get("name", "").strip(), f.get("email", "").strip(), f.get("country", "IT").strip().upper()
                 if not name or "@" not in email:
                     return self._send(page("Checkout", "<p class=warn>Name and a valid e-mail are needed.</p><p><a href='/checkout'>Back</a></p>", s))
-                o = s.place_order([(l["id"], l["option"], l["qty"]) for l in cart], {"name": name, "email": email, "address": f.get("address", "")[:200]}, country)
+                code_txt = f.get("code", "").strip()
+                if code_txt and not s.discount_for(code_txt, sum(s.product(l["id"])["price"] * l["qty"] for l in cart if s.product(l["id"])))[1]:
+                    return self._send(page("Checkout", f"<p class=warn>The code “{html.escape(code_txt[:20])}” is not valid for this cart.</p><p><a href='/checkout'>Back</a></p>", s))
+                o = s.place_order([(l["id"], l["option"], l["qty"]) for l in cart], {"name": name, "email": email, "address": f.get("address", "")[:200]}, country,
+                                  code=code_txt or None, wrap=bool(f.get("wrap")))
                 if not o:
                     return self._send(page("Checkout", "<p class=warn>We cannot ship to that destination yet, or the items are out of stock.</p><p><a href='/cart'>Back to cart</a></p>", s))
                 s.data["carts"].pop(cid, None)
@@ -844,8 +928,12 @@ class Handler(BaseHTTPRequestHandler):
         _rules = s.ship_rules()
         _names = {"IT": "Italy", "DE": "Germany", "FR": "France", "ES": "Spain", "EU": "other EU", "CH": "Switzerland", "GB": "United Kingdom", "US": "USA", "AT": "Austria", "NL": "Netherlands", "BE": "Belgium", "PT": "Portugal", "NO": "Norway", "CA": "Canada"}
         _ship_txt = ", ".join(f"{_names.get(c, c)} " + ("free" if (fo and sub >= fo) else money(cost) + (f" (free over {money(fo)})" if fo else "")) for c, cost, fo in _rules)
+        gw = s.gift_wrap()
+        wrap_html = (f"<label><input type=checkbox name=wrap value=1> Gift wrap (+{money(gw.get('price', 0))}) — kraft paper, ribbon, a hand-written card</label>" if gw.get("active") else "")
+        code_html = "<label>Discount code <input name=code size=12 placeholder='optional'></label>" if [c for c in s.codes() if c.get("active")] else ""
         body = (f"<p>Subtotal {money(sub)}. Shipping: {_ship_txt}.</p>"
                 "<form method=post action='/checkout/pay'><label>Name <input name=name required></label><label>E-mail <input name=email type=email required></label>"
+                + code_html + wrap_html +
                 "<label>Address <input name=address size=40></label><label>Country <select name=country><option value=IT>Italy</option><option value=DE>Germany</option>"
                 "<option value=FR>France</option><option value=ES>Spain</option><option value=AT>Austria</option><option value=NL>Netherlands</option><option value=CH>Switzerland</option><option value=GB>United Kingdom</option>"
                 + "".join(f"<option value={c}>{_names.get(c, c)}</option>" for c, _, _ in _rules if c not in ("IT", "DE", "FR", "ES", "EU", "AT", "NL", "CH", "GB")) + "</select></label>"
@@ -860,7 +948,9 @@ class Handler(BaseHTTPRequestHandler):
         rows = "".join(f"<tr><td>{html.escape(l['name'])} <span class=muted>{html.escape(l['option'])}</span></td><td>{l['qty']}</td><td>{money(l['price'] * l['qty'])}</td></tr>" for l in o["lines"])
         ev = "".join(f"<li>{html.escape(e['t'][:16])} — {html.escape(e['what'])}</li>" for e in o["events"] if not e["what"].startswith("replied to"))
         body = (f"<p>Thank you, {html.escape(o['customer'].get('name', ''))}! Order <b>#{o['n']}</b> — status: <b>{o['status']}</b>" + (f" · tracking {o['tracking']}" if o.get("tracking") else "") + "</p>"
-                f"<table>{rows}<tr><td>Shipping ({o['country']})</td><td></td><td>{money(o['shipping'])}</td></tr><tr><td><b>Total</b></td><td></td><td><b>{money(o['total'])}</b></td></tr></table><ul>{ev}</ul>")
+                f"<table>{rows}" + (f"<tr><td>Code {html.escape(o['code'])}</td><td></td><td>−{money(o['discount'])}</td></tr>" if o.get("code") else "")
+                + (f"<tr><td>Gift wrap</td><td></td><td>{money(o['gift_wrap'])}</td></tr>" if o.get("gift_wrap") else "")
+                + f"<tr><td>Shipping ({o['country']})</td><td></td><td>{money(o['shipping'])}</td></tr><tr><td><b>Total</b></td><td></td><td><b>{money(o['total'])}</b></td></tr></table><ul>{ev}</ul>")
         self._send(page(f"Order #{o['n']}", body, s))
 
     def _help(self, key):

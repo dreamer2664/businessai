@@ -366,7 +366,7 @@ class Inbox:
                 if not other_q and not c.get("stock") and not c.get("contradiction"):
                     text = self._sanitize(self._template(c), rec)       # a plain 'do you ship to X?' → the table's answer, word for word
                     c["note"] = "answered from the shipping table"
-                    return {**c, "text": text, "checks": []}
+                    return {**c, "text": self._with_notice(text, rec), "checks": []}
         if c["kind"] == "product_question":
             about_shipping = bool(re.search(r"\b(ship|deliver|delivery|shipping)\b", rec["text"].lower()))
             have = (self.policy.get("ships_to") if about_shipping else self.policy.get("products")) or ""
@@ -378,7 +378,7 @@ class Inbox:
                 text = self._sanitize(self._template(c), rec)
                 c["note"] = ("no product/shipping facts in the policy — deferring to the owner (set them with /policy" +
                              (" or let me read your shop's pages with /shop <address>)" if not (self.shopfacts and self.shopfacts.url) else ")"))
-                return {**c, "text": text, "checks": []}
+                return {**c, "text": self._with_notice(text, rec), "checks": []}
             facts = have
         if shop:
             c["shop_facts"] = shop.count("\n- ")
@@ -386,7 +386,12 @@ class Inbox:
                 c["needs"] = [n for n in c["needs"] if "order" not in n.lower()]    # a general question: no order to ask about
         needs = ("\nMISSING FACTS you must ask the customer for: " + ", ".join(c["needs"])) if c["needs"] else ""
         if c["kind"] == "discount_request":
-            needs += "\nTHIS IS A DISCOUNT REQUEST: state the discount policy plainly (no codes in chat; newsletter subscribers get 10% on the first order). Do not ask for an order number. Do not say 'sure' or 'I can help with that'."
+            live = self._live_code()
+            if live:
+                c["live_code"] = live["code"]
+                needs += f"\nTHIS IS A DISCOUNT REQUEST: the shop has a public code right now — tell the customer to enter the code {live['code']} at checkout ({self._code_words(live)}). Do not invent any other discount. Do not ask for an order number."
+            else:
+                needs += "\nTHIS IS A DISCOUNT REQUEST: state the discount policy plainly (no codes in chat; newsletter subscribers get 10% on the first order). Do not ask for an order number. Do not say 'sure' or 'I can help with that'."
         if c["kind"] == "return_or_refund" and re.search(r"\bafter \d+ (days?|weeks?|months?)|\d+ (days?|weeks?) ago|too late|still return|ancora (restituire|rendere)\b", rec["text"].lower()):
             c["asks_window"] = True
             needs += ("\nTHE CUSTOMER ASKS ABOUT THE RETURN WINDOW: first state the window explicitly, with the number of days from the returns policy / shop facts "
@@ -454,7 +459,41 @@ class Inbox:
                 c["rejected"] = {"text": text, "checks": checks}
                 text, checks = tmpl, []
                 c["note"] = "model draft failed the checks; using the safe template"
-        return {**c, "text": text, "checks": checks}
+        return {**c, "text": self._with_notice(text, rec), "checks": checks}
+
+    def _with_notice(self, text, rec):
+        """A shop notice (holiday pause etc.) is repeated just above the sign-off of every store reply while it is up."""
+        try:
+            nt = self.store.notice() if (self.store is not None and (rec or {}).get("channel") == "store") else {}
+            if not text or not nt.get("text") or nt["text"].lower()[:30] in text.lower():
+                return text
+            note = f"Please note: {nt['text'].rstrip('.')}."
+            if re.match(r"^(Grazie|Buongiorno|Salve|Gentile)", text.split("\n\n", 1)[-1]):
+                note = f"Nota: {nt['text'].rstrip('.')}."
+            parts = text.rstrip().rsplit("\n\n", 1)
+            return (parts[0] + "\n\n" + note + "\n\n" + parts[1]) if len(parts) == 2 else text.rstrip() + "\n\n" + note
+        except Exception:
+            return text
+
+    def _live_code(self):
+        """The public discount code customers may be told about (active, not exhausted), or None."""
+        try:
+            if self.store is None:
+                return None
+            for x in self.store.codes():
+                if x.get("active") and not (x.get("max_uses") and x.get("uses", 0) >= x["max_uses"]):
+                    return x
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _code_words(x):
+        if not x:
+            return ""
+        pct, fixed, mn = float(x.get("pct", 0) or 0), float(x.get("fixed", 0) or 0), float(x.get("min", 0) or 0)
+        w = f"{pct:g}% off" if pct else f"€{fixed:.2f} off"
+        return w + (f" on orders over €{mn:.2f}" if mn else "")
 
     def _template(self, c):
         p = self.policy
@@ -566,7 +605,8 @@ class Inbox:
             "return_or_refund": f"Thank you for your message. Our returns policy: {(self.shopfacts.best_sentence('return refund') if self.shopfacts and self.shopfacts.covers('returns & refunds') else p['returns']).rstrip('.')}. {p['refunds'].split(';')[0].capitalize()}. " + (f"I will start the return for order{o} and send you the instructions within one business day." if o else "Please send me your order number and I will start the return for you."),
             "damaged_or_wrong": f"I am sorry your order{o} did not arrive as it should. " + ("Please send me " + " and ".join(("your " + n) if n == "order number" else "a " + n for n in c["needs"]) + ", and I will sort out a replacement or refund straight away." if c["needs"] else "I will sort out a replacement or refund straight away and confirm the details within one business day."),
             "cancel_or_change": f"Thank you for letting me know. I will check whether your order{o} has already left the warehouse: if not, it will be cancelled and refunded; if it has, I will send you the return options. You will hear from me within one business day" + ("." if not c["needs"] else " — please send me your order number first."),
-            "discount_request": f"Thank you for asking. {p['discounts'].split(';')[-1].strip().capitalize()}.",
+            "discount_request": (f"Thank you for asking. Yes — enter the code {c['live_code']} at checkout and you get {self._code_words(self.store.code(c['live_code']))}." if c.get("live_code") and self.store is not None
+                                 else f"Thank you for asking. {p['discounts'].split(';')[-1].strip().capitalize()}."),
             "product_question": "Thank you for your question. I want to give you a precise answer, so I will check this with the owner and come back to you within one business day.",
             "complaint": "I am sorry about your experience. Could you tell me a little more (and your order number, if you have one) so I can put this right?",
             "compliment": "Thank you so much, that made our day. Enjoy your order, and do get in touch any time.",
@@ -650,7 +690,7 @@ class Inbox:
         if re.search(r"\b(full refund|refund(ed)?|replacement)\b", low) and c["kind"] not in ("damaged_or_wrong", "return_or_refund", "cancel_or_change") \
                 and not (c.get("order") or {}).get("late") and not ((c.get("order") or {}).get("status") == "paid" and "cancel" in low):
             flags.append("promises a refund/replacement outside the return/damage cases")
-        if re.search(r"\b\d{1,2}%\s*(off|discount)|\b(code|coupon)\s+[A-Z0-9]{4,}\b", text) and "newsletter" not in low:
+        if re.search(r"\b\d{1,2}%\s*(off|discount)|\b(code|coupon)\s+[A-Z0-9]{4,}\b", text) and "newsletter" not in low and not (c.get("live_code") and c["live_code"].lower() in low):
             flags.append("offers a discount not in the policy")
         if re.search(r"\b(within|in) \d+ (hours?|days?)\b", low) and not re.search(r"one business day|5 business days|7-15 business days|30 days", low):
             spans = re.findall(r"\b(?:within|in) (\d+) (hours?|days?)\b", low)
@@ -758,7 +798,10 @@ class Inbox:
                 flags.append("claims to know the order status — it doesn't")
             if re.search(r"\b(i'll|i will|we'll|we will|have) cancel+ed|(i'll|i will|we will) cancel\b|is (now )?cancel+ed\b", low):
                 flags.append("promises a cancellation without checking if it shipped")
-        if c["kind"] == "discount_request" and (re.search(r"\b(check your eligibility|get back to you as soon as possible|order number|sure, i can)\b", low) or "newsletter" not in low):
+        if c["kind"] == "discount_request" and c.get("live_code"):
+            if c["live_code"].lower() not in low or re.search(r"\b(order number|check your eligibility)\b", low):
+                flags.append(f"discount reply must give the live code {c['live_code']} and nothing else")
+        elif c["kind"] == "discount_request" and (re.search(r"\b(check your eligibility|get back to you as soon as possible|order number|sure, i can)\b", low) or "newsletter" not in low):
             flags.append("discount reply must state the policy (newsletter 10%) and nothing else")
         if len(text) > 1200:
             flags.append("too long")

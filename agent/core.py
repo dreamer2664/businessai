@@ -1708,6 +1708,49 @@ class Agent:
             self.bot.send(self.owner_id, f"🏪 {ch['name']}: price {money(ch['old'])} → {money(ch['value'])}{warn}\nApply it?",
                           buttons=[[("✅ Apply", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
             return None
+        if k == "code":
+            if ch.get("off"):
+                prop = st.propose("code", ch["code"], json.dumps({"off": True}), "you asked: switch the code off")
+                self.bot.send(self.owner_id, f"🏷️ Switch off code {ch['code']} — it stops working at checkout at once (orders already placed keep their discount).\nDo it?",
+                              buttons=[[("✅ Switch off", f"s:ok:{prop['id']}"), ("❌ Keep it", f"s:no:{prop['id']}")]])
+                return None
+            n = st.numbers()
+            aov = n["revenue"] / n["orders"] if n.get("orders") else 30.0
+            give = aov * ch["pct"] / 100 + ch.get("fixed", 0)
+            margin_hit = ""
+            try:
+                worst = min(st.products(), key=lambda p: (p["price"] - p.get("cost", 0)) / p["price"])
+                m_after = (worst["price"] * (1 - ch["pct"] / 100) - ch.get("fixed", 0) - worst.get("cost", 0)) / worst["price"] * 100
+                margin_hit = f" On the thinnest product ({worst['name'].split(' (')[0]}) the margin goes to {m_after:.0f} % before fees."
+            except Exception:
+                pass
+            desc = (f"{ch['pct']:g} % off" if ch["pct"] else f"{money(ch.get('fixed', 0))} off") + (f" on orders over {money(ch['min'])}" if ch.get("min") else "") + (f", max {ch['max_uses']} uses" if ch.get("max_uses") else "")
+            prop = st.propose("code", ch["code"], json.dumps({"pct": ch["pct"], "fixed": ch.get("fixed", 0), "min": ch.get("min", 0), "max_uses": ch.get("max_uses"), "note": "owner"}), f"you asked: code {ch['code']} {desc}")
+            self.bot.send(self.owner_id, f"🏷️ Code {ch['code']}: {desc}. At the current basket ({money(aov)}) that's about {money(give)} given away per use.{margin_hit}"
+                          + (" Tip: a minimum order just above the average basket turns the code into a basket-lifter." if not ch.get("min") else "") + "\nCreate it?",
+                          buttons=[[("✅ Create", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
+        if k == "gift_wrap":
+            if not ch.get("active"):
+                prop = st.propose("gift_wrap", "shop", json.dumps({"active": False}), "you asked: gift wrap off")
+                self.bot.send(self.owner_id, "🎁 Remove the gift-wrap option from checkout.\nDo it?", buttons=[[("✅ Remove", f"s:ok:{prop['id']}"), ("❌ Keep it", f"s:no:{prop['id']}")]])
+                return None
+            price = ch.get("price", 2.9)
+            cost = 0.8
+            prop = st.propose("gift_wrap", "shop", json.dumps({"active": True, "price": price, "cost": cost}), f"you asked: gift wrap at {money(price)}")
+            self.bot.send(self.owner_id, f"🎁 Gift wrap at {money(price)} as a tick box at checkout (kraft paper + ribbon + card ≈ {money(cost)} per parcel → {money(price - cost)} extra per wrapped order). "
+                          "Typically 10–25 % of buyers tick it before Christmas, 5–10 % the rest of the year. You'll need the paper and 2 extra minutes per wrapped parcel.\nAdd it?",
+                          buttons=[[("✅ Add it", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
+        if k == "notice":
+            if not ch.get("text"):
+                prop = st.propose("notice", "shop", json.dumps({"text": ""}), "you asked: remove the notice")
+                self.bot.send(self.owner_id, "📣 Remove the notice from the shop pages.\nDo it?", buttons=[[("✅ Remove", f"s:ok:{prop['id']}"), ("❌ Keep it", f"s:no:{prop['id']}")]])
+                return None
+            prop = st.propose("notice", "shop", json.dumps({"text": ch["text"]}), "you asked for a shop notice")
+            self.bot.send(self.owner_id, f"📣 Notice on every shop page: “{ch['text']}”. Customer replies will mention it too while it's up.\nPut it up?",
+                          buttons=[[("✅ Put it up", f"s:ok:{prop['id']}"), ("❌ Leave it", f"s:no:{prop['id']}")]])
+            return None
         if k in ("ship", "cancel", "refund"):
             prop = st.propose(k, str(ch["order"]), {"ship": "shipped", "cancel": "cancelled", "refund": "refunded"}[k], "you asked in chat")
             label = {"ship": "✅ Mark shipped", "cancel": "✅ Cancel & refund", "refund": "✅ Refund"}[k]

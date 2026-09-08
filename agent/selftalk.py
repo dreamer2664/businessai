@@ -1583,6 +1583,17 @@ class SelfTalk:
             if k == "description":
                 pr = st.product(t)
                 return f"new description for {pr['name'].split(' (')[0] if pr else t}"
+            if k == "code":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                if d.get("off"):
+                    return f"switch off code {t}"
+                return f"code {t}: " + (f"{float(d.get('pct', 0)):g} % off" if d.get("pct") else f"{_eur(float(d.get('fixed', 0)))} off") + (f" over {_eur(float(d['min']))}" if d.get("min") else "")
+            if k == "gift_wrap":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                return f"gift wrap {'on at ' + _eur(float(d.get('price', 0))) if d.get('active') else 'off'}"
+            if k == "notice":
+                d = json.loads(ch) if isinstance(ch, str) else dict(ch)
+                return f"shop notice “{d.get('text', '')[:50]}”" if d.get("text") else "remove the shop notice"
         except Exception:
             pass
         return f"{k} {t} → {str(ch)[:60]}"
@@ -1622,19 +1633,26 @@ class SelfTalk:
         if self.store is None:
             return None
         st = self.store
-        applied = [p for p in st.data.get("proposals", []) if p["status"] == "applied" and p["kind"] in ("price", "stock", "cost", "shipping", "description", "page")]
+        applied = [p for p in st.data.get("proposals", []) if p["status"] == "applied" and p["kind"] in ("price", "stock", "cost", "shipping", "description", "page", "code", "gift_wrap", "notice")]
         if not applied:
-            return "Nothing to undo — no change of price, stock, cost, shipping or text has been applied yet (orders shipped/refunded can't be un-done from here)."
+            return "Nothing to undo — no change of price, stock, cost, shipping, text, code, gift wrap or notice has been applied yet (orders shipped/refunded can't be un-done from here)."
         p = applied[-1]
         k, tg, ch = p["kind"], p["target"], p["change"]
         try:
-            if p.get("before") is None:
+            if p.get("before") is None and k not in ("code",):
                 return f"I can't undo that one safely ({self._prop_line(p)}) — it was applied before I kept 'before' values. Tell me the value to set and I propose it."
             before = p["before"]
             if k in ("price", "cost", "stock"):
                 newp = st.propose(k, tg, before if k != "stock" else int(before), f"undo of {p['id']}: back to the previous value")
             elif k == "shipping":
                 newp = st.propose("shipping", tg, json.dumps({"cost": before[1], "free_over": before[2]}), f"undo of {p['id']}: back to the previous shipping row")
+            elif k == "code":
+                if before is None or not before.get("active"):          # the code did not exist / was off before → switch it off again
+                    newp = st.propose("code", tg, json.dumps({"off": True}), f"undo of {p['id']}: code off again")
+                else:
+                    newp = st.propose("code", tg, json.dumps({"pct": before.get("pct", 0), "fixed": before.get("fixed", 0), "min": before.get("min", 0), "max_uses": before.get("max_uses"), "note": before.get("note", "")}), f"undo of {p['id']}: code back on")
+            elif k in ("gift_wrap", "notice"):
+                newp = st.propose(k, tg, json.dumps(before), f"undo of {p['id']}: back to the previous setting")
             else:
                 newp = st.propose(k, tg, before, f"undo of {p['id']}: back to the previous text")
             out = st.apply(newp["id"])

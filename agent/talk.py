@@ -28,7 +28,7 @@ _MONEY = r"(?:€|eur|euro|euros|\$|usd|£)?\s*(\d+(?:[.,]\d+)?)\s*(?:€|eur|eu
 
 
 def _num(s):
-    return float(s.replace(",", "."))
+    return float(str(s).replace(",", "."))
 
 
 def _eur(x):
@@ -121,6 +121,15 @@ class Talk:
     STORE_REVIEW = re.compile(r"\b(?:review the (?:store|shop)|store review|what (?:do you|would you) (?:propose|suggest) (?:for|in) the (?:store|shop)|any proposals|what (?:should|needs to|do) (?:i|we) (?:do|fix) in the (?:store|shop)|cosa proponi per il negozio|controlla il negozio)\b", re.I)
     STORE_ORDERS = re.compile(r"\b(?:(?:open|pending|new|today'?s|latest|recent|last|unshipped|paid) orders|orders to ship|what (?:do i|should i|needs to be|do we) ship|which orders|show (?:me )?(?:the )?orders|ordini (?:da spedire|aperti|recenti|nuovi)|quali ordini)\b", re.I)
     STORE_LABELS = re.compile(r"\b(?:print|prepare|make|generate|create|give me|stampa|prepara|fammi)\b.{0,20}?\b(?:shipping labels?|labels?|packing slips?|etichette|bolle|lettere di vettura)\b|\b(?:shipping labels?|packing slips?|etichette)\b.{0,25}?\b(?:for|of|per)\b.{0,25}?\b(?:orders?|ordini|today|oggi)\b", re.I)
+    CODE_MAKE = re.compile(r"\b(?:make|create|add|set up|activate|open|start|launch|crea|attiva|fai|aggiungi)\s+(?:a |the |an |un |il )?(?:new )?(?:discount |promo |coupon |voucher |sconto )?(?:code|codice|coupon|voucher)\s*(?:called |named |chiamato |:)?\s*[\"“']?(?P<code>[A-Za-z][A-Za-z0-9\-]{2,19})[\"”']?\b.{0,40}?(?:(?P<pct>\d{1,2}(?:[.,]\d)?)\s*%|(?:€|eur|euro)?\s*(?P<fixed>\d{1,3}(?:[.,]\d{1,2})?)\s*(?:€|eur|euro|euros)\s+off)(?:.{0,30}?\b(?:over|above|from|min(?:imum)?|sopra|da)\s*(?:€|eur|euro)?\s*(?P<min>\d{1,4}(?:[.,]\d{1,2})?))?(?:.{0,30}?\b(?P<uses>\d{1,4})\s*(?:uses|times|customers|people|utilizzi|volte))?"
+                           r"|\b(?P<pct2>\d{1,2})\s*%\s*(?:off|discount|di sconto)\b.{0,30}?\b(?:with |using |code |codice )+[\"“']?(?P<code2>[A-Z][A-Z0-9\-]{2,19})[\"”']?\b", re.I)
+    CODE_OFF = re.compile(r"\b(?:switch off|turn off|disable|deactivate|stop|kill|remove|delete|end|expire|disattiva|spegni|elimina|togli)\s+(?:the |il |la )?(?:discount |promo )?(?:code|codice|coupon)\s*[\"“']?(?P<code>[A-Za-z][A-Za-z0-9\-]{2,19})[\"”']?\W*$", re.I)
+    CODE_Q = re.compile(r"\b(?:which|what|any|list|show|do we have|abbiamo|quali)\b.{0,20}?\b(?:discount |promo |active |live )?(?:codes?|coupons?|codici(?: sconto)?)\b.{0,20}?(?:active|live|running|do we have|are there|exist|attivi|\?|$)|\bcodes? (?:in use|usage|stats)\b|\bhow many (?:people|customers|orders) used (?:the )?code\b|\bhow much .{0,20}\b(?:given away|discounts?|coupons?|codes?)\b.{0,20}(?:discounts?|codes?|coupons?|\?|$)|\bquanto .{0,20}\bsconti\b", re.I)
+    GIFT_WRAP = re.compile(r"\b(?:add|offer|enable|activate|turn on|switch on|set up|start|aggiungi|attiva|offri)\s+(?:a |the |an |un |il )?gift[- ]?wrap(?:ping)?(?: option| service)?\b(?:.{0,30}?(?:at|for|a|per)\s*(?:€|eur|euro)?\s*(?P<price>\d{1,2}(?:[.,]\d{1,2})?))?|\bgift[- ]?wrap(?:ping)?\b.{0,20}?\b(?:at|for)\s*(?:€|eur|euro)?\s*(?P<price2>\d{1,2}(?:[.,]\d{1,2})?)\s*(?:€|eur|euros?)?\b.{0,20}?\b(?:add|offer|enable|turn on|please|option)\b|\b(?:add|offer|enable)\b.{0,10}?['\"“]?gift wrap['\"”]?\b.{0,20}?\b(?:option|at)\b.{0,10}?(?P<price3>\d{1,2}(?:[.,]\d{1,2})?)|\bconfezione regalo\b.{0,30}?(?:€|eur|euro)?\s*(?P<price4>\d{1,2}(?:[.,]\d{1,2})?)", re.I)
+    GIFT_WRAP_OFF = re.compile(r"\b(?:remove|disable|turn off|switch off|stop|drop|togli|disattiva)\s+(?:the |il |la )?(?:gift[- ]?wrap(?:ping)?|confezione regalo)(?: option)?\W*$", re.I)
+    NOTICE_SET = re.compile(r"\b(?:put|add|show|set|display|write|metti|mostra|scrivi)\s+(?:a |the |an |un |una )?(?:notice|banner|message|note|announcement|avviso|banner|messaggio)\s+(?:on|at|to|across|in|sul|nel|nella|su)\s+(?:the |every |all |il |tutte le |ogni )?(?:shop|store|site|website|pages?|home ?page|top|negozio|sito|pagine)\b.{0,20}?(?:saying|that says|reading|with|:|che dice|con)\s*[\"“']?(?P<text>[^\"”']{6,180})[\"”']?\W*$"
+                            r"|\b(?:notice|banner|avviso)\s*:\s*[\"“']?(?P<text2>[^\"”']{6,180})[\"”']?\W*$", re.I)
+    NOTICE_OFF = re.compile(r"\b(?:remove|take down|delete|clear|hide|togli|rimuovi|cancella)\s+(?:the |il |la |l')?(?:notice|banner|announcement|avviso|messaggio)(?: from the (?:shop|site|pages?))?\W*$", re.I)
     OFFLINE_STOCK = re.compile(r"\b(?:i |we |ho |abbiamo )?(?:sold|gave away|gave|handed out|took|used|broke|dropped|venduto|regalato|dato via|rotto)\s+(?P<n>\d{1,3}|a|an|one|two|three|four|five|un|una|due|tre)\s+(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+(?:at|on|to|for|in|as|al|a|per|come|during)\s+(?:the |a |my |our |il |la |un |una )?(?:market|fair|stall|event|street market|christmas market|mercato|mercatino|fiera|friend|friends|neighbou?r|mum|mom|dad|sister|brother|family|colleague|office|amico|amica|gift|present|photo shoot|shoot|sample|test|cash|hand|regalo)\b"
                                r"|\b(?:give|gave|regala|dai)\s+(?:the |a |an |il |la |un |una )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\s+to (?:my |a |our |un |una |mia |mio )?(?:friend|mum|mom|dad|sister|brother|neighbou?r|colleague|family|amico|amica|mamma|papà)\b.{0,40}?\b(?:free|gift|regalo|gratis|adjust|update|fix|take it off|off the stock|stock)\b"
                                r"|\b(?:someone|a customer|customer|the customer|a buyer|un cliente|una cliente)\s+(?:returned|sent back|gave back|ha restituito|ha reso|ha rimandato)\s+(?:the |a |an |il |la |un |una )?(?P<what3>[a-zà-ú][a-zà-ú0-9 \-]{2,40}?)\b.{0,60}?\b(?:works? fine|works|is fine|it'?s fine|undamaged|intact|unused|like new|good condition|perfect|funziona|intatt[oa]|come nuov[oa]|resell|back on the shelf|restock)\b", re.I)
@@ -984,6 +993,42 @@ class Talk:
                 if p["stock"] == 0:
                     return f"{p['name']} already shows sold out (0 in stock) — the page takes e-mails for the restock. Say “we received N more …” when it's back."
                 return {"store_change": {"kind": "stock", "product": p["id"], "value": 0, "name": p["name"], "old": p["stock"], "text": f"Mark {p['name']} sold out (stock {p['stock']} → 0; the page shows 'sold out' and stops taking orders)"}}
+        m = self.CODE_OFF.search(t)
+        if m and self.store.code(m.group("code")):
+            return {"store_change": {"kind": "code", "code": m.group("code").upper(), "off": True}}
+        m = self.CODE_MAKE.search(t)
+        if m and (m.group("pct") or m.group("fixed") or m.group("pct2")):
+            code = (m.group("code") or m.group("code2")).upper()
+            pct = _num(m.group("pct") or m.group("pct2") or 0)
+            fixed = _num(m.group("fixed") or 0)
+            mn = _num(m.group("min") or 0)
+            uses = int(m.group("uses")) if m.group("uses") else None
+            if pct > 50:
+                return f"{pct:g} % off is more than the whole margin on most products — I won't prepare that. 10–15 % is the usual size for a code; say “make a code {code} for 15 %”."
+            return {"store_change": {"kind": "code", "code": code, "pct": pct, "fixed": fixed, "min": mn, "max_uses": uses}}
+        m = self.GIFT_WRAP_OFF.search(t)
+        if m:
+            return {"store_change": {"kind": "gift_wrap", "active": False}}
+        m = self.GIFT_WRAP.search(t)
+        if m:
+            price = _num(next((g for g in (m.group("price"), m.group("price2"), m.group("price3"), m.group("price4")) if g), 2.9))
+            return {"store_change": {"kind": "gift_wrap", "active": True, "price": price}}
+        m = self.NOTICE_OFF.search(t)
+        if m:
+            return {"store_change": {"kind": "notice", "text": ""}}
+        m = self.NOTICE_SET.search(t)
+        if m:
+            return {"store_change": {"kind": "notice", "text": (m.group("text") or m.group("text2")).strip(" :-–—\"“”'")}}
+        if self.CODE_Q.search(t):
+            codes = self.store.codes()
+            if not codes:
+                return "No discount codes exist yet. Say “make a code WELCOME10 for 10 % off” and I prepare it — codes show up as a field at checkout only once one is live."
+            lines = []
+            for c in codes:
+                lines.append(f"• {c['code']}: " + (f"{c['pct']:g} % off" if c.get("pct") else f"{_eur(c.get('fixed', 0))} off") + (f" over {_eur(c['min'])}" if c.get("min") else "") +
+                             f" — {'live' if c.get('active') else 'off'}, used {c.get('uses', 0)}×" + (f"/{c['max_uses']}" if c.get("max_uses") else ""))
+            n = self.store.numbers()
+            return "Discount codes:\n" + "\n".join(lines) + (f"\nGiven away so far: {_eur(n.get('discounts', 0))} on {n.get('code_orders', 0)} order(s)." if n.get("code_orders") else "")
         m = self.OFFLINE_STOCK.search(t)
         if m:
             what = (m.group("what") or m.group("what2") or m.group("what3") or "").strip()
