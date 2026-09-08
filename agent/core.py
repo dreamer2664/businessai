@@ -50,7 +50,14 @@ from .mind import Mind
 def money_list(orders):
     return ", ".join(f"#{o['n']} {money(o['total'])}" for o in orders[:5]) + ("…" if len(orders) > 5 else "")
 
-VERSION = "1.5 (milestone 11: practice store — /store open; I run a whole shop here with fake payments and simulated customers, and every change waits for your tap)"
+def _version():
+    try:
+        return (Path(__file__).resolve().parent.parent / "VERSION").read_text().strip()
+    except Exception:
+        return "1.8"
+
+
+VERSION = _version() + " (Phase 2: I understand plain requests, plan them, hand you documents, check sellers deeply, look at photos, pass simple security checks, build websites and study on my own)"
 
 HELP = """Just talk to me. I work out whether you're asking a question, want something looked up on the web, want a page summarized, or want suppliers compared.
 Examples: "what is a good margin for dropshipping" · "find out how ePacket works" · "look for suppliers of bamboo toothbrushes" · paste a link.

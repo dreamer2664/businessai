@@ -227,10 +227,13 @@ Milestones (one per session, each with a score set; earlier scores must not drop
 |---|---|---|
 | 13 understanding & planning (brief, pace, plan → Go/Change/Cancel) | ✅ | brief 30/30 |
 | 14 deliverables + deep seller check (document with pictures/links, store proposal) | ✅ | sellers 27/27 |
-| 15 eyes on listings + CAPTCHA attempts | ✅ (inside sellers/accounts) | — |
+| 15 eyes on listings (real photos, describe-then-judge) + CAPTCHAs in everyday work (try → skip → one tap) | ✅ | eyes on listings 26/26 · walls 14/14 |
 | 16 own accounts / credential vault / mail codes | ✅ | accounts 12/12 |
 | 17 Drive library: PDF density judge, video ideas, long courses in chapters, brainstorm, quiet-time loop | ✅ | study 18/18 |
 | 18 social readiness: practice network + rehearsals (limits, photos, comments, replies) | ✅ | rehearsal 19/19 |
 | 19 website builder + Google-Maps-style auto-training (OpenStreetMap places) + Drive "Websites" | ✅ | sites 28/28 |
-| 20 thinking: journal, interruptions, reflection, lessons | ✅ | mind 29/29 |
+| 20 thinking: journal, interruptions, reflection, lessons, queue instead of 'busy', everyday talk | ✅ | mind 33/33 · talk 22/22 |
+| 14b research/compare deliver documents too (summary, one card per page with picture + link + points) | ✅ | practice day 27/27 |
 | 12 real store | ⏳ awaits platform choice (end of the road, per owner) | — |
+
+VERSION 1.8 (2026-09-08): documents for research/compare, eyes on listings with real photos, CAPTCHA try-then-move-on, no more 'I'm still busy' (queue), stop/hurry inside page loops, everyday talk (pricing, shipping sanity, recap, menu, customer words → draft).
