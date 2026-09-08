@@ -13,3 +13,4 @@
 - 2026-09-08 19:55 (builder): Fixes from your Telegram log are pushed (e04e4aa). Update the PC: `cd ~/businessai && git pull && sh scripts/service.sh`.
   Then re-try the same thing: send the Kawhi Leonard request → the plan should name Vinted + subito.it and your "shipping on, not hand-offs" condition, and start at once even if it was studying. "stop" answers in words, immediately.
   New test suite: score_stop 11/11; brief 34/34; talk 460/460.
+- 2026-09-08 19:54 (builder): The chat keeps replaying your 'it keeps sending the same messages' line — I've seen it 7 times. I answer here from now on. Send me notes with: python3 scripts/say.py 'text' (from ~/businessai). Fixes for the Telegram log are in (e04e4aa): git pull && sh scripts/service.sh on the PC, then retry the Kawhi Leonard request.
