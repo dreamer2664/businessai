@@ -49,8 +49,8 @@ class Talk:
     START = re.compile(r"\b(where (do|should) i (start|begin)|how (do|should|can) i (start|begin|get started)|i want to (start|sell|open)|voglio (vendere|aprire|iniziare)|da dove (comincio|inizio|parto))\b", re.I)
     OPINION_IT = re.compile(r"\b(che ne pensi|cosa ne pensi|secondo te)\b", re.I)
     # ---- the practice store in plain words ----
-    STORE_NUM = re.compile(r"\b(?:how many (?:orders|sales|visitors|visits|customers)|(?:what(?:'s| is| are) )?(?:our|my|the) (?:best[- ]?sellers?|top (?:product|seller)s?|conversion(?: rate)?|revenue|turnover|profit|margin|numbers|visitors|visits)|how much (?:profit|money|revenue) (?:did|have) (?:we|i) (?:make|made|earn|earned)|(?:profit|revenue|sales) (?:so far|this week|today|this month)|summary of (?:the|this|my) (?:week|day|month)|(?:weekly|daily) summary|how(?:'s| is| are) (?:business|sales|things) going|quanti ordini|quante visite|quanto abbiamo (?:guadagnato|venduto|incassato)|qual è il (?:più venduto|best seller)|riepilogo (?:della |di questa )?(?:settimana|giornata)|riassunto (?:della |di questa |del |di )?(?:settimana|giornata|mese)|(?:our|my|the) (?:average (?:order|basket)(?: value| size)?|aov)|scontrino medio|(?:how are we doing|how did we do|come (?:siamo andati|è andata)) (?:compared to|vs\.?|versus|against|rispetto a(?:lla)?) (?:last|the previous|la scorsa|la settimana scorsa)|compared to last week|rispetto alla settimana scorsa)\b", re.I)
-    SHIP_COST_Q = re.compile(r"\b(?:how much (?:is|does|do we charge for|costs?) (?:the )?(?:shipping|delivery|postage)|(?:shipping|delivery) (?:cost|price|fee)s?(?: to| for)?|what do we charge (?:for )?(?:shipping|delivery)|quanto (?:costa|chiediamo per) (?:la )?spedizione|quanto costa spedire|what are (?:our|the|my) (?:shipping|delivery) (?:days|times|options|rules|prices|rates)|how long (?:does|is) (?:our |the )?(?:shipping|delivery)(?: take)?|(?:our|my) (?:shipping|delivery) (?:times|days|rules)|(?:tempi|giorni) di (?:spedizione|consegna))\b", re.I)
+    STORE_NUM = re.compile(r"\b(?:how ?many (?:orders|sales|visitors|visits|customers)|^\W*(?:orders?|sales|profit|revenue|visits|visitors|conversion|best[- ]?sellers?|ordini|vendite|profitto|incasso|fatturato|visite)(?: (?:today|this week|so far|this month|oggi|di oggi|della settimana|questa settimana|del mese|finora))?(?=\W*$)|total (?:sales|revenue|orders|profit)(?: so far)?|(?:what(?:'s| is| are) )?(?:our|my|the) (?:best[- ]?sellers?|top (?:product|seller)s?|conversion(?: rate)?|revenue|turnover|profit|margin|numbers|visitors|visits)|how much (?:profit|money|revenue) (?:did|have) (?:we|i) (?:make|made|earn|earned)|(?:profit|revenue|sales) (?:so far|this week|today|this month)|summary of (?:the|this|my) (?:week|day|month)|(?:weekly|daily) summary|how(?:'s| is| are) (?:business|sales|things) going|quanti ordini|quante visite|quanto abbiamo (?:guadagnato|venduto|incassato)|qual è il (?:più venduto|best seller)|riepilogo (?:della |di questa )?(?:settimana|giornata)|riassunto (?:della |di questa |del |di )?(?:settimana|giornata|mese)|(?:our|my|the) (?:average (?:order|basket)(?: value| size)?|aov)|scontrino medio|(?:how are we doing|how did we do|come (?:siamo andati|è andata)) (?:compared to|vs\.?|versus|against|rispetto a(?:lla)?) (?:last|the previous|la scorsa|la settimana scorsa)|compared to last week|rispetto alla settimana scorsa)\b", re.I)
+    SHIP_COST_Q = re.compile(r"\b(?:how much (?:is|does|do we charge for|costs?) (?:the )?(?:shipping|delivery|postage)|(?:shipping|delivery) (?:cost|price|fee)s?(?: to| for)?|what do we charge (?:for )?(?:shipping|delivery)|quanto (?:costa|chiediamo per) (?:la )?spedizione|quanto costa spedire|what are (?:our|the|my) (?:shipping|delivery) (?:days|times|options|rules|prices|rates)|how long (?:does|is) (?:our |the )?(?:shipping|delivery)(?: take)?|(?:our|my) (?:shipping|delivery) (?:times|days|rules)|(?:tempi|giorni) di (?:spedizione|consegna)|spedizione (?:in|per|verso) [a-zà-ú]+ quanto costa|spedire in [a-zà-ú]+ quanto costa)\b", re.I)
     SELLOUT_Q = re.compile(r"\b(?:how long (?:until|before|till) (?:the |our )?(?P<what>[a-z][a-z \-]{2,40}?) (?:sells? out|runs? out|is gone|is sold out)|when (?:will|does) (?:the |our )?(?P<what2>[a-z][a-z \-]{2,40}?) (?:sell out|run out)|(?:stock|units) (?:left )?(?:of |for )?(?:the )?(?P<what3>[a-z][a-z \-]{2,40}?) (?:last|lasts|will last)|quanto dura(?:no)? (?:le |la |il |lo |gli |i )?(?P<what4>[a-zà-ú][a-zà-ú \-]{2,40}?)\?)", re.I)
     MATHS = re.compile(r"^\W*(?:what(?:'s| is)|quanto (?:fa|è)|calcola|calculate|compute)?\s*(?P<a>\d+(?:[.,]\d+)?)\s*%\s*(?:of|di|del|della)\s*(?P<b>\d+(?:[.,]\d+)?)\W*$"
                        r"|^\W*(?:what(?:'s| is)|quanto fa)?\s*(?P<c>\d+(?:[.,]\d+)?)\s*(?:€|eur|euro)?\s*(?:plus|più|\+)\s*(?P<d>\d+(?:[.,]\d+)?)\s*%\W*$"
@@ -93,6 +93,11 @@ class Talk:
     SET_FREE_SHIP = re.compile(r"\b(?:set|make|put|change|offer|introduce|metti|imposta|offri)\b.{0,15}?\bfree (?:shipping|delivery)\b.{0,20}?\b(?:over|above|from|for orders over|from orders of|sopra|oltre|da)\s*" + _MONEY.replace("(\\d", "(?P<amt>\\d") + r"|\bspedizione gratuita\b.{0,15}?\b(?:sopra|oltre|da)\s*" + _MONEY.replace("(\\d", "(?P<amt2>\\d"), re.I)
     WHY_NOBODY = re.compile(r"\b(?:why (?:did|has|does|is) (?:nobody|no one|no-one|noone) (?:buy|bought|buying|order|ordered|want)|why (?:isn'?t|doesn'?t|aren'?t|don'?t) (?:the |our |my )?(?P<what0>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?) (?:sell|selling|move|moving)|why (?:are|is) (?:the |our |my )?(?P<what00>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?) not selling|perch[eé] nessuno compra|perch[eé] non (?:si )?vend(?:e|ono))\b(?:\s+(?:the |our |my |i |le |il |la )?(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?))?\W*$", re.I)
     PAGE_LANG = re.compile(r"\b(?:translate|traduci)\b.{0,12}?\b(?:the |la |le )?(?P<page>shipping|returns?|faq|contact|about|spedizioni?|resi|contatti)\s+(?:page|policy|pagina)\b.{0,12}?\b(?:into|in|to) (?P<lang>english|italian|german|french|spanish|dutch|inglese|italiano|tedesco|francese|spagnolo|olandese)\b|\bmake the (?:shop|store|negozio) (?:bilingual|in (?:english|italian|german|french|spanish)( too| as well)?|multilingual)\b|\b(?:negozio|shop|store) (?:bilingue|anche in inglese|anche in italiano)\b", re.I)
+    CHECK_IN = re.compile(r"^\W*(?:so |hey |ok |ciao |hi )?(?:how (?:r|are) (?:we|things|you guys|we doing)|how(?:'s| is) (?:it|everything|business|the shop|the store|the day) ?(?:going|doing)?|(?:is )?everything (?:ok|okay|fine|alright|good)(?: with the (?:shop|store))?|all (?:good|ok|fine|quiet)|any (?:problems?|issues?|trouble|news|updates?)|"
+                          r"(?:give me an? |quick )?(?:update|status update|sitrep|rundown|briefing)(?: me)?|update me|catch me up|fill me in|anything (?:i should know|new|urgent|to report|happened|going on)|what(?:'s| is) (?:new|up|going on|happening|the situation)|what needs my attention|what should i look at|"
+                          r"did anything happen(?: while i was (?:away|out|gone|asleep|at work))?|what did i miss|is anyone waiting(?: for (?:a reply|me|an answer))?|anyone waiting|(?:any )?(?:orders? )?to ship\??|any orders? (?:to ship|waiting|open|today)|"
+                          r"stock (?:ok|okay|fine|alright)|(?:are we|is anything) (?:running )?(?:low|out)(?: on anything| of stock)?|are we running low on anything|come (?:va|andiamo|stiamo andando)|tutto (?:ok|bene|a posto)|novità|aggiornami|problemi|qualcosa da sapere|c'è qualcuno in attesa)\W*$", re.I)
+    SOLD_HOW_MANY = re.compile(r"\b(?:how many|quant[ei])\s+(?P<what>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\s+(?:did we sell|have we sold|sold|were sold|abbiamo venduto|venduti|vendute)(?:\s+(?P<when>this week|today|so far|yesterday|in total|questa settimana|oggi|ieri|in totale))?\W*$|\bwhen did we last sell (?:a |an |the )?(?P<what2>[a-zà-ú][a-zà-ú0-9 \-]{2,30}?)\W*$", re.I)
     STORE_OPEN = re.compile(r"^\W*(?:can you |could you |please |puoi )?(?P<verb>open|start|launch|turn on|close|stop|shut|apri|avvia|chiudi)\s+(?:up |down )?(?:the |my |our |il |lo |la )?(?:practice |test |fake |training |online )?(?:store|shop|negozio|bottega)\b", re.I)
     STORE_STOCK = re.compile(r"\b(?:what(?:'s| is| do we have| do i have) (?:in |the |our |my )?stock|stock (?:levels?|list|situation|status)|how many .{2,30}? (?:do (?:we|i) have|are left|in stock|left)|list (?:the |our |my )?products|(?:our|my) (?:products|catalogue|catalog)|cosa (?:abbiamo|c'è) in magazzino|quant[ei] .{2,30}? (?:abbiamo|restano|rimangono))\b", re.I)
     STORE_DAY = re.compile(r"\b(?:(?:run|simulate|start|do|play|fai)\s+(?:a |one |another |the next |un |un altro |\d+ |two |three |five |seven )?(?:more )?(?:practice |test |training )?(?:days?|giorn[oi])|(?:a |one |another )?(?:practice |test )?day (?:passes|goes by)|let (?:a|the) day pass|practice day|giorno di prova|passa un giorno)\b", re.I)
@@ -226,6 +231,8 @@ class Talk:
     def quick(self, t):
         """To-do adds/list/done, 'what time is it in X', and A-vs-B opinions. None when it's not one of these."""
         low = t.lower()
+        if self.CHECK_IN.match(t) and not re.search(r"https?://", t):
+            return self.check_in(t)
         m = self.REMIND_AT.match(t)
         if m and self.memory is not None:
             return self.remind_at(m.group("when"), m.group("what"))
@@ -764,6 +771,11 @@ class Talk:
         m = self.SOLD_WHEN.search(t)
         if m:
             return self.sold_when((m.group("when") or "so far").lower())
+        m = self.SOLD_HOW_MANY.search(t)
+        if m:
+            r = self.sold_how_many(m.group("what") or m.group("what2") or "", (m.group("when") or ("last" if m.group("what2") else "so far")).lower())
+            if r:
+                return r
         if self.STOCK_VALUE.search(t):
             return self.stock_value(t)
         m = self.OOS_SAY.search(t)
@@ -933,7 +945,7 @@ class Talk:
         if re.search(r"\b(profit|money|earn|guadagnato|margin)\b", low) and not re.search(r"\bsummary|riepilogo\b", low):
             return (f"Profit {label}: {_eur(profit)} on {_eur(rev)} of sales from {len(paid)} orders " +
                     f"(goods {_eur(cogs)}, shipping {_eur(ship)}, payment fees {_eur(fees)})" + (f" — {profit / rev * 100:.0f} % net margin." if rev else "."))
-        if re.search(r"\b(how many|quanti)\b.*\b(orders|sales|ordini|customers)\b", low):
+        if re.search(r"\b(how ?many|quanti)\b.*\b(orders|sales|ordini|customers)\b", low):
             return (f"Orders {label}: {len(paid)}" + (f" ({_eur(rev)} in sales, average basket {_eur(rev / len(paid))})" if paid else "") +
                     (f"; {len([o for o in orders if o['status'] == 'refunded'])} refunded" if any(o["status"] == "refunded" for o in orders) else "") + ".")
         # summary
@@ -1252,6 +1264,84 @@ class Talk:
             return "Nothing waiting — every customer message has an answer. I'll ping you when one comes in."
         rows = [f"• {r.get('from', '?')} — {(r.get('subject') or r['text'])[:70]}" for r in new[:5]]
         return f"{len(new)} customer message(s) waiting:\n" + "\n".join(rows) + (f"\n…and {len(new) - 5} more" if len(new) > 5 else "") + "\nSay “/inbox” and I show each one with my draft reply for your tap."
+
+    def check_in(self, t):
+        """'how are we doing?', 'everything ok?', 'update me', 'anything I should know?' — the shop's state in four lines: what happened, what waits, what's wrong."""
+        low = t.lower()
+        it = bool(re.search(r"\b(come|tutto|novità|aggiornami|problemi|sapere|attesa)\b", low))
+        lines, problems = [], []
+        if self.mind and self.mind.job:
+            lines.append("• " + self.mind.status_line())
+        try:
+            if self.store is not None and self.store.data.get("orders"):
+                st = self.store
+                day = st.data.get("day", 0)
+                today = [o for o in st.data["orders"] if o.get("day") == day and o["status"] in ("paid", "shipped", "delivered")]
+                week = [o for o in st.data["orders"] if o.get("day", 0) > day - 7 and o["status"] in ("paid", "shipped", "delivered")]
+                lines.append(f"• shop: {len(today)} order(s) today ({_eur(sum(o['total'] for o in today))}), {len(week)} this week ({_eur(sum(o['total'] for o in week))}), practice day {day}")
+                open_ = [o for o in st.data["orders"] if o["status"] == "paid"]
+                late = [o for o in open_ if day - o.get("day", day) >= 1]
+                if open_:
+                    (problems if late else lines).append(f"• 📦 {len(open_)} order(s) to ship" + (f" — {len(late)} already late (promised next-day)" if late else "") + " — say “print the shipping labels”")
+                lowst = [p for p in st.products() if p["stock"] <= 3]
+                if lowst:
+                    problems.append("• ⚠️ low/out of stock: " + ", ".join(f"{p['name'].split(' (')[0]} ({p['stock']})" for p in lowst))
+                props = [p for p in st.data.get("proposals", []) if p["status"] == "open"]
+                if props:
+                    lines.append(f"• {len(props)} store proposal(s) waiting for your tap")
+            elif self.store is not None:
+                lines.append("• shop: no practice day yet — say “run a practice day”")
+        except Exception:
+            pass
+        try:
+            if self.inbox is not None:
+                new = self.inbox.items("new")
+                if new:
+                    problems.append(f"• 💬 {len(new)} customer message(s) waiting — /inbox")
+        except Exception:
+            pass
+        try:
+            items = self.memory.open_items() if self.memory else []
+            today = _dt.date.today().isoformat()
+            due = [x for x in items if x.get("due") and x["due"][:10] <= today]
+            if due:
+                problems.append(f"• ⏰ {len(due)} reminder(s) due: " + "; ".join(re.sub(r" \(⏰ .*\)$", "", x["text"])[:40] for x in due[:3]))
+            elif items:
+                lines.append(f"• {len(items)} thing(s) on your to-do list")
+        except Exception:
+            pass
+        asked_stock = bool(re.search(r"\b(stock|low|out)\b", low))
+        asked_ship = bool(re.search(r"\bship\b", low))
+        asked_wait = bool(re.search(r"\b(waiting|reply|attesa)\b", low))
+        if asked_stock:
+            return next((p for p in problems if "stock" in p), "Stock is fine — nothing at or below 3 pieces." if self.store is not None else "I have no stock to watch yet.").lstrip("• ")
+        if asked_ship:
+            return next((p for p in problems + lines if "to ship" in p), "Nothing to ship — every paid order is already on its way.").lstrip("• ")
+        if asked_wait:
+            return next((p for p in problems if "customer message" in p), "Nobody is waiting — the inbox is clear.").lstrip("• ")
+        if not lines and not problems:
+            return "Tutto tranquillo: niente da spedire, nessun messaggio in attesa, niente in corso." if it else "All quiet: nothing to ship, nobody waiting, nothing running. Give me a job or I'll study."
+        head = ("Situazione:" if it else ("All fine, here's where we are:" if not problems else f"{len(problems)} thing(s) need you, rest is fine:"))
+        return head + "\n" + "\n".join(problems + lines)
+
+    def sold_how_many(self, what, when):
+        p = self.store.find_product(what)
+        if not p:
+            return None
+        st = self.store
+        day = st.data.get("day", 0)
+        keep = {"today": lambda o: o.get("day") == day, "oggi": lambda o: o.get("day") == day, "yesterday": lambda o: o.get("day") == day - 1, "ieri": lambda o: o.get("day") == day - 1,
+                "this week": lambda o: o.get("day", 0) > day - 7, "questa settimana": lambda o: o.get("day", 0) > day - 7}.get(when, lambda o: True)
+        rows = [(o, sum(l["qty"] for l in o["lines"] if l["id"] == p["id"])) for o in st.data["orders"] if o["status"] in ("paid", "shipped", "delivered") and keep(o) and any(l["id"] == p["id"] for l in o["lines"])]
+        if when == "last":
+            if not rows:
+                return f"We haven't sold {p['name']} yet."
+            o, q = rows[-1]
+            ago = day - o.get("day", day)
+            return f"Last {p['name']} sale: order #{o['n']} on practice day {o.get('day')} ({'today' if ago == 0 else 'yesterday' if ago == 1 else f'{ago} days ago'}), ×{q} to {o['country']}. {p['stock']} left."
+        n = sum(q for _, q in rows)
+        label = {"today": "today", "oggi": "today", "yesterday": "yesterday", "ieri": "yesterday", "this week": "this week", "questa settimana": "this week"}.get(when, "so far")
+        return f"{p['name']}: {n} sold {label} in {len(rows)} order(s)" + (f" = {_eur(sum(q * p['price'] for _, q in rows))}" if n else "") + f"; {p['stock']} left."
 
     def plate(self):
         """'what's on my plate today?' — to-dos (dated first), orders to ship, messages waiting, low stock — one list."""
